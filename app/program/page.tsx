@@ -1,0 +1,552 @@
+import Link from "next/link";
+
+export default function ProgramPage() {
+  const trainingDays = [
+    {
+      day: "Day 1",
+      title: "First Aid Foundations & Human Systems Awareness",
+      text: "Introduces essential first aid knowledge, occupational hazards, and workplace emergency awareness.",
+      icon: "/10-Day Curriculum/day_1.png",
+      featured: true,
+    },
+    {
+      day: "Day 2",
+      title: "Practical First Aid & Emergency Response",
+      text: "Covers casualty handling, CPR, AED use, and emergency response scenarios.",
+      icon: "/10-Day Curriculum/day_2.png",
+      featured: false,
+    },
+    {
+      day: "Day 3",
+      title: "Fire Marshal Training & Emergency Preparedness",
+      text: "Focuses on fire prevention, evacuation systems, and emergency protocols.",
+      icon: "/10-Day Curriculum/day_3.png",
+      featured: false,
+    },
+    {
+      day: "Day 4",
+      title: "Hazardous Materials Management",
+      text: "Covers identification, labelling, risk assessment, and handling of hazardous materials.",
+      icon: "/10-Day Curriculum/day_4.png",
+      featured: false,
+    },
+    {
+      day: "Day 5",
+      title: "Occupational Health & Safety Systems",
+      text: "Explores OHS policies, PPE use, risk control, and accident investigation.",
+      icon: "/10-Day Curriculum/day_5.png",
+      featured: false,
+    },
+    {
+      day: "Day 6",
+      title: "Energy Sector Foundations",
+      text: "Introduces oil, gas, LPG, and Botswana’s energy economy landscape.",
+      icon: "/10-Day Curriculum/day_6.png",
+      featured: false,
+    },
+    {
+      day: "Day 7",
+      title: "Fuel Logistics & Distribution",
+      text: "Covers transportation, storage, and fuel distribution systems.",
+      icon: "/10-Day Curriculum/day_7.png",
+      featured: false,
+    },
+    {
+      day: "Day 8",
+      title: "LPG & Clean Energy Pathways",
+      text: "Explores LPG supply chains and clean cooking opportunities.",
+      icon: "/10-Day Curriculum/day_8.png",
+      featured: false,
+    },
+    {
+      day: "Day 9",
+      title: "Fuel Retail & Wholesale",
+      text: "Covers fuel station development, licensing, and business models.",
+      icon: "/10-Day Curriculum/day_9.png",
+      featured: false,
+    },
+    {
+      day: "Day 10",
+      title: "Entrepreneurial Activation",
+      text: "Focuses on business setup, funding readiness, and opportunity access.",
+      icon: "/10-Day Curriculum/day_10.png",
+      featured: false,
+    },
+  ];
+
+  const partners = [
+    "/logos/gov_1.png",
+    "/logos/seth_1.png",
+    "/logos/emangweni_1.png",
+    "/logos/baisago_1.png",
+    "/logos/ub_1.png",
+    "/logos/bera_1.png",
+    "/logos/ter_1.png",
+  ];
+
+  const applicationRequirements = [
+    {
+      title: "Botswana Citizen Focus",
+      text: "The programme is designed to prioritise citizens seeking practical pathways into Botswana’s energy economy.",
+    },
+    {
+      title: "Complete Application",
+      text: "Applicants must submit full registration details and complete all required application fields accurately.",
+    },
+    {
+      title: "Supporting Documents",
+      text: "Applicants should be ready to provide the required supporting documents during the application process.",
+    },
+    {
+      title: "Programme Commitment",
+      text: "Applicants should be available to attend and participate in the full 10-day training programme.",
+    },
+    {
+      title: "Relevant Interest",
+      text: "The programme is best suited to those interested in oil, gas, LPG, logistics, fuel retail, safety, or related enterprise pathways.",
+    },
+    {
+      title: "Selection & Onboarding",
+      text: "Successful applicants may be contacted for further vetting, confirmation, and onboarding before final participation.",
+    },
+  ];
+
+  const curriculumRows = [
+    trainingDays.slice(0, 3),
+    trainingDays.slice(3, 6),
+    trainingDays.slice(6, 10),
+  ];
+
+  return (
+    <main className="min-h-screen bg-[#f6f7fb] text-slate-900">
+    {/* NAVBAR */}
+<nav className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
+  <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
+    {/* LOGO */}
+    <div className="flex items-center gap-3">
+      <img
+        src="/bywc-logo.png.png"
+        alt="BYWC Logo"
+        className="h-20 w-auto object-contain"
+      />
+    </div>
+
+    {/* NAV LINKS */}
+    <div className="hidden items-center gap-8 text-sm font-medium text-slate-700 md:flex">
+      <Link href="/home" className="text-blue-900">
+        Home
+      </Link>
+
+      <Link href="/apply" className="hover:text-blue-900">
+        Apply
+      </Link>
+
+      <Link href="/dashboard" className="hover:text-blue-900">
+        Dashboard
+      </Link>
+
+      <a href="#contact" className="hover:text-blue-900">
+        Contact
+      </a>
+    </div>
+
+    {/* RIGHT SIDE */}
+    <div className="flex items-center gap-3">
+      <Link
+        href="/home"
+        className="rounded-full px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-50"
+      >
+        Back Home
+      </Link>
+    </div>
+  </div>
+</nav>
+
+      {/* FLOATING TOP BANNER WITH INTAKE BOX */}
+      <section className="px-6 pt-8 lg:px-10 lg:pt-10">
+        <div className="mx-auto max-w-7xl">
+          <div className="relative overflow-visible rounded-[32px] shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+            <div className="relative h-[62vh] min-h-[460px] w-full overflow-hidden rounded-[32px]">
+              <img
+                src="/banner_2.png"
+                alt="Programme Banner"
+                className="h-full w-full object-cover"
+              />
+
+              <div className="absolute inset-0 z-10 bg-gradient-to-r from-black/40 via-black/10 to-transparent" />
+            </div>
+
+            {/* FLOATING INTAKE BOX */}
+            <div className="absolute inset-x-0 -bottom-28 z-20 px-6 lg:px-10">
+              <div className="mx-auto max-w-5xl">
+                <div className="rounded-[28px] border border-white/70 bg-white/96 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.18)] backdrop-blur lg:p-8">
+                  <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-end">
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
+                        10-Day Programme
+                      </p>
+
+                      <h2 className="mt-3 text-4xl font-bold tracking-tight text-blue-950 lg:text-5xl">
+                        2026 National Intake
+                      </h2>
+
+                      <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 lg:text-base">
+                        National training access designed to connect citizens to
+                        sector readiness, opportunity pathways, and partner-led
+                        industry exposure.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <p className="text-2xl font-bold text-blue-950">
+                          1,000
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Participants
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <p className="text-2xl font-bold text-blue-950">
+                          10
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Day Programme
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <p className="text-2xl font-bold text-blue-950">
+                          61
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Constituencies
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <p className="text-base font-bold text-blue-950 lg:text-lg">
+                          Partner-Led
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Selection
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap gap-4">
+                    <Link
+                      href="/apply"
+                      className="rounded-full bg-orange-500 px-7 py-3.5 text-sm font-semibold text-white hover:bg-orange-600"
+                    >
+                      Apply Now
+                    </Link>
+
+                    <Link
+                      href="/program"
+                      className="rounded-full border-2 border-blue-900 px-7 py-3.5 text-sm font-semibold text-blue-900 hover:bg-blue-50"
+                    >
+                      Download Guide
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-36 lg:h-40" />
+        </div>
+      </section>
+
+      {/* PROGRAM LAUNCH & LEADERSHIP ENGAGEMENT */}
+      <section className="bg-white py-24">
+        <div className="mx-auto max-w-7xl px-6 lg:px-10">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
+                Program Launch
+              </p>
+
+              <h2 className="mt-3 text-4xl font-bold tracking-tight text-blue-950 lg:text-5xl">
+                Program Launch &<br className="hidden lg:block" />
+                Leadership Engagement
+              </h2>
+
+              <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600">
+                The programme is positioned as a high-visibility national
+                platform, strengthened through leadership engagement and
+                public-sector alignment. Its launch is intended to signal
+                seriousness, national relevance, and long-term commitment to
+                expanding opportunity within Botswana’s energy economy.
+              </p>
+
+              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">
+                This leadership-backed positioning supports stronger public
+                confidence, deeper partner credibility, and a clearer sense that
+                the programme is not just training, but a coordinated pathway
+                into industry access, readiness, and economic participation.
+              </p>
+
+              <div className="mt-8 flex flex-wrap gap-4">
+                <Link
+                  href="/apply"
+                  className="rounded-full bg-orange-500 px-7 py-3.5 text-sm font-semibold text-white hover:bg-orange-600"
+                >
+                  Apply Now
+                </Link>
+
+                <Link
+                  href="/program"
+                  className="rounded-full border-2 border-blue-900 px-7 py-3.5 text-sm font-semibold text-blue-900 hover:bg-blue-50"
+                >
+                  View Programme
+                </Link>
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="absolute -top-10 right-10 h-32 w-32 rounded-full bg-orange-200/30 blur-3xl" />
+              <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-blue-200/30 blur-3xl" />
+
+              <div className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.10)]">
+                <img
+                  src="/pic_2.png"
+                  alt="Programme leadership engagement"
+                  className="h-[520px] w-full object-cover"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* BREAK */}
+      <section className="px-6 py-4 lg:px-10">
+        <div className="mx-auto max-w-7xl">
+          <img
+            src="/break_1.png"
+            alt="Section break"
+            className="h-auto w-full object-contain"
+          />
+        </div>
+      </section>
+
+{/* CURRICULUM */}
+<section className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+  <div className="mb-14 text-center">
+    <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
+      10-Day Curriculum
+    </p>
+
+    <h2 className="mt-3 text-4xl font-bold text-blue-950 lg:text-5xl">
+      Full Training Breakdown
+    </h2>
+
+    <p className="mx-auto mt-4 max-w-3xl text-base leading-8 text-slate-600">
+      A direct, structured learning journey covering safety, emergency
+      response, operations, logistics, LPG, fuel retail, and business
+      activation.
+    </p>
+  </div>
+
+  {curriculumRows.map((row, rowIndex) => (
+    <div key={rowIndex}>
+      <div
+        className={`grid gap-8 ${
+          row.length === 3
+            ? "md:grid-cols-2 xl:grid-cols-3"
+            : "md:grid-cols-2 xl:grid-cols-4"
+        }`}
+      >
+        {row.map((item) => {
+          const isDayOne = item.day === "Day 1";
+
+          const dayLinks: Record<string, string> = {
+            "Day 1": "/program/day-1",
+            "Day 2": "/program/day-2",
+            "Day 3": "/program/day-3",
+            "Day 4": "/program/day-4",
+            "Day 5": "/program/day-5",
+            "Day 6": "/program/day-6",
+            "Day 7": "/program/day-7",
+            "Day 8": "/program/day-8",
+            "Day 9": "/program/day-9",
+            "Day 10": "/program/day-10",
+          };
+
+          return (
+            <Link
+              href={dayLinks[item.day] || "/program"}
+              key={item.day}
+              className={`group flex h-full min-h-[430px] flex-col rounded-[30px] p-8 shadow-sm transition hover:-translate-y-1 hover:shadow-md ${
+                isDayOne
+                  ? "border border-blue-900 bg-blue-950"
+                  : "border-2 border-blue-900 bg-white"
+              }`}
+            >
+              {/* TOP: ICON + DAY */}
+              <div className="flex items-center gap-5">
+                <div
+                  className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl ${
+                    isDayOne ? "bg-white/10" : "bg-orange-50"
+                  }`}
+                >
+                  <img
+                    src={item.icon}
+                    alt={item.day}
+                    className={`h-14 w-14 object-contain ${
+                      isDayOne ? "brightness-0 invert" : ""
+                    }`}
+                  />
+                </div>
+
+                {/* DAY LABEL */}
+                <div className="rounded-xl bg-blue-900 px-5 py-3">
+                  <p className="text-base font-bold uppercase tracking-[0.18em] text-white">
+                    {item.day}
+                  </p>
+                </div>
+              </div>
+
+              {/* TITLE */}
+              <h3
+                className={`mt-7 text-[2rem] font-bold leading-tight ${
+                  isDayOne ? "text-white" : "text-blue-900"
+                }`}
+              >
+                {item.title}
+              </h3>
+
+              {/* DESCRIPTION */}
+              <p
+                className={`mt-6 text-lg leading-8 ${
+                  isDayOne ? "text-blue-100" : "text-slate-600"
+                }`}
+              >
+                {item.text}
+              </p>
+
+              {/* CTA */}
+              <div className="mt-auto pt-8">
+                <p
+                  className={`text-base font-bold ${
+                    isDayOne ? "text-white" : "text-blue-900"
+                  }`}
+                >
+                  View details →
+                </p>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* BREAK IMAGE */}
+      {rowIndex < curriculumRows.length - 1 && (
+        <div className="py-12">
+          <img
+            src="/break_1.png"
+            alt="Section break"
+            className="h-auto w-full object-contain"
+          />
+        </div>
+      )}
+    </div>
+  ))}
+</section>
+
+      {/* PARTNERS */}
+      <section
+        id="partners"
+        className="mx-auto max-w-7xl px-6 py-14 lg:px-10"
+      >
+        <div className="mb-10 text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
+            In Partnership With
+          </p>
+
+          <h2 className="mt-3 text-3xl font-bold text-blue-950 lg:text-4xl">
+            Our Strategic Partners
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+          {partners.map((logo, index) => (
+            <div
+              key={index}
+              className="flex h-[120px] items-center justify-center rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+            >
+              <img
+                src={logo}
+                alt={`Partner logo ${index + 1}`}
+                className="h-full w-full object-contain scale-125"
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+
+     {/* APPLICATION REQUIREMENTS */}
+<section className="bg-white py-16">
+  <div className="mx-auto max-w-7xl px-6 lg:px-10">
+    <div className="mb-10 text-center">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
+        Before You Apply
+      </p>
+
+      <h2 className="mt-3 text-3xl font-bold text-blue-950 lg:text-4xl">
+        Application Requirements
+      </h2>
+
+      <p className="mx-auto mt-4 max-w-3xl text-base leading-8 text-slate-600">
+        Review the key public-facing requirements below before starting your
+        application.
+      </p>
+    </div>
+
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {applicationRequirements.map((item, index) => (
+        <div
+          key={item.title}
+          className="rounded-2xl border border-slate-200 bg-[#f6f7fb] p-6 shadow-sm transition hover:shadow-md"
+        >
+          {/* TITLE + NUMBER BADGE */}
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
+              {index + 1}
+            </div>
+
+            <h3 className="text-lg font-bold text-blue-900">
+              {item.title}
+            </h3>
+          </div>
+
+          {/* DESCRIPTION */}
+          <p className="mt-5 text-sm leading-8 text-slate-600">
+            {item.text}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+      {/* CTA */}
+      <section className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+        <div className="rounded-3xl bg-blue-950 p-10 text-center text-white">
+          <h2 className="text-3xl font-bold">Ready to Apply?</h2>
+
+          <p className="mt-4 text-blue-100">
+            Start your application and take the first step into the energy
+            sector.
+          </p>
+
+          <button className="mt-6 rounded-full bg-orange-500 px-6 py-3">
+            Apply Now
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
