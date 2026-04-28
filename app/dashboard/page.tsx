@@ -26,6 +26,15 @@ type AdminMessage = {
   read?: boolean;
 };
 
+const navItems = [
+  ["Home", "/home", "⌂", false],
+  ["Dashboard", "/dashboard", "▦", true],
+  ["Profile", "#profile", "◉", false],
+  ["Messages", "/inbox", "✉", false],
+  ["Tracker", "/tracker", "✓", false],
+  ["Apply", "/apply", "+", false],
+];
+
 export default function DashboardPage() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [latestApplication, setLatestApplication] =
@@ -180,9 +189,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#eef1f7] px-6 py-8 text-slate-900 lg:px-10">
-      <section className="mx-auto grid max-w-7xl overflow-hidden rounded-[36px] border border-white/70 bg-white p-3 shadow-[0_30px_80px_rgba(15,23,42,0.14)] lg:grid-cols-[90px_1fr]">
-        <aside className="flex flex-col items-center justify-between rounded-[30px] bg-blue-950 px-4 py-6 text-white">
+    <main className="min-h-screen bg-[#eef1f7] px-4 py-5 text-slate-900 lg:px-10 lg:py-8">
+      <section className="mx-auto grid max-w-7xl overflow-hidden rounded-[28px] border border-white/70 bg-white p-3 shadow-[0_30px_80px_rgba(15,23,42,0.14)] lg:grid-cols-[90px_1fr] lg:rounded-[36px]">
+        <aside className="hidden flex-col items-center justify-between rounded-[30px] bg-blue-950 px-4 py-6 text-white lg:flex">
           <div className="flex flex-col items-center gap-6">
             <Link
               href="/home"
@@ -192,14 +201,7 @@ export default function DashboardPage() {
             </Link>
 
             <nav className="flex flex-col items-center gap-4">
-              {[
-                ["Home", "/home", "⌂", false],
-                ["Dashboard", "/dashboard", "▦", true],
-                ["Profile", "#profile", "◉", false],
-                ["Messages", "/inbox", "✉", false],
-                ["Tracker", "/tracker", "✓", false],
-                ["Apply", "/apply", "+", false],
-              ].map(([label, href, icon, active]) => (
+              {navItems.map(([label, href, icon, active]) => (
                 <Link
                   key={String(label)}
                   href={String(href)}
@@ -231,7 +233,40 @@ export default function DashboardPage() {
           </button>
         </aside>
 
-        <section className="rounded-[30px] bg-[#f8fafc] p-6 lg:p-8">
+        <section className="rounded-[24px] bg-[#f8fafc] p-4 lg:rounded-[30px] lg:p-8">
+          <div className="mb-6 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm lg:hidden">
+            <div className="grid grid-cols-2 gap-3">
+              {navItems.map(([label, href, icon, active]) => (
+                <Link
+                  key={String(label)}
+                  href={String(href)}
+                  className={`relative flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                    active
+                      ? "border-orange-500 bg-orange-500 text-white"
+                      : "border-slate-200 bg-slate-50 text-blue-950 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="text-lg">{icon}</span>
+                  <span>{label}</span>
+
+                  {label === "Messages" && unreadMessages > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-950 text-[10px] font-bold text-white">
+                      {unreadMessages}
+                    </span>
+                  )}
+                </Link>
+              ))}
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-blue-950 hover:bg-slate-100"
+              >
+                <span className="text-lg">↩</span>
+                <span>Log Out</span>
+              </button>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-500">
@@ -243,7 +278,7 @@ export default function DashboardPage() {
               </h1>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="hidden items-center gap-4 lg:flex">
               <Link
                 href="/inbox"
                 className="relative flex h-12 w-12 items-center justify-center rounded-full bg-white text-blue-950 shadow-sm"
@@ -280,8 +315,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="mt-10 grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="relative overflow-hidden rounded-[34px] bg-orange-500 p-8 text-white shadow-[0_18px_45px_rgba(249,115,22,0.22)]">
+          <div className="mt-8 grid gap-6 lg:mt-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-8">
+            <div className="relative overflow-hidden rounded-[28px] bg-orange-500 p-6 text-white shadow-[0_18px_45px_rgba(249,115,22,0.22)] lg:rounded-[34px] lg:p-8">
               <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
               <div className="absolute -bottom-12 right-20 h-32 w-32 rounded-full bg-blue-950/20" />
 
@@ -289,7 +324,7 @@ export default function DashboardPage() {
                 Application Status
               </p>
 
-              <h2 className="mt-4 text-5xl font-bold leading-tight">
+              <h2 className="mt-4 text-4xl font-bold leading-tight lg:text-5xl">
                 {status}
               </h2>
 
@@ -323,7 +358,7 @@ export default function DashboardPage() {
 
             <div
               id="profile"
-              className="rounded-[34px] bg-white p-8 shadow-[0_16px_45px_rgba(15,23,42,0.08)]"
+              className="rounded-[28px] bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8"
             >
               <div className="flex items-center gap-4">
                 <label className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-blue-950 text-3xl font-bold text-white">
@@ -397,8 +432,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1fr_0.85fr]">
-            <div className="rounded-[30px] bg-white p-7 shadow-[0_16px_45px_rgba(15,23,42,0.08)]">
+          <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr_0.85fr] lg:gap-8">
+            <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[30px] lg:p-7">
               <p className="text-sm font-semibold text-slate-500">
                 Next Step
               </p>
@@ -422,7 +457,7 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <div className="rounded-[30px] bg-white p-7 shadow-[0_16px_45px_rgba(15,23,42,0.08)]">
+            <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[30px] lg:p-7">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-slate-500">
                   Messages
@@ -450,7 +485,7 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="rounded-[30px] bg-white p-7 shadow-[0_16px_45px_rgba(15,23,42,0.08)]">
+            <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[30px] lg:p-7">
               <p className="text-sm font-semibold text-slate-500">
                 Document Checklist
               </p>
@@ -487,7 +522,7 @@ export default function DashboardPage() {
 
           <div
             id="contact"
-            className="mt-8 rounded-[30px] bg-blue-950 p-7 text-white shadow-[0_16px_45px_rgba(15,23,42,0.16)]"
+            className="mt-8 rounded-[28px] bg-blue-950 p-6 text-white shadow-[0_16px_45px_rgba(15,23,42,0.16)] lg:rounded-[30px] lg:p-7"
           >
             <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
               <div>

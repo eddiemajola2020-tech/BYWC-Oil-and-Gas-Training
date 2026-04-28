@@ -629,7 +629,7 @@ const [currentStep, setCurrentStep] = useState(0);
         className="mx-auto max-w-7xl scroll-mt-28 px-6 py-10 lg:px-10"
       >
         <div className="grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="h-fit rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <aside className="hidden h-fit rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm lg:block">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-500">
               Progress
             </p>
@@ -697,11 +697,26 @@ const [currentStep, setCurrentStep] = useState(0);
           </aside>
 
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm lg:p-8">
-            <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-              Logged in as: <span className="font-bold">{loggedInEmail}</span>
-            </div>
+  {/* Mobile Progress Bar Only */}
+  <div className="mb-6 block lg:hidden">
+    <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+      <div
+        className="h-3 rounded-full bg-orange-500 transition-all duration-300"
+        style={{ width: `${progress}%` }}
+      />
+    </div>
 
-            <form onSubmit={handleSubmit}>
+    <p className="mt-3 text-sm font-semibold text-slate-600">
+      Step {currentStep + 1} of {steps.length}
+    </p>
+  </div>
+
+  {/* Logged In Box */}
+  <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+    Logged in as: <span className="font-bold">{loggedInEmail}</span>
+  </div>
+
+  <form onSubmit={handleSubmit}>
               {currentStep === 0 && (
                 <section>
                   <h3 className="text-2xl font-bold text-blue-950">

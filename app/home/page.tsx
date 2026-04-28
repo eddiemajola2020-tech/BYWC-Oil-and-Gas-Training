@@ -59,6 +59,7 @@ const bannerImages = ["/banner_1.png", "/banner_2.png", "/banner_3.png"];
 
 export default function Home() {
   const [activeBanner, setActiveBanner] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -72,19 +73,19 @@ export default function Home() {
     <main className="min-h-screen bg-[#f6f7fb] text-slate-900">
       {/* NAVBAR */}
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 lg:px-10">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 lg:px-10">
           {/* LOGO */}
-          <Link href="/home" className="flex h-full items-center">
+          <Link href="/home" className="flex items-center">
             <img
               src="/bywc-logo.png.png"
               alt="BYWC Logo"
-              className="h-12 w-auto object-contain md:h-14 lg:h-16"
+              className="h-16 w-auto object-contain md:h-20"
             />
           </Link>
 
-          {/* NAV LINKS */}
+          {/* DESKTOP NAV LINKS */}
           <nav className="hidden items-center gap-8 text-sm font-medium text-slate-700 md:flex">
-            <Link href="/home" className="transition hover:text-blue-900">
+            <Link href="/home" className="text-blue-900">
               Home
             </Link>
 
@@ -96,10 +97,7 @@ export default function Home() {
               Apply
             </Link>
 
-            <Link
-              href="/dashboard"
-              className="transition hover:text-blue-900"
-            >
+            <Link href="/dashboard" className="transition hover:text-blue-900">
               Dashboard
             </Link>
 
@@ -108,55 +106,109 @@ export default function Home() {
             </a>
           </nav>
 
-          {/* RIGHT SIDE */}
-          <div className="flex items-center gap-3">
+          {/* DESKTOP RIGHT SIDE */}
+          <div className="hidden items-center gap-3 md:flex">
             <Link
               href="/dashboard"
-              className="rounded-full bg-orange-500 px-5 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+              className="rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-600"
             >
               Dashboard
             </Link>
           </div>
+
+          {/* MOBILE MENU BUTTON */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className="rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white md:hidden"
+          >
+            {mobileMenuOpen ? "Close" : "Menu"}
+          </button>
         </div>
+
+        {/* MOBILE DROPDOWN MENU */}
+        {mobileMenuOpen && (
+          <div className="border-t border-slate-200 bg-white px-5 py-5 md:hidden">
+            <div className="grid gap-3">
+              <Link
+                href="/home"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700"
+              >
+                Home
+              </Link>
+
+              <Link
+                href="/program"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
+              >
+                Program
+              </Link>
+
+              <Link
+                href="/apply"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
+              >
+                Apply
+              </Link>
+
+              <Link
+                href="/dashboard"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
+              >
+                Dashboard
+              </Link>
+
+              <a
+                href="#contact"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
+              >
+                Contact
+              </a>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* SECTION 1: HERO BANNER CAROUSEL */}
-      <section className="px-6 pt-8 lg:px-10 lg:pt-10">
+      <section className="px-4 pt-4 sm:px-6 sm:pt-6 lg:px-10 lg:pt-10">
         <div className="mx-auto max-w-7xl">
-          <div className="relative overflow-hidden rounded-[32px] shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
-            <div className="relative h-[78vh] min-h-[620px] w-full overflow-hidden rounded-[32px]">
+          <div className="relative overflow-hidden rounded-[26px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:rounded-[32px]">
+            <div className="relative h-[500px] w-full overflow-hidden rounded-[26px] md:h-[76vh] md:min-h-[620px] md:rounded-[32px] lg:h-[78vh]">
               {bannerImages.map((image, index) => (
                 <img
                   key={image}
                   src={image}
                   alt={`BYWC banner ${index + 1}`}
-                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
+                  className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-1000 ${
                     index === activeBanner ? "opacity-100" : "opacity-0"
                   }`}
                 />
               ))}
 
-              {/* DARK GRADIENT OVERLAY */}
-              <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/45 to-black/45 md:bg-gradient-to-r md:from-black/60 md:via-black/25 md:to-transparent" />
 
-              {/* HERO COPY */}
-              <div className="absolute inset-0 z-20 flex items-center">
-                <div className="w-full px-8 lg:px-14">
+              <div className="absolute inset-0 z-20 flex items-end pb-20 md:items-center md:pb-0">
+                <div className="w-full px-6 sm:px-8 lg:px-14">
                   <div className="max-w-3xl">
-                    <h1 className="text-5xl font-bold leading-[1.05] text-white md:text-6xl lg:text-7xl">
-                      10-Day Oil & Gas
+                    <h1 className="max-w-[620px] text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
+                      10-Day Oil &amp; Gas
                       <br />
                       Training Program
                     </h1>
 
-                    <p className="mt-6 max-w-xl text-lg font-medium text-white/90">
+                    <p className="mt-5 max-w-md text-base font-semibold leading-7 text-white/95 sm:text-lg md:mt-6 md:max-w-xl">
                       Gain skills. Enter Botswana’s energy sector.
                     </p>
 
-                    <div className="mt-10">
+                    <div className="mt-7 md:mt-10">
                       <Link
                         href="/apply"
-                        className="inline-flex rounded-full bg-orange-500 px-8 py-4 text-base font-semibold text-white shadow-lg transition hover:bg-orange-600"
+                        className="inline-flex rounded-full bg-orange-500 px-7 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-orange-600 md:px-8 md:py-4 md:text-base"
                       >
                         Apply Now
                       </Link>
@@ -165,7 +217,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* CAROUSEL DOTS */}
               <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 gap-3">
                 {bannerImages.map((_, index) => (
                   <button
@@ -190,17 +241,16 @@ export default function Home() {
       {/* SECTION 2: LOGGED-IN JOURNEY PREVIEW */}
       <section className="bg-[#f6f7fb]">
         <div className="mx-auto grid max-w-7xl gap-8 px-6 py-14 lg:grid-cols-2 lg:px-10 lg:py-16">
-          {/* LEFT SIDE */}
           <div className="flex flex-col justify-center">
             <span className="mb-4 inline-flex w-fit rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-orange-700">
               NATIONAL TRAINING PLATFORM
             </span>
 
-            <h2 className="max-w-xl text-5xl font-bold leading-tight tracking-tight text-blue-950 lg:text-6xl">
+            <h2 className="max-w-xl text-4xl font-bold leading-tight tracking-tight text-blue-950 md:text-5xl lg:text-6xl">
               Build Your Future in Botswana’s Energy Sector
             </h2>
 
-            <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
+            <p className="mt-6 max-w-xl text-base leading-8 text-slate-600 md:text-lg">
               A structured national platform helping youth, women and citizens
               access training, industry readiness, and real opportunity in oil,
               gas, logistics, fuel retail, and entrepreneurship.
@@ -240,14 +290,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT SIDE */}
           <div className="relative flex items-center justify-center">
             <div className="absolute -top-8 right-10 h-28 w-28 rounded-full bg-orange-200/40 blur-3xl" />
             <div className="absolute bottom-0 left-0 h-36 w-36 rounded-full bg-blue-200/40 blur-3xl" />
 
             <div className="relative w-full max-w-xl rounded-[28px] border border-white/60 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
-              {/* HEADER */}
-              <div className="mb-6 flex items-center justify-between">
+              <div className="mb-6 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm text-slate-500">Program Flow</p>
                   <h3 className="text-xl font-semibold text-blue-950">
@@ -260,7 +308,6 @@ export default function Home() {
                 </span>
               </div>
 
-              {/* STEPS */}
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="text-sm text-slate-500">Step 1</p>
@@ -299,13 +346,12 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* CTA */}
               <div className="mt-6 rounded-2xl bg-blue-950 p-5 text-white">
                 <p className="text-sm text-blue-100">
                   Application Dashboard
                 </p>
 
-                <div className="mt-3 flex items-end justify-between">
+                <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-3xl font-bold">Track Progress</p>
                     <p className="mt-1 text-sm text-blue-100">
@@ -315,7 +361,7 @@ export default function Home() {
 
                   <Link
                     href="/dashboard"
-                    className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-950"
+                    className="w-fit rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-950"
                   >
                     Dashboard
                   </Link>
@@ -326,12 +372,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SECTION 3: ABOUT REDESIGNED WITH IMAGE */}
+      {/* SECTION 3: WHY THIS PROGRAM MATTERS */}
       <section id="about" className="bg-white py-16">
         <div className="mx-auto max-w-7xl px-6 lg:px-10">
           <div className="grid items-center gap-8 lg:grid-cols-[1fr_1fr]">
             <div className="relative">
-              <div className="max-w-xl rounded-[28px_28px_110px_28px] bg-[#214b92] px-8 py-10 text-white shadow-[0_20px_50px_rgba(33,75,146,0.18)] lg:px-10 lg:py-12">
+              <div className="max-w-xl rounded-[28px_28px_90px_28px] bg-[#214b92] px-8 py-10 text-white shadow-[0_20px_50px_rgba(33,75,146,0.18)] lg:rounded-[28px_28px_110px_28px] lg:px-10 lg:py-12">
                 <span className="inline-flex rounded-full bg-white/12 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/90">
                   BYWC Overview
                 </span>
@@ -363,7 +409,7 @@ export default function Home() {
             <div className="relative flex items-center justify-center">
               <div className="absolute inset-0 flex items-center justify-center">
                 <div
-                  className="h-[360px] w-[360px] rounded-full opacity-20 blur-3xl"
+                  className="h-[300px] w-[300px] rounded-full opacity-20 blur-3xl lg:h-[360px] lg:w-[360px]"
                   style={{
                     background:
                       "radial-gradient(circle, rgba(33,75,146,0.35) 0%, rgba(255,255,255,0) 70%)",
@@ -380,11 +426,11 @@ export default function Home() {
                 }}
               />
 
-              <div className="relative flex min-h-[420px] w-full items-end justify-center">
+              <div className="relative flex min-h-[340px] w-full items-end justify-center lg:min-h-[420px]">
                 <img
                   src="/person_1.png"
                   alt="BYWC participant overview"
-                  className="max-h-[480px] w-auto object-contain lg:max-h-[560px]"
+                  className="max-h-[420px] w-auto object-contain lg:max-h-[560px]"
                 />
               </div>
             </div>
@@ -410,7 +456,7 @@ export default function Home() {
       </section>
 
       {/* PARTNERS */}
-      <section className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
+      <section id="partners" className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
         <div className="mb-10 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
             In Partnership With
@@ -425,12 +471,12 @@ export default function Home() {
           {partners.map((logo, index) => (
             <div
               key={index}
-              className="flex h-[120px] items-center justify-center rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+              className="flex h-[110px] items-center justify-center rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md lg:h-[120px]"
             >
               <img
                 src={logo}
                 alt={`Partner logo ${index + 1}`}
-                className="h-full w-full object-contain scale-125"
+                className="h-full w-full scale-110 object-contain lg:scale-125"
               />
             </div>
           ))}
@@ -439,7 +485,6 @@ export default function Home() {
 
       {/* WHAT YOU'LL LEARN */}
       <section className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
-        {/* HEADER */}
         <div className="mb-12 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
             What You’ll Learn
@@ -450,9 +495,7 @@ export default function Home() {
           </h2>
         </div>
 
-        {/* CONTENT */}
         <div className="grid items-center gap-10 lg:grid-cols-2">
-          {/* IMAGE LEFT */}
           <div className="flex justify-center">
             <img
               src="/pic_1.png"
@@ -461,199 +504,127 @@ export default function Home() {
             />
           </div>
 
-          {/* RIGHT SIDE */}
           <div>
             <p className="max-w-xl text-base leading-8 text-slate-600">
-              The program is designed to help participants understand the
-              sector, identify opportunity areas, and build the readiness needed
-              to move toward employment, entrepreneurship, and industry
-              participation.
+              The program is designed to help participants understand the sector,
+              identify opportunity areas, and build the readiness needed to move
+              toward employment, entrepreneurship, and industry participation.
             </p>
 
-            {/* CARDS */}
-            <div className="mt-10 grid gap-6 md:grid-cols-2">
+            <div className="mt-8 grid gap-6 md:grid-cols-2">
               {pathwayCards.map((item) => (
                 <div
                   key={item.title}
-                  className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
+                  className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
                 >
-                  {/* ICON CONTAINER */}
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-                    {/* ICON SIZE CONTROL */}
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50">
                     <img
                       src={item.icon}
                       alt={item.title}
-                      className={`object-contain ${
-                        item.title === "LPG & Clean Energy"
-                          ? "h-12 w-12"
-                          : "h-16 w-16"
-                      }`}
+                      className="h-10 w-10 object-contain"
                     />
                   </div>
 
-                  {/* TEXT */}
-                  <div>
-                    <h3 className="font-semibold text-blue-900">
-                      {item.title}
-                    </h3>
+                  <h3 className="font-semibold text-blue-900">
+                    {item.title}
+                  </h3>
 
-                    <p className="mt-1 text-sm leading-6 text-gray-600">
-                      {item.text}
-                    </p>
-                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {item.text}
+                  </p>
                 </div>
               ))}
             </div>
 
-            {/* BUTTONS */}
-            <div className="mt-10 flex flex-wrap gap-4">
+            <div className="mt-8">
               <Link
                 href="/program"
-                className="rounded-full border-2 border-blue-900 px-6 py-3 text-sm font-semibold text-blue-900 hover:bg-blue-50"
+                className="inline-flex rounded-full bg-blue-950 px-7 py-3.5 text-sm font-semibold text-white hover:bg-blue-900"
               >
-                See More
-              </Link>
-
-              <Link
-                href="/apply"
-                className="rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-600"
-              >
-                Apply Now
+                View Full Programme
               </Link>
             </div>
           </div>
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
-      <section className="bg-white py-20 text-center">
-        <div className="mx-auto max-w-6xl px-6 lg:px-10">
-          {/* HEADER */}
-          <div className="mb-12 text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
-              How It Works
-            </p>
+      {/* FINAL CTA */}
+      <section className="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+        <div className="rounded-3xl bg-blue-950 p-8 text-center text-white shadow-[0_20px_60px_rgba(15,23,42,0.16)] lg:p-10">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-300">
+            Applications Open
+          </p>
 
-            <h2 className="mt-3 text-3xl font-bold text-blue-950 lg:text-4xl">
-              Your Application Journey
-            </h2>
-          </div>
+          <h2 className="mt-4 text-3xl font-bold lg:text-4xl">
+            Ready to Apply?
+          </h2>
 
-          {/* DESKTOP FLOW */}
-          <div className="mt-10 hidden items-center justify-center gap-4 md:flex">
-            {/* STEP 1 */}
-            <div className="relative flex w-full max-w-sm items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
-                1
-              </div>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-blue-100 md:text-base">
+            Start your application and take the first step into Botswana’s
+            energy sector.
+          </p>
 
-              <p className="text-base font-medium text-slate-900">
-                Complete Application
-              </p>
-            </div>
-
-            {/* ARROW 1 */}
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-500">
-              <span className="text-xl font-bold">→</span>
-            </div>
-
-            {/* STEP 2 */}
-            <div className="relative flex w-full max-w-sm items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
-                2
-              </div>
-
-              <p className="text-base font-medium text-slate-900">
-                Submit Documents
-              </p>
-            </div>
-
-            {/* ARROW 2 */}
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-500">
-              <span className="text-xl font-bold">→</span>
-            </div>
-
-            {/* STEP 3 */}
-            <div className="relative flex w-full max-w-sm items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
-                3
-              </div>
-
-              <p className="text-base font-medium text-slate-900">
-                Track Status
-              </p>
-            </div>
-          </div>
-
-          {/* MOBILE STACK */}
-          <div className="mt-10 grid gap-4 md:hidden">
-            <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
-                1
-              </div>
-
-              <p className="text-base font-medium text-slate-900">
-                Complete Application
-              </p>
-            </div>
-
-            <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
-                2
-              </div>
-
-              <p className="text-base font-medium text-slate-900">
-                Submit Documents
-              </p>
-            </div>
-
-            <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
-                3
-              </div>
-
-              <p className="text-base font-medium text-slate-900">
-                Track Status
-              </p>
-            </div>
-          </div>
-
-          {/* EXPLANATION COPY */}
-          <div className="mx-auto mt-12 max-w-3xl text-center">
-            <p className="text-base leading-8 text-slate-600">
-              Complete your application, upload the required documents, and
-              submit your application for review. Once submitted, you can return
-              to your dashboard at any time to check your progress and see new
-              updates on your application status.
-            </p>
-          </div>
-
-          {/* CTA */}
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
               href="/apply"
-              className="rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-600"
+              className="rounded-full bg-orange-500 px-7 py-3.5 text-sm font-semibold text-white hover:bg-orange-600"
             >
-              Start Application
+              Apply Now
             </Link>
 
             <Link
               href="/dashboard"
-              className="rounded-full border-2 border-blue-900 px-6 py-3 text-sm font-semibold text-blue-900 hover:bg-blue-50"
+              className="rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-blue-950 hover:bg-slate-100"
             >
-              Check Status
+              Go to Dashboard
             </Link>
           </div>
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer
-        id="contact"
-        className="border-t py-6 text-center text-sm text-gray-500"
-      >
-        © 2026 BYWC Oil &amp; Gas Training Platform
-      </footer>
+      {/* CONTACT */}
+      <section id="contact" className="bg-white py-14">
+        <div className="mx-auto max-w-7xl px-6 lg:px-10">
+          <div className="rounded-[28px] border border-slate-200 bg-[#f6f7fb] p-8 shadow-sm">
+            <div className="grid gap-8 lg:grid-cols-[1fr_0.8fr] lg:items-center">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
+                  Contact
+                </p>
+
+                <h2 className="mt-3 text-3xl font-bold text-blue-950">
+                  Need help with the programme?
+                </h2>
+
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
+                  Contact the programme administration team for support with
+                  applications, account access, programme information, and
+                  onboarding.
+                </p>
+              </div>
+
+              <div className="grid gap-3 text-sm text-slate-700">
+                <div className="rounded-2xl bg-white px-5 py-4">
+                  <span className="font-semibold text-blue-950">Phone:</span>{" "}
+                  355 2838
+                </div>
+
+                <div className="rounded-2xl bg-white px-5 py-4">
+                  <span className="font-semibold text-blue-950">Email:</span>{" "}
+                  oil-gas.training@sethresources.com
+                </div>
+
+                <Link
+                  href="/apply"
+                  className="rounded-2xl bg-orange-500 px-5 py-4 text-center font-semibold text-white hover:bg-orange-600"
+                >
+                  Start Application
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
