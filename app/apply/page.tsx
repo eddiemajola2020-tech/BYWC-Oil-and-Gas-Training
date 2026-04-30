@@ -19,9 +19,11 @@ type FormData = {
   disabilityProofFile: string;
   constituency: string;
   district: string;
+  townVillage: string;
   address: string;
 
   highestQualification: string;
+  completedBgcseIgcse: string;
   examinationBody: string;
   bgcseLevel: string;
   bgcsePoints: string;
@@ -29,6 +31,7 @@ type FormData = {
   yearCompleted: string;
   preferredLanguage: string;
   englishComfort: string;
+  tertiaryCompleted: string;
   tertiaryEducation: string;
   tertiaryInstitution: string;
   fieldOfStudy: string;
@@ -44,6 +47,8 @@ type FormData = {
   omangFile: string;
   cvFile: string;
   certificateFile: string;
+  bgcseCertificateFile: string;
+  highestQualificationFile: string;
 
   declarationAccepted: boolean;
   consentAccepted: boolean;
@@ -53,72 +58,82 @@ type UploadingState = {
   omangFile: boolean;
   cvFile: boolean;
   certificateFile: boolean;
+  bgcseCertificateFile: boolean;
+  highestQualificationFile: boolean;
   disabilityProofFile: boolean;
 };
 
-const constituencies = [
-  "Okavango West",
-  "Okavango East",
-  "Ngami",
-  "Maun North",
-  "Maun East",
-  "Maun West",
-  "Chobe",
-  "Nata-Gweta",
-  "Nkange",
-  "Shashe West",
-  "Tati West",
-  "Tati East",
-  "Francistown West",
-  "Francistown South",
-  "Francistown East",
-  "Tonota",
-  "Boteti East",
-  "Ghanzi North",
-  "Ghanzi South",
-  "Kgalagadi North",
-  "Kgalagadi South",
-  "Serowe North",
-  "Serowe West",
-  "Serowe South",
-  "Shoshong",
-  "Mahalapye West",
-  "Mahalapye East",
-  "Lerala-Maunatlala",
-  "Palapye",
-  "Mmadinare",
-  "Bobonong",
-  "Selebi Phikwe West",
-  "Selebi Phikwe East",
-  "Kgatleng West",
-  "Kgatleng Central",
-  "Kgatleng East",
-  "Boteti West",
-  "Boteti South",
-  "Letlhakeng",
-  "Takatokwane",
-  "Jwaneng-Mabutsane",
-  "Molepolole North",
-  "Molepolole South",
-  "Thamaga-Kumakwane",
-  "Mmopane-Metsimotlhabe",
-  "Lentsweletau",
-  "Mogoditshane West",
-  "Mogoditshane East",
-  "Gaborone North",
-  "Gaborone Central",
-  "Gaborone North West",
-  "Gaborone South",
-  "Gaborone Bonnington North",
-  "Gaborone Bonnington South",
-  "Tlokweng-Mmokolodi",
-  "Ramotswa",
-  "Lobatse",
-  "Goodhope-Mmathethe",
-  "Kanye North",
-  "Kanye South",
-  "Moshupa-Manyana",
-];
+const districtConstituencies: Record<string, string[]> = {
+  "Central District": [
+    "Serowe North",
+    "Serowe West",
+    "Serowe South",
+    "Shoshong",
+    "Mahalapye West",
+    "Mahalapye East",
+    "Lerala-Maunatlala",
+    "Palapye",
+    "Mmadinare",
+    "Bobonong",
+    "Selebi Phikwe West",
+    "Selebi Phikwe East",
+    "Boteti East",
+    "Boteti West",
+    "Boteti South",
+  ],
+  "North West District": [
+    "Okavango West",
+    "Okavango East",
+    "Ngami",
+    "Maun North",
+    "Maun East",
+    "Maun West",
+  ],
+  "Chobe District": ["Chobe"],
+  "Tutume District": ["Nata-Gweta", "Nkange", "Shashe West", "Tonota"],
+  "North East District": [
+    "Tati West",
+    "Tati East",
+    "Francistown West",
+    "Francistown South",
+    "Francistown East",
+  ],
+  "Ghanzi District": ["Ghanzi North", "Ghanzi South"],
+  "Kgalagadi District": ["Kgalagadi North", "Kgalagadi South"],
+  "Kgatleng District": ["Kgatleng West", "Kgatleng Central", "Kgatleng East"],
+  "Kweneng District": [
+    "Letlhakeng",
+    "Takatokwane",
+    "Molepolole North",
+    "Molepolole South",
+    "Thamaga-Kumakwane",
+    "Mmopane-Metsimotlhabe",
+    "Lentsweletau",
+    "Mogoditshane West",
+    "Mogoditshane East",
+  ],
+  "South East District": [
+    "Gaborone North",
+    "Gaborone Central",
+    "Gaborone North West",
+    "Gaborone South",
+    "Gaborone Bonnington North",
+    "Gaborone Bonnington South",
+    "Tlokweng-Mmokolodi",
+    "Ramotswa",
+  ],
+  "Southern District": [
+    "Jwaneng-Mabutsane",
+    "Lobatse",
+    "Goodhope-Mmathethe",
+    "Kanye North",
+    "Kanye South",
+    "Moshupa-Manyana",
+  ],
+};
+
+const districts = Object.keys(districtConstituencies);
+const allConstituencies = Object.values(districtConstituencies).flat();
 
 const initialFormData: FormData = {
   firstName: "",
@@ -135,9 +150,11 @@ const initialFormData: FormData = {
   disabilityProofFile: "",
   constituency: "",
   district: "",
+  townVillage: "",
   address: "",
 
   highestQualification: "",
+  completedBgcseIgcse: "",
   examinationBody: "",
   bgcseLevel: "",
   bgcsePoints: "",
@@ -145,6 +162,7 @@ const initialFormData: FormData = {
   yearCompleted: "",
   preferredLanguage: "",
   englishComfort: "",
+  tertiaryCompleted: "",
   tertiaryEducation: "",
   tertiaryInstitution: "",
   fieldOfStudy: "",
@@ -160,6 +178,8 @@ const initialFormData: FormData = {
   omangFile: "",
   cvFile: "",
   certificateFile: "",
+  bgcseCertificateFile: "",
+  highestQualificationFile: "",
 
   declarationAccepted: false,
   consentAccepted: false,
@@ -174,6 +194,10 @@ const steps = [
   "Review",
 ];
 
+function countWords(text: string) {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
 export default function ApplyPage() {
  const [loggedInEmail, setLoggedInEmail] = useState("");
 const [authChecked, setAuthChecked] = useState(false);
@@ -187,6 +211,8 @@ const [currentStep, setCurrentStep] = useState(0);
     omangFile: false,
     cvFile: false,
     certificateFile: false,
+    bgcseCertificateFile: false,
+    highestQualificationFile: false,
     disabilityProofFile: false,
   });
 
@@ -197,17 +223,33 @@ const [currentStep, setCurrentStep] = useState(0);
     return ((currentStep + 1) / steps.length) * 100;
   }, [currentStep]);
 
+  const motivationWordCount = useMemo(() => {
+    return countWords(formData.motivation);
+  }, [formData.motivation]);
+
+  const postProgramWordCount = useMemo(() => {
+    return countWords(formData.postProgramPlan);
+  }, [formData.postProgramPlan]);
+
+  const availableConstituencies = useMemo(() => {
+    if (!formData.district) {
+      return allConstituencies;
+    }
+
+    return districtConstituencies[formData.district] || [];
+  }, [formData.district]);
+
   const filteredConstituencies = useMemo(() => {
     const query = constituencyQuery.trim().toLowerCase();
 
     if (!query) {
-      return constituencies.slice(0, 10);
+      return availableConstituencies.slice(0, 10);
     }
 
-    return constituencies.filter((item) =>
+    return availableConstituencies.filter((item) =>
       item.toLowerCase().includes(query)
     );
-  }, [constituencyQuery]);
+  }, [constituencyQuery, availableConstituencies]);
 
   useEffect(() => {
   let redirectTimer: ReturnType<typeof setTimeout>;
@@ -318,6 +360,44 @@ const [currentStep, setCurrentStep] = useState(0);
       return;
     }
 
+    if (name === "district") {
+      setFormData((prev) => ({
+        ...prev,
+        district: value,
+        constituency: "",
+      }));
+      setConstituencyQuery("");
+      setShowConstituencyResults(false);
+      return;
+    }
+
+    if (name === "completedBgcseIgcse") {
+      setFormData((prev) => ({
+        ...prev,
+        completedBgcseIgcse: value,
+        examinationBody: value === "Yes" ? prev.examinationBody : "",
+        bgcsePoints: value === "Yes" ? prev.bgcsePoints : "",
+        schoolName: value === "Yes" ? prev.schoolName : "",
+        yearCompleted: value === "Yes" ? prev.yearCompleted : "",
+        bgcseCertificateFile: value === "Yes" ? prev.bgcseCertificateFile : "",
+        certificateFile: value === "Yes" ? prev.certificateFile : "",
+      }));
+      return;
+    }
+
+    if (name === "tertiaryCompleted") {
+      setFormData((prev) => ({
+        ...prev,
+        tertiaryCompleted: value,
+        tertiaryEducation: value === "Yes" ? prev.tertiaryEducation : "",
+        tertiaryInstitution: value === "Yes" ? prev.tertiaryInstitution : "",
+        fieldOfStudy: value === "Yes" ? prev.fieldOfStudy : "",
+        highestQualificationFile:
+          value === "Yes" ? prev.highestQualificationFile : "",
+      }));
+      return;
+    }
+
     if (name === "employmentStatus") {
       setFormData((prev) => ({
         ...prev,
@@ -363,6 +443,8 @@ const [currentStep, setCurrentStep] = useState(0);
       | "omangFile"
       | "cvFile"
       | "certificateFile"
+      | "bgcseCertificateFile"
+      | "highestQualificationFile"
       | "disabilityProofFile"
   ) {
     const file = e.target.files?.[0];
@@ -485,9 +567,11 @@ const [currentStep, setCurrentStep] = useState(0);
 
       constituency: formData.constituency,
       district: formData.district,
+      town_village: formData.townVillage,
       address: formData.address,
 
       highest_qualification: formData.highestQualification,
+      completed_bgcse_igcse: formData.completedBgcseIgcse,
       examination_body: formData.examinationBody,
       bgcse_level: formData.bgcseLevel,
       bgcse_points: formData.bgcsePoints,
@@ -496,6 +580,7 @@ const [currentStep, setCurrentStep] = useState(0);
       preferred_language: formData.preferredLanguage,
       english_comfort: formData.englishComfort,
 
+      tertiary_completed: formData.tertiaryCompleted,
       tertiary_education: formData.tertiaryEducation,
       tertiary_institution: formData.tertiaryInstitution,
       field_of_study: formData.fieldOfStudy,
@@ -507,10 +592,15 @@ const [currentStep, setCurrentStep] = useState(0);
 
       motivation: formData.motivation,
       post_program_plan: formData.postProgramPlan,
+      motivation_word_count: motivationWordCount,
+      post_program_word_count: postProgramWordCount,
 
       omang_file: formData.omangFile,
       cv_file: formData.cvFile,
-      certificate_file: formData.certificateFile,
+      certificate_file: formData.bgcseCertificateFile || formData.certificateFile,
+      bgcse_certificate_file:
+        formData.bgcseCertificateFile || formData.certificateFile,
+      highest_qualification_file: formData.highestQualificationFile,
 
       declaration_accepted: formData.declarationAccepted,
       consent_accepted: formData.consentAccepted,
@@ -817,10 +907,18 @@ const [currentStep, setCurrentStep] = useState(0);
                       </>
                     )}
 
-                    <Input
-                      label="District / Town / Village"
+                    <Select
+                      label="District"
                       name="district"
                       value={formData.district}
+                      onChange={handleInputChange}
+                      options={["Select district", ...districts]}
+                    />
+
+                    <Input
+                      label="Town / Village"
+                      name="townVillage"
+                      value={formData.townVillage}
                       onChange={handleInputChange}
                     />
                   </div>
@@ -843,13 +941,17 @@ const [currentStep, setCurrentStep] = useState(0);
                           setShowConstituencyResults(true);
                         }}
                         onFocus={() => setShowConstituencyResults(true)}
-                        placeholder="Start typing your constituency name"
+                        placeholder={
+                          formData.district
+                            ? "Start typing your constituency name"
+                            : "Select district first, then type constituency"
+                        }
                         className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-900 focus:ring-2 focus:ring-blue-100"
                       />
 
                       <p className="mt-2 text-xs text-slate-500">
-                        Start typing to search instead of scrolling through all
-                        61 constituencies.
+                        Select your district first. Constituency suggestions
+                        will then be filtered for that district.
                       </p>
 
                       {showConstituencyResults && (
@@ -877,7 +979,7 @@ const [currentStep, setCurrentStep] = useState(0);
 
                   <div className="mt-6">
                     <TextArea
-                      label="Physical Address"
+                      label="Residential Address"
                       name="address"
                       value={formData.address}
                       onChange={handleInputChange}
@@ -893,28 +995,28 @@ const [currentStep, setCurrentStep] = useState(0);
                     Education
                   </h3>
                   <p className="mt-2 text-sm text-slate-600">
-                    Provide your academic background and preferred training
-                    language.
+                    Provide your education background. BGCSE / IGCSE completion
+                    and proof are required for eligibility screening.
                   </p>
 
                   <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
                     <h4 className="text-lg font-bold text-blue-950">
-                      Secondary Education
+                      Minimum Education Requirement
                     </h4>
                     <p className="mt-2 text-sm text-slate-600">
-                      This section captures your core academic background.
+                      This section confirms whether you meet the minimum academic
+                      requirement for the programme.
                     </p>
 
                     <div className="mt-6 grid gap-6 md:grid-cols-2">
                       <Select
-                        label="Highest Qualification"
+                        label="Highest Qualification Completed"
                         name="highestQualification"
                         value={formData.highestQualification}
                         onChange={handleInputChange}
                         options={[
                           "Select qualification",
-                          "BGCSE",
-                          "IGCSE",
+                          "BGCSE / IGCSE",
                           "Certificate",
                           "Diploma",
                           "Degree",
@@ -922,43 +1024,70 @@ const [currentStep, setCurrentStep] = useState(0);
                           "Other",
                         ]}
                       />
+
                       <Select
-                        label="Examination Body"
-                        name="examinationBody"
-                        value={formData.examinationBody}
+                        label="Did you complete BGCSE / IGCSE?"
+                        name="completedBgcseIgcse"
+                        value={formData.completedBgcseIgcse}
                         onChange={handleInputChange}
-                        options={[
-                          "Select examination body",
-                          "BGCSE",
-                          "IGCSE",
-                          "Other",
-                        ]}
+                        options={["Select option", "Yes", "No"]}
                       />
-                      <Input
-                        label="Minimum BGCSE / IGCSE Level"
-                        name="bgcseLevel"
-                        value={formData.bgcseLevel}
-                        onChange={handleInputChange}
-                      />
-                      <Input
-                        label="BGCSE / IGCSE Points"
-                        name="bgcsePoints"
-                        type="number"
-                        value={formData.bgcsePoints}
-                        onChange={handleInputChange}
-                      />
-                      <Input
-                        label="School Name"
-                        name="schoolName"
-                        value={formData.schoolName}
-                        onChange={handleInputChange}
-                      />
-                      <Input
-                        label="Year Completed"
-                        name="yearCompleted"
-                        value={formData.yearCompleted}
-                        onChange={handleInputChange}
-                      />
+
+                      {formData.completedBgcseIgcse === "Yes" && (
+                        <>
+                          <Select
+                            label="Examination Type"
+                            name="examinationBody"
+                            value={formData.examinationBody}
+                            onChange={handleInputChange}
+                            options={[
+                              "Select examination type",
+                              "BGCSE",
+                              "IGCSE",
+                              "Other",
+                            ]}
+                          />
+
+                          <Input
+                            label="BGCSE / IGCSE Points"
+                            name="bgcsePoints"
+                            type="number"
+                            value={formData.bgcsePoints}
+                            onChange={handleInputChange}
+                          />
+
+                          <Input
+                            label="School Name"
+                            name="schoolName"
+                            value={formData.schoolName}
+                            onChange={handleInputChange}
+                          />
+
+                          <Input
+                            label="Year Completed"
+                            name="yearCompleted"
+                            value={formData.yearCompleted}
+                            onChange={handleInputChange}
+                          />
+
+                          <div className="md:col-span-2">
+                            <FileUploadCard
+                              label="BGCSE / IGCSE Certificate or Results Slip"
+                              helper="Required for eligibility screening. Accepted formats: PDF, JPG, PNG"
+                              fileName={
+                                formData.bgcseCertificateFile ||
+                                formData.certificateFile
+                              }
+                              inputId="bgcse-certificate-upload"
+                              isUploading={uploading.bgcseCertificateFile}
+                              onFileChange={(e) =>
+                                handleFileUpload(e, "bgcseCertificateFile")
+                              }
+                            />
+                          </div>
+                        </>
+                      )}
+
                       <Select
                         label="Preferred Training Language"
                         name="preferredLanguage"
@@ -970,6 +1099,7 @@ const [currentStep, setCurrentStep] = useState(0);
                           "Setswana",
                         ]}
                       />
+
                       <Select
                         label="Are you comfortable learning and participating in English?"
                         name="englishComfort"
@@ -979,45 +1109,72 @@ const [currentStep, setCurrentStep] = useState(0);
                       />
                     </div>
 
-                    <p className="mt-5 text-xs leading-6 text-slate-500">
-                      The training programme is delivered primarily in English.
-                      Preferred language is used for eligibility screening and
-                      administration planning.
-                    </p>
+                    
                   </div>
 
                   <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6">
                     <h4 className="text-lg font-bold text-blue-950">
-                      Tertiary / Additional Study
+                      Higher Qualification Evidence
                     </h4>
                     <p className="mt-2 text-sm text-slate-600">
-                      Fill this in only if you have further education beyond
-                      BGCSE / IGCSE.
+                      If you have a certificate, diploma, degree, postgraduate
+                      qualification, or other higher qualification, provide the
+                      details and upload proof. This can strengthen your
+                      application ranking.
                     </p>
 
                     <div className="mt-6 grid gap-6 md:grid-cols-2">
-                      <Input
-                        label="Tertiary Qualification (Optional)"
-                        name="tertiaryEducation"
-                        value={formData.tertiaryEducation}
+                      <Select
+                        label="Have you completed tertiary / higher education?"
+                        name="tertiaryCompleted"
+                        value={formData.tertiaryCompleted}
                         onChange={handleInputChange}
+                        options={["Select option", "Yes", "No"]}
                       />
-                      <Input
-                        label="Institution Name (Optional)"
-                        name="tertiaryInstitution"
-                        value={formData.tertiaryInstitution}
-                        onChange={handleInputChange}
-                      />
-                    </div>
 
-                    <div className="mt-6">
-                      <TextArea
-                        label="Field of Study / Additional Details (Optional)"
-                        name="fieldOfStudy"
-                        value={formData.fieldOfStudy}
-                        onChange={handleInputChange}
-                        rows={4}
-                      />
+                      {formData.tertiaryCompleted === "Yes" && (
+                        <>
+                          <Input
+                            label="Higher Qualification Name"
+                            name="tertiaryEducation"
+                            value={formData.tertiaryEducation}
+                            onChange={handleInputChange}
+                          />
+
+                          <Input
+                            label="Institution Name"
+                            name="tertiaryInstitution"
+                            value={formData.tertiaryInstitution}
+                            onChange={handleInputChange}
+                          />
+
+                          <div className="md:col-span-2">
+                            <TextArea
+                              label="Field of Study / Additional Details"
+                              name="fieldOfStudy"
+                              value={formData.fieldOfStudy}
+                              onChange={handleInputChange}
+                              rows={4}
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <FileUploadCard
+                              label="Proof of Highest Qualification"
+                              helper="Optional but recommended. Accepted formats: PDF, JPG, PNG"
+                              fileName={formData.highestQualificationFile}
+                              inputId="highest-qualification-upload"
+                              isUploading={uploading.highestQualificationFile}
+                              onFileChange={(e) =>
+                                handleFileUpload(
+                                  e,
+                                  "highestQualificationFile"
+                                )
+                              }
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </section>
@@ -1104,24 +1261,50 @@ const [currentStep, setCurrentStep] = useState(0);
                   </h3>
                   <p className="mt-2 text-sm text-slate-600">
                     Tell us why you want to join the program and what you hope
-                    to do afterward.
+                    to do afterward. These answers help the review team assess
+                    seriousness and programme fit.
                   </p>
 
                   <div className="mt-8 space-y-6">
-                    <TextArea
-                      label="Why do you want to join this program?"
-                      name="motivation"
-                      value={formData.motivation}
-                      onChange={handleInputChange}
-                      rows={6}
-                    />
-                    <TextArea
-                      label="What do you hope to do after completing the program?"
-                      name="postProgramPlan"
-                      value={formData.postProgramPlan}
-                      onChange={handleInputChange}
-                      rows={6}
-                    />
+                    <div>
+                      <TextArea
+                        label="Why do you want to join this program?"
+                        name="motivation"
+                        value={formData.motivation}
+                        onChange={handleInputChange}
+                        rows={6}
+                      />
+                      <p
+                        className={`mt-2 text-xs ${
+                          motivationWordCount < 40
+                            ? "text-orange-600"
+                            : "text-slate-500"
+                        }`}
+                      >
+                        {motivationWordCount} words. Recommended minimum: 40
+                        words.
+                      </p>
+                    </div>
+
+                    <div>
+                      <TextArea
+                        label="What do you hope to do after completing the program?"
+                        name="postProgramPlan"
+                        value={formData.postProgramPlan}
+                        onChange={handleInputChange}
+                        rows={6}
+                      />
+                      <p
+                        className={`mt-2 text-xs ${
+                          postProgramWordCount < 30
+                            ? "text-orange-600"
+                            : "text-slate-500"
+                        }`}
+                      >
+                        {postProgramWordCount} words. Recommended minimum: 30
+                        words.
+                      </p>
+                    </div>
                   </div>
                 </section>
               )}
@@ -1132,8 +1315,8 @@ const [currentStep, setCurrentStep] = useState(0);
                     Documents
                   </h3>
                   <p className="mt-2 text-sm text-slate-600">
-                    Attach the required supporting documents for your
-                    application.
+                    Attach your supporting documents. Some documents are
+                    critical for eligibility screening.
                   </p>
 
                   {uploadError && (
@@ -1145,7 +1328,7 @@ const [currentStep, setCurrentStep] = useState(0);
                   <div className="mt-8 grid gap-6">
                     <FileUploadCard
                       label="Omang / ID Copy"
-                      helper="Accepted formats: PDF, JPG, PNG"
+                      helper="Required for eligibility screening. Accepted formats: PDF, JPG, PNG"
                       fileName={formData.omangFile}
                       inputId="omang-upload"
                       isUploading={uploading.omangFile}
@@ -1153,18 +1336,45 @@ const [currentStep, setCurrentStep] = useState(0);
                     />
 
                     <FileUploadCard
+                      label="BGCSE / IGCSE Certificate or Results Slip"
+                      helper="Required for eligibility screening. Accepted formats: PDF, JPG, PNG"
+                      fileName={
+                        formData.bgcseCertificateFile ||
+                        formData.certificateFile
+                      }
+                      inputId="bgcse-certificate-upload-documents"
+                      isUploading={uploading.bgcseCertificateFile}
+                      onFileChange={(e) =>
+                        handleFileUpload(e, "bgcseCertificateFile")
+                      }
+                    />
+
+                    <FileUploadCard
                       label="Curriculum Vitae (CV)"
-                      helper="Accepted formats: PDF, DOC, DOCX"
+                      helper="Optional but recommended. Accepted formats: PDF, DOC, DOCX"
                       fileName={formData.cvFile}
                       inputId="cv-upload"
                       isUploading={uploading.cvFile}
                       onFileChange={(e) => handleFileUpload(e, "cvFile")}
                     />
 
+                    {formData.tertiaryCompleted === "Yes" && (
+                      <FileUploadCard
+                        label="Proof of Highest Qualification"
+                        helper="Optional but recommended. Accepted formats: PDF, JPG, PNG"
+                        fileName={formData.highestQualificationFile}
+                        inputId="highest-qualification-upload-documents"
+                        isUploading={uploading.highestQualificationFile}
+                        onFileChange={(e) =>
+                          handleFileUpload(e, "highestQualificationFile")
+                        }
+                      />
+                    )}
+
                     {formData.disabilityStatus === "Yes" && (
                       <FileUploadCard
                         label="Proof of Disability"
-                        helper="Accepted formats: PDF, JPG, PNG"
+                        helper="Required if disability was selected. Accepted formats: PDF, JPG, PNG"
                         fileName={formData.disabilityProofFile}
                         inputId="disability-proof-upload-documents"
                         isUploading={uploading.disabilityProofFile}
@@ -1173,17 +1383,6 @@ const [currentStep, setCurrentStep] = useState(0);
                         }
                       />
                     )}
-
-                    <FileUploadCard
-                      label="Certificates / Results Slip"
-                      helper="Attach your BGCSE / IGCSE certificate or results slip"
-                      fileName={formData.certificateFile}
-                      inputId="certificate-upload"
-                      isUploading={uploading.certificateFile}
-                      onFileChange={(e) =>
-                        handleFileUpload(e, "certificateFile")
-                      }
-                    />
                   </div>
                 </section>
               )}
@@ -1218,9 +1417,10 @@ const [currentStep, setCurrentStep] = useState(0);
                           formData.disabilityType,
                         ],
                         ["Proof of Disability", formData.disabilityProofFile],
-                        ["Constituency", formData.constituency],
                         ["District", formData.district],
-                        ["Address", formData.address],
+                        ["Constituency", formData.constituency],
+                        ["Town / Village", formData.townVillage],
+                        ["Residential Address", formData.address],
                       ]}
                     />
 
@@ -1228,25 +1428,41 @@ const [currentStep, setCurrentStep] = useState(0);
                       title="Education"
                       items={[
                         [
-                          "Highest Qualification",
+                          "Highest Qualification Completed",
                           formData.highestQualification,
                         ],
-                        ["Examination Body", formData.examinationBody],
-                        ["Minimum BGCSE / IGCSE Level", formData.bgcseLevel],
+                        [
+                          "Completed BGCSE / IGCSE",
+                          formData.completedBgcseIgcse,
+                        ],
+                        ["Examination Type", formData.examinationBody],
                         ["BGCSE / IGCSE Points", formData.bgcsePoints],
                         ["School Name", formData.schoolName],
                         ["Year Completed", formData.yearCompleted],
+                        [
+                          "BGCSE / IGCSE Certificate",
+                          formData.bgcseCertificateFile ||
+                            formData.certificateFile,
+                        ],
                         [
                           "Preferred Training Language",
                           formData.preferredLanguage,
                         ],
                         ["English Comfort", formData.englishComfort],
                         [
-                          "Tertiary Qualification",
+                          "Tertiary / Higher Education Completed",
+                          formData.tertiaryCompleted,
+                        ],
+                        [
+                          "Higher Qualification",
                           formData.tertiaryEducation,
                         ],
                         ["Institution", formData.tertiaryInstitution],
                         ["Field of Study", formData.fieldOfStudy],
+                        [
+                          "Proof of Highest Qualification",
+                          formData.highestQualificationFile,
+                        ],
                       ]}
                     />
 
@@ -1267,7 +1483,12 @@ const [currentStep, setCurrentStep] = useState(0);
                       title="Motivation"
                       items={[
                         ["Why Join", formData.motivation],
+                        ["Motivation Word Count", String(motivationWordCount)],
                         ["Post Program Plan", formData.postProgramPlan],
+                        [
+                          "Post Program Word Count",
+                          String(postProgramWordCount),
+                        ],
                       ]}
                     />
 
@@ -1275,12 +1496,17 @@ const [currentStep, setCurrentStep] = useState(0);
                       title="Documents"
                       items={[
                         ["Omang / ID Copy", formData.omangFile],
-                        ["CV", formData.cvFile],
-                        ["Proof of Disability", formData.disabilityProofFile],
                         [
-                          "Certificates / Results Slip",
-                          formData.certificateFile,
+                          "BGCSE / IGCSE Certificate",
+                          formData.bgcseCertificateFile ||
+                            formData.certificateFile,
                         ],
+                        ["CV", formData.cvFile],
+                        [
+                          "Proof of Highest Qualification",
+                          formData.highestQualificationFile,
+                        ],
+                        ["Proof of Disability", formData.disabilityProofFile],
                       ]}
                     />
 
