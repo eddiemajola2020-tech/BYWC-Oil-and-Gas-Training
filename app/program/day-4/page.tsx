@@ -137,29 +137,35 @@ export default function DayFourPage() {
                   Focus areas include:
                 </p>
 
-                <div className="mt-6 space-y-3 md:space-y-2">
+                <div className="mt-6 grid gap-4 md:gap-3">
                   {focusAreas.map((item) => (
                     <div
                       key={item.number}
-                      className="grid min-h-[76px] grid-cols-[48px_1px_58px_1fr] items-center bg-blue-900 px-4 py-3 text-white md:min-h-[92px] md:grid-cols-[80px_1px_82px_1fr] md:px-6 md:py-0"
+                      className="flex min-h-[170px] flex-col items-center justify-center bg-blue-900 px-5 py-6 text-center text-white md:min-h-[110px] md:grid md:grid-cols-[52px_8px_76px_1fr] md:items-center md:gap-x-4 md:px-6 md:py-5 md:text-left"
                     >
-                      <div className="text-3xl font-black leading-none md:text-6xl">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-orange-500 md:hidden">
+                        <img
+                          src={item.icon}
+                          alt={item.title}
+                          className="h-8 w-8 object-contain brightness-0 invert"
+                        />
+                      </div>
+
+                      <div className="mt-4 text-4xl font-black leading-none md:col-start-1 md:row-start-1 md:mt-0 md:text-5xl">
                         {item.number}
                       </div>
 
-                      <div className="h-10 w-[3px] bg-orange-500 md:h-16" />
+                      <div className="mt-4 h-[5px] w-16 bg-orange-500 md:col-start-2 md:row-start-1 md:mt-0 md:h-14 md:w-[5px]" />
 
-                      <div className="flex justify-center">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-full border-4 border-orange-500 md:h-16 md:w-16">
-                          <img
-                            src={item.icon}
-                            alt={item.title}
-                            className="h-6 w-6 object-contain brightness-0 invert md:h-10 md:w-10"
-                          />
-                        </div>
+                      <div className="hidden md:col-start-3 md:row-start-1 md:flex md:h-[68px] md:w-[68px] md:items-center md:justify-center md:rounded-full md:border-[5px] md:border-orange-500">
+                        <img
+                          src={item.icon}
+                          alt={item.title}
+                          className="h-9 w-9 object-contain brightness-0 invert"
+                        />
                       </div>
 
-                      <p className="pl-3 text-sm font-medium leading-tight md:pl-5 md:text-base">
+                      <p className="mt-3 text-[15px] font-semibold leading-[1.35] md:col-start-4 md:row-start-1 md:mt-0 md:text-[19px] md:font-bold md:leading-[1.25]">
                         {item.title}
                       </p>
                     </div>

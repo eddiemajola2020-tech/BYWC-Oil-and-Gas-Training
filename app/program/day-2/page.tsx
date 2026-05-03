@@ -130,33 +130,37 @@ export default function DayTwoPage() {
                   Focus areas include:
                 </p>
 
-                <div className="mt-6 grid gap-4">
+                <div className="mt-6 grid gap-4 md:gap-3">
                   {focusAreas.map((item) => (
                     <div
                       key={item.number}
-                      className="flex items-start bg-blue-900 px-6 py-5 text-white"
+                      className="flex min-h-[170px] flex-col items-center justify-center bg-blue-900 px-5 py-6 text-center text-white md:min-h-[110px] md:grid md:grid-cols-[52px_8px_76px_1fr] md:items-center md:gap-x-4 md:px-6 md:py-5 md:text-left"
                     >
-                      <div className="flex items-center">
-                        <div className="w-[34px] shrink-0 text-4xl font-black leading-none md:w-[52px] md:text-6xl">
-                          {item.number}
-                        </div>
-
-                        <div className="ml-2 mr-4 h-14 w-[5px] shrink-0 bg-orange-500 md:h-16" />
-                      </div>
-
-                      <div className="mr-5 flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-full border-[5px] border-orange-500 md:h-[72px] md:w-[72px]">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-orange-500 md:h-[68px] md:w-[68px] md:border-[5px]">
                         <img
                           src={item.icon}
                           alt={item.title}
-                          className="h-7 w-7 object-contain brightness-0 invert md:h-9 md:w-9"
+                          className="h-8 w-8 object-contain brightness-0 invert md:h-9 md:w-9"
                         />
                       </div>
 
-                      <div className="flex-1">
-                        <p className="text-[18px] font-semibold leading-[1.3] md:text-[22px] md:font-bold">
-                          {item.title}
-                        </p>
+                      <div className="mt-4 text-4xl font-black leading-none md:col-start-1 md:row-start-1 md:mt-0 md:text-5xl">
+                        {item.number}
                       </div>
+
+                      <div className="mt-4 h-[5px] w-16 bg-orange-500 md:col-start-2 md:row-start-1 md:mt-0 md:h-14 md:w-[5px]" />
+
+                      <div className="hidden md:col-start-3 md:row-start-1 md:flex md:h-[68px] md:w-[68px] md:items-center md:justify-center md:rounded-full md:border-[5px] md:border-orange-500">
+                        <img
+                          src={item.icon}
+                          alt={item.title}
+                          className="h-9 w-9 object-contain brightness-0 invert"
+                        />
+                      </div>
+
+                      <p className="mt-3 text-[15px] font-semibold leading-[1.35] md:col-start-4 md:row-start-1 md:mt-0 md:text-[19px] md:font-bold md:leading-[1.25]">
+                        {item.title}
+                      </p>
                     </div>
                   ))}
                 </div>
