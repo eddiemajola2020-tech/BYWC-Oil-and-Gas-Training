@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/src/lib/supabaseClient";
+import { supabase } from "../../src/lib/supabaseClient";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -15,11 +15,20 @@ export default function ForgotPasswordPage() {
 
     setMessage("");
     setErrorMessage("");
+
+    if (!email.trim()) {
+      setErrorMessage("Please enter your email address.");
+      return;
+    }
+
     setIsLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email.trim(),
+      {
+        redirectTo: `${window.location.origin}/create-new-password`,
+      }
+    );
 
     setIsLoading(false);
 
@@ -28,17 +37,19 @@ export default function ForgotPasswordPage() {
       return;
     }
 
+    setEmail("");
     setMessage("Password reset link sent. Please check your email.");
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-6">
       <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-3xl font-bold text-blue-950">Reset Password</h1>
+        <h1 className="text-3xl font-bold text-blue-950">
+          Reset Your Password
+        </h1>
 
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Enter the email address linked to your account. We’ll send you a
-          password reset link.
+          Enter your email and we’ll send you a reset link.
         </p>
 
         <form onSubmit={handleReset} className="mt-8 space-y-5">
@@ -46,6 +57,7 @@ export default function ForgotPasswordPage() {
             <span className="mb-2 block text-sm font-semibold text-slate-700">
               Email Address
             </span>
+
             <input
               type="email"
               required
