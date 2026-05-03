@@ -113,7 +113,7 @@ export default function DayFourPage() {
 
             {/* MOBILE IMAGE */}
             <img
-              src="/courses/C4.png"
+              src="/courses/C4.webp"
               alt="Hazardous materials management participant"
               className="relative z-10 mx-auto w-full max-h-[360px] object-contain md:hidden"
             />
@@ -176,7 +176,7 @@ export default function DayFourPage() {
 
             {/* DESKTOP MODEL IMAGE */}
             <img
-              src="/courses/C4.png"
+              src="/courses/C4.webp"
               alt="Hazardous materials management participant"
               className="absolute bottom-0 right-[-80px] z-20 hidden max-h-[680px] w-auto object-contain md:block lg:right-[-120px] lg:max-h-[760px]"
             />

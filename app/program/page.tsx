@@ -227,7 +227,7 @@ const partners = [
           <div className="relative overflow-hidden rounded-[28px] shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:rounded-[32px]">
             <div className="relative h-[420px] w-full overflow-hidden rounded-[28px] md:h-[62vh] md:min-h-[460px] md:rounded-[32px]">
               <img
-                src="/banner_2.png"
+                src="/banner_2.webp"
                 alt="Programme Banner"
                className="h-full w-full object-cover object-[32%_35%] md:object-center"
               />
@@ -351,7 +351,7 @@ const partners = [
 
               <div className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.10)]">
                 <img
-                  src="/pic_2.png"
+                  src="/pic_2.webp"
                   alt="Programme leadership engagement"
                   className="h-[380px] w-full object-cover object-center md:h-[520px]"
                 />
@@ -364,7 +364,7 @@ const partners = [
       <section className="px-6 py-4 lg:px-10">
         <div className="mx-auto max-w-7xl">
           <img
-            src="/break_1.png"
+            src="/break_1.webp"
             alt="Section break"
             className="h-auto w-full object-contain"
           />
@@ -478,7 +478,7 @@ const partners = [
             {rowIndex < curriculumRows.length - 1 && (
               <div className="py-10 lg:py-12">
                 <img
-                  src="/break_1.png"
+                  src="/break_1.webp"
                   alt="Section break"
                   className="h-auto w-full object-contain"
                 />

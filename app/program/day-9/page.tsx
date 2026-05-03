@@ -2,22 +2,27 @@ import Link from "next/link";
 
 const focusAreas = [
   {
+    number: "1",
     title: "Wholesale Fuel Business Models",
     icon: "/d9_icon1.png",
   },
   {
+    number: "2",
     title: "Licensing And Compliance Requirements",
     icon: "/d9_icon2.png",
   },
   {
+    number: "3",
     title: "Fuel Retail Station Development",
     icon: "/d9_icon3.png",
   },
   {
+    number: "4",
     title: "Site Feasibility, Zoning And Market Analysis",
     icon: "/d9_icon4.png",
   },
   {
+    number: "5",
     title: "Ownership Models And Operational Considerations",
     icon: "/d9_icon5.png",
   },
@@ -74,18 +79,18 @@ export default function DayNinePage() {
             </div>
 
             <div className="relative z-10 px-8 py-10 lg:px-12">
-              {/* TOP LINE */}
-              <div className="mb-8 h-[3px] w-full bg-gradient-to-r from-orange-500 via-orange-500 to-blue-500" />
-
               {/* HEADER */}
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-700">
-                    Program Details
-                  </p>
+                  <h1 className="text-4xl font-black uppercase leading-tight tracking-tight text-blue-900 lg:text-5xl">
+                    Ten-Day Masterclass
+                    <br />
+                    <span className="text-orange-500">
+                      Training Structure
+                    </span>
+                  </h1>
 
-                  {/* DAY LABEL */}
-                  <div className="mt-6 flex items-center gap-3">
+                  <div className="mt-8 flex items-center gap-3">
                     <div className="text-4xl text-blue-900">▣</div>
 
                     <h2 className="text-4xl font-black text-blue-900">
@@ -102,24 +107,26 @@ export default function DayNinePage() {
               </div>
 
               {/* MAIN BOX CENTERED */}
-              <div className="mx-auto mt-4 max-w-[760px] bg-[#e6e6e6]">
-                {/* TOP BANNER IMAGE */}
+              <div className="mx-auto mt-8 max-w-[760px] bg-[#e6e6e6]">
+                {/* BANNER IMAGE */}
                 <img
-                  src="/banner_7.png"
+                  src="/banner_7.webp"
                   alt="Fuel wholesale and retail business"
-                  className="h-[320px] w-full rounded-tr-[24px] object-cover object-center"
+                  className="h-[280px] w-full object-cover object-center"
                 />
 
                 {/* BLUE TITLE BAR */}
                 <div className="bg-blue-900 px-8 py-4">
                   <h3 className="text-xl font-black text-white">
                     Fuel Wholesale & Retail Business{" "}
-                    <span className="text-orange-400">Development</span>
+                    <span className="text-orange-400">
+                      Development
+                    </span>
                   </h3>
                 </div>
 
                 {/* CONTENT */}
-                <div className="px-5 py-7 sm:px-8 sm:py-8">
+                <div className="px-8 py-8">
                   <p className="text-lg leading-8 text-black">
                     Participants are introduced to{" "}
                     <span className="font-bold">
@@ -127,39 +134,32 @@ export default function DayNinePage() {
                     </span>
                   </p>
 
-                  <p className="mt-6 text-lg font-bold text-black">
+                  <p className="mt-5 text-lg text-black">
                     Focus areas include:
                   </p>
 
-                  {/* LESSON CARDS */}
-                  <div className="mt-8 grid gap-5">
-                    {focusAreas.map((item, index) => (
+                  {/* ICON GRID - MATCHES DAY 7 MOBILE STRUCTURE */}
+                  <div className="mt-8 grid gap-3 md:grid-cols-5">
+                    {focusAreas.map((item) => (
                       <div
-                        key={item.title}
-                        className="flex items-center bg-blue-900 px-5 py-6 text-white sm:px-7 sm:py-7"
+                        key={item.number}
+                        className="flex min-h-[220px] flex-col items-center bg-blue-900 px-4 py-5 text-center text-white"
                       >
-                        <div className="w-[42px] shrink-0 text-4xl font-extrabold leading-none sm:w-[52px] sm:text-5xl">
-                          {index + 1}
-                        </div>
-
-                        <div className="ml-2 mr-4 h-14 w-[5px] shrink-0 bg-orange-500 sm:mr-5 sm:h-16 sm:w-[6px]" />
-
-                        <div className="mr-5 flex h-[70px] w-[70px] shrink-0 items-center justify-center rounded-full border-[6px] border-orange-500 sm:h-[82px] sm:w-[82px] sm:border-[7px]">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-orange-500">
                           <img
                             src={item.icon}
                             alt={item.title}
-                            className="h-8 w-8 object-contain brightness-0 invert sm:h-9 sm:w-9"
+                            className="h-9 w-9 object-contain brightness-0 invert"
                           />
                         </div>
 
-                        <div className="flex-1 text-[20px] font-extrabold leading-[1.18] sm:text-[24px]">
+                        <p className="mt-5 text-xs font-medium leading-5">
                           {item.title}
-                        </div>
+                        </p>
                       </div>
                     ))}
                   </div>
 
-                  {/* BOTTOM TEXT */}
                   <p className="mt-8 text-lg leading-8 text-black">
                     Participants learn what it realistically takes to develop
                     and operate fuel-related businesses.

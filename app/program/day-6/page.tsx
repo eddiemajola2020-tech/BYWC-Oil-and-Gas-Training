@@ -113,7 +113,7 @@ export default function DaySixPage() {
 
             {/* MOBILE IMAGE */}
             <img
-              src="/courses/C6.png"
+              src="/courses/C6.webp"
               alt="Energy sector training participant"
               className="relative z-10 w-full max-h-[360px] object-contain md:hidden"
             />
@@ -165,7 +165,7 @@ export default function DaySixPage() {
 
             {/* DESKTOP MODEL IMAGE */}
             <img
-              src="/courses/C6.png"
+              src="/courses/C6.webp"
               alt="Energy sector training participant"
               className="hidden md:block absolute bottom-0 right-[-180px] z-20 max-h-[650px] w-auto object-contain lg:right-[-240px] lg:max-h-[720px]"
             />

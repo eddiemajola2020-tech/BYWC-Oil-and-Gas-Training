@@ -105,7 +105,7 @@ export default function DayEightPage() {
 
             {/* MOBILE PERSON IMAGE - FLUSH ABOVE CONTENT */}
             <img
-              src="/courses/C8.png"
+              src="/courses/C8.WEBP"
               alt="LPG business participant"
               className="relative z-10 w-full max-h-[360px] object-contain md:hidden"
             />
@@ -175,7 +175,7 @@ export default function DayEightPage() {
 
                     {/* DESKTOP PERSON IMAGE */}
                     <img
-                      src="/courses/C8.png"
+                      src="/courses/C8.webp"
                       alt="LPG business participant"
                       className="hidden md:block absolute bottom-0 right-[-60px] z-20 max-h-[620px] w-auto object-contain lg:right-[-90px] lg:max-h-[720px]"
                     />

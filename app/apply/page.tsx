@@ -842,7 +842,7 @@ export default function ApplyPage() {
           <div className="overflow-hidden rounded-[32px] shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
             <div className="relative h-[42vh] min-h-[280px] w-full overflow-hidden rounded-[32px]">
               <img
-                src="/banner_3.png"
+                src="/banner_3.webp"
                 alt="Apply banner"
                 className="h-full w-full object-cover"
               />

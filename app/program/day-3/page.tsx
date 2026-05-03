@@ -115,7 +115,7 @@ export default function DayThreePage() {
 
             {/* MOBILE IMAGE - FLUSH WITH CONTENT */}
             <img
-              src="/courses/C3.png"
+              src="/courses/C3.webp"
               alt="Fire marshal training participant"
               className="relative z-10 w-full max-h-[360px] object-contain md:hidden"
             />
@@ -178,7 +178,7 @@ export default function DayThreePage() {
 
             {/* DESKTOP CHARACTER IMAGE */}
             <img
-              src="/courses/C3.png"
+              src="/courses/C3.webp"
               alt="Fire marshal training participant"
               className="absolute bottom-0 right-0 z-20 hidden max-h-[680px] w-auto object-contain md:block lg:max-h-[760px]"
             />

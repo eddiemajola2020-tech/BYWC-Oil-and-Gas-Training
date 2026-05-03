@@ -88,7 +88,7 @@ export default function DayTenPage() {
 
               {/* 🔥 IMAGE MOVED TO TOP */}
               <img
-                src="/banner_8.png"
+                src="/banner_8.webp"
                 alt="Graduates holding certificates"
                 className="mt-6 w-full object-cover"
               />

@@ -108,7 +108,7 @@ export default function DayTwoPage() {
             </div>
 
             <img
-              src="/courses/C2.png"
+              src="/courses/C2.webp"
               alt="Practical first aid participant"
               className="relative z-10 w-full max-h-[360px] object-contain md:hidden"
             />
@@ -168,7 +168,7 @@ export default function DayTwoPage() {
             </div>
 
             <img
-              src="/courses/C2.png"
+              src="/courses/C2.webp"
               alt="Practical first aid participant"
               className="absolute bottom-0 right-0 z-20 hidden max-h-[650px] w-auto object-contain md:block lg:max-h-[720px]"
             />

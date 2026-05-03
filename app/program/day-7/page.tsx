@@ -110,7 +110,7 @@ export default function DaySevenPage() {
               <div className="mx-auto mt-8 max-w-[760px] bg-[#e6e6e6]">
                 {/* BANNER IMAGE */}
                 <img
-                  src="/banner_6.png"
+                  src="/banner_6.webp"
                   alt="Fuel logistics and distribution"
                   className="h-[280px] w-full object-cover object-center"
                 />

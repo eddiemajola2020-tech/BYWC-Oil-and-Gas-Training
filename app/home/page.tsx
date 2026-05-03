@@ -56,7 +56,7 @@ const partners = [
   "/logos/ter_1.png",
 ];
 
-const bannerImages = ["/banner_1.png", "/banner_2.png", "/banner_3.png"];
+const bannerImages = ["/banner_1.webp", "/banner_2.webp", "/banner_3.webp"];
 
 export default function Home() {
   const [activeBanner, setActiveBanner] = useState(0);
@@ -429,7 +429,7 @@ export default function Home() {
 
               <div className="relative flex min-h-[340px] w-full items-end justify-center lg:min-h-[420px]">
                 <img
-                  src="/person_1.png"
+                  src="/person_1.webp"
                   alt="BYWC participant overview"
                   className="max-h-[420px] w-auto object-contain lg:max-h-[560px]"
                 />
@@ -505,7 +505,7 @@ export default function Home() {
         <div className="grid items-center gap-10 lg:grid-cols-2">
           <div className="flex justify-center">
             <img
-              src="/pic_1.png"
+              src="/pic_1.webp"
               alt="Training visual"
               className="w-full max-w-lg rounded-2xl object-cover shadow-md"
             />

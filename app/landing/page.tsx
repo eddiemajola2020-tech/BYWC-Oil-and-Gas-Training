@@ -108,7 +108,7 @@ export default function Home() {
       <section className="relative overflow-hidden">
         <div className="relative h-[82vh] min-h-[620px] w-full">
           <img
-            src="/banner_1.png"
+            src="/banner_1.webp"
             alt="BYWC Oil and Gas banner"
             className="h-full w-full object-cover"
           />
@@ -342,7 +342,7 @@ export default function Home() {
 
               <div className="relative flex min-h-[420px] w-full items-end justify-center">
                 <img
-                  src="/person_1.png"
+                  src="/person_1.webp"
                   alt="BYWC participant overview"
                   className="max-h-[480px] w-auto object-contain lg:max-h-[560px]"
                 />
@@ -416,7 +416,7 @@ export default function Home() {
     {/* IMAGE LEFT */}
     <div className="flex justify-center">
       <img
-        src="/pic_1.png"
+        src="/pic_1.webp"
         alt="Training visual"
         className="w-full max-w-lg rounded-2xl shadow-md object-cover"
       />
