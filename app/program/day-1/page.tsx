@@ -51,7 +51,9 @@ export default function DayOnePage() {
 
           <div className="hidden items-center gap-8 text-sm font-medium text-slate-700 md:flex">
             <Link href="/home">Home</Link>
-            <Link href="/program" className="text-blue-900">Program</Link>
+            <Link href="/program" className="text-blue-900">
+              Program
+            </Link>
             <Link href="/apply">Apply</Link>
             <Link href="/dashboard">Dashboard</Link>
           </div>
@@ -69,7 +71,6 @@ export default function DayOnePage() {
       <section className="px-6 py-10 lg:px-10">
         <div className="mx-auto max-w-6xl overflow-hidden border border-slate-200 bg-white shadow-[0_25px_70px_rgba(15,23,42,0.12)]">
           <div className="relative overflow-hidden px-6 py-6 md:px-8 md:py-10 lg:px-14">
-            
             {/* BACKGROUND */}
             <div className="absolute inset-0 opacity-[0.08]">
               <div className="h-full w-full bg-[radial-gradient(circle_at_1px_1px,#1e3a8a_1px,transparent_0)] [background-size:10px_10px]" />
@@ -90,26 +91,24 @@ export default function DayOnePage() {
                 </div>
               </div>
 
-              <img
-                src="/logo_2.png"
-                className="hidden md:block h-20"
-              />
+              <img src="/logo_2.png" alt="Logo" className="hidden h-20 md:block" />
             </div>
 
             {/* IMAGE */}
             <img
               src="/courses/C9.png"
+              alt="First aid training"
               className="relative z-10 w-full max-h-[360px] object-contain md:hidden"
             />
 
             <img
               src="/courses/C9.png"
-              className="hidden md:block absolute bottom-0 left-[-160px] z-20 max-h-[650px]"
+              alt="First aid training"
+              className="hidden max-h-[650px] md:absolute md:bottom-0 md:left-[-160px] md:z-20 md:block"
             />
 
             {/* CONTENT */}
             <div className="relative z-10 -mt-2 w-full bg-[#e6e6e6] pb-8 md:ml-auto md:mt-5 md:max-w-[720px]">
-              
               <div className="bg-blue-900 px-6 py-4 md:px-8">
                 <h3 className="text-lg font-black text-white">
                   First Aid Foundations & Human Systems Awareness
@@ -117,45 +116,43 @@ export default function DayOnePage() {
               </div>
 
               <div className="px-6 py-6 md:px-8">
-                <p className="text-base md:text-lg">
-                  This opening masterclass introduces essential first aid knowledge and workplace emergency awareness.
+                <p className="text-base leading-7 md:text-lg md:leading-8">
+                  This opening masterclass introduces essential first aid
+                  knowledge and workplace emergency awareness.
                 </p>
 
-                <p className="mt-4 text-base md:text-lg">
+                <p className="mt-5 text-base font-medium md:text-lg">
                   Focus areas include:
                 </p>
 
-                {/* ✅ FIXED CARDS */}
-                <div className="mt-6 grid gap-4">
+                {/* FOCUS CARDS */}
+                <div className="mt-6 grid gap-5">
                   {focusAreas.map((item) => (
                     <div
                       key={item.number}
-                      className="grid min-h-[120px] grid-cols-[60px_8px_70px_1fr] items-center gap-x-4 bg-blue-900 px-5 py-5 text-white md:grid-cols-[70px_10px_82px_1fr] md:px-6 md:py-6"
+                      className="bg-blue-900 px-7 py-6 text-white md:grid md:min-h-[128px] md:grid-cols-[58px_8px_86px_1fr] md:items-center md:gap-x-5 md:px-7 md:py-6"
                     >
-                      {/* NUMBER */}
-                      <div className="text-4xl md:text-5xl font-extrabold">
-                        {item.number}
-                      </div>
+                      {/* MOBILE TOP ROW */}
+                      <div className="flex items-center md:contents">
+                        <div className="w-[52px] shrink-0 text-5xl font-extrabold leading-none md:w-auto">
+                          {item.number}
+                        </div>
 
-                      {/* ORANGE BAR */}
-                      <div className="h-16 w-[6px] bg-orange-500" />
+                        <div className="mr-4 h-16 w-[6px] shrink-0 bg-orange-500 md:mr-0" />
 
-                      {/* ICON */}
-                      <div className="flex items-center justify-center">
-                        <div className="flex h-16 w-16 md:h-20 md:w-20 items-center justify-center rounded-full border-[6px] border-orange-500">
+                        <div className="flex h-[82px] w-[82px] shrink-0 items-center justify-center rounded-full border-[7px] border-orange-500 md:h-[78px] md:w-[78px] md:border-[6px]">
                           <img
                             src={item.icon}
-                            className="h-8 w-8 md:h-10 md:w-10 brightness-0 invert"
+                            alt={item.title}
+                            className="h-9 w-9 object-contain brightness-0 invert md:h-9 md:w-9"
                           />
                         </div>
                       </div>
 
-                      {/* TEXT (FIXED BREATHING SPACE) */}
-                      <div className="pl-2 pr-3">
-                        <p className="text-[18px] md:text-[22px] font-extrabold leading-[1.25]">
-                          {item.title}
-                        </p>
-                      </div>
+                      {/* TEXT */}
+                      <p className="mt-5 max-w-[95%] text-[24px] font-extrabold leading-[1.2] md:mt-0 md:max-w-none md:pl-2 md:pr-4 md:text-[22px] md:leading-[1.25]">
+                        {item.title}
+                      </p>
                     </div>
                   ))}
                 </div>
