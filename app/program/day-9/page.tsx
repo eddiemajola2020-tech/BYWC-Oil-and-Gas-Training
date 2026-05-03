@@ -6,7 +6,7 @@ const focusAreas = [
     icon: "/d9_icon1.png",
   },
   {
-    title: "Licensing and Compliance Requirements",
+    title: "Licensing And Compliance Requirements",
     icon: "/d9_icon2.png",
   },
   {
@@ -83,6 +83,15 @@ export default function DayNinePage() {
                   <p className="text-sm font-medium text-slate-700">
                     Program Details
                   </p>
+
+                  {/* DAY LABEL */}
+                  <div className="mt-6 flex items-center gap-3">
+                    <div className="text-4xl text-blue-900">▣</div>
+
+                    <h2 className="text-4xl font-black text-blue-900">
+                      Day 9
+                    </h2>
+                  </div>
                 </div>
 
                 <img
@@ -93,7 +102,7 @@ export default function DayNinePage() {
               </div>
 
               {/* MAIN BOX CENTERED */}
-              <div className="mx-auto mt-6 max-w-[760px] bg-[#e6e6e6]">
+              <div className="mx-auto mt-4 max-w-[760px] bg-[#e6e6e6]">
                 {/* TOP BANNER IMAGE */}
                 <img
                   src="/banner_7.png"
@@ -101,29 +110,16 @@ export default function DayNinePage() {
                   className="h-[320px] w-full rounded-tr-[24px] object-cover object-center"
                 />
 
-                {/* DAY LABEL */}
-                <div className="px-8 pt-8">
-                  <div className="flex items-center gap-3">
-                    <div className="text-4xl text-blue-900">▣</div>
-
-                    <h2 className="text-4xl font-black text-blue-900">
-                      Day 9
-                    </h2>
-                  </div>
-                </div>
-
                 {/* BLUE TITLE BAR */}
-                <div className="mt-6 bg-blue-900 px-8 py-4">
+                <div className="bg-blue-900 px-8 py-4">
                   <h3 className="text-xl font-black text-white">
                     Fuel Wholesale & Retail Business{" "}
-                    <span className="text-orange-400">
-                      Development
-                    </span>
+                    <span className="text-orange-400">Development</span>
                   </h3>
                 </div>
 
                 {/* CONTENT */}
-                <div className="px-8 py-8">
+                <div className="px-5 py-7 sm:px-8 sm:py-8">
                   <p className="text-lg leading-8 text-black">
                     Participants are introduced to{" "}
                     <span className="font-bold">
@@ -131,28 +127,34 @@ export default function DayNinePage() {
                     </span>
                   </p>
 
-                  <p className="mt-6 text-lg text-black">
+                  <p className="mt-6 text-lg font-bold text-black">
                     Focus areas include:
                   </p>
 
-                  {/* ICON GRID */}
-                  <div className="mt-8 grid gap-3 md:grid-cols-5">
-                    {focusAreas.map((item) => (
+                  {/* LESSON CARDS */}
+                  <div className="mt-8 grid gap-5">
+                    {focusAreas.map((item, index) => (
                       <div
                         key={item.title}
-                        className="flex min-h-[220px] flex-col items-center bg-blue-900 px-4 py-5 text-center text-white"
+                        className="flex items-center bg-blue-900 px-5 py-6 text-white sm:px-7 sm:py-7"
                       >
-                        <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-orange-500">
+                        <div className="w-[42px] shrink-0 text-4xl font-extrabold leading-none sm:w-[52px] sm:text-5xl">
+                          {index + 1}
+                        </div>
+
+                        <div className="ml-2 mr-4 h-14 w-[5px] shrink-0 bg-orange-500 sm:mr-5 sm:h-16 sm:w-[6px]" />
+
+                        <div className="mr-5 flex h-[70px] w-[70px] shrink-0 items-center justify-center rounded-full border-[6px] border-orange-500 sm:h-[82px] sm:w-[82px] sm:border-[7px]">
                           <img
                             src={item.icon}
                             alt={item.title}
-                            className="h-12 w-12 object-contain brightness-0 invert"
+                            className="h-8 w-8 object-contain brightness-0 invert sm:h-9 sm:w-9"
                           />
                         </div>
 
-                        <p className="mt-5 text-xs font-medium leading-5">
+                        <div className="flex-1 text-[20px] font-extrabold leading-[1.18] sm:text-[24px]">
                           {item.title}
-                        </p>
+                        </div>
                       </div>
                     ))}
                   </div>
