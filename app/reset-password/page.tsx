@@ -4,33 +4,28 @@ import { useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/src/lib/supabaseClient";
 
-export default function ResetPasswordPage() {
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  async function handleUpdatePassword(e: React.FormEvent) {
+  async function handleReset(e: React.FormEvent) {
     e.preventDefault();
 
     setMessage("");
     setErrorMessage("");
 
-    if (password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.");
+    if (!email) {
+      setErrorMessage("Please enter your email.");
       return;
     }
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password,
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      // 🔥 THIS IS THE FIX
+      redirectTo: `${window.location.origin}/reset-password`,
     });
 
     setIsLoading(false);
@@ -40,46 +35,33 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    setMessage("Password updated successfully. You can now log in.");
+    setMessage("Password reset link sent. Check your email.");
+    setEmail("");
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-6">
       <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
         <h1 className="text-3xl font-bold text-blue-950">
-          Create New Password
+          Reset Your Password
         </h1>
 
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Enter your new password below.
+          Enter your email and we’ll send you a reset link.
         </p>
 
-        <form onSubmit={handleUpdatePassword} className="mt-8 space-y-5">
+        <form onSubmit={handleReset} className="mt-8 space-y-5">
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">
-              New Password
+              Email Address
             </span>
             <input
-              type="password"
+              type="email"
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-900 focus:ring-2 focus:ring-blue-100"
-              placeholder="Enter new password"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-slate-700">
-              Confirm New Password
-            </span>
-            <input
-              type="password"
-              required
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-900 focus:ring-2 focus:ring-blue-100"
-              placeholder="Confirm new password"
+              placeholder="Enter your email"
             />
           </label>
 
@@ -100,18 +82,16 @@ export default function ResetPasswordPage() {
             disabled={isLoading}
             className="w-full rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
           >
-            {isLoading ? "Updating..." : "Update Password"}
+            {isLoading ? "Sending..." : "Send Reset Link"}
           </button>
         </form>
 
-        {message && (
-          <Link
-            href="/login"
-            className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline"
-          >
-            Go to Login
-          </Link>
-        )}
+        <Link
+          href="/login"
+          className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline"
+        >
+          Back to Login
+        </Link>
       </div>
     </main>
   );
