@@ -47,6 +47,7 @@ const pathwayCards = [
 
 const partners = [
   "/logos/gov_1.png",
+  "/logos/pyec_1.png",
   "/logos/seth_1.png",
   "/logos/emangweni_1.png",
   "/logos/baisago_1.png",
@@ -467,19 +468,25 @@ export default function Home() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-          {partners.map((logo, index) => (
-            <div
-              key={index}
-              className="flex h-[110px] items-center justify-center rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md lg:h-[120px]"
-            >
-              <img
-                src={logo}
-                alt={`Partner logo ${index + 1}`}
-                className="h-full w-full scale-110 object-contain lg:scale-125"
-              />
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 justify-items-center">
+          {partners.map((logo, index) => {
+            const isPriority = index === 0 || index === 1;
+
+            return (
+              <div
+                key={index}
+                className={`flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${
+                  isPriority ? "h-[200px]" : "h-[180px]"
+                }`}
+              >
+                <img
+                  src={logo}
+                  alt={`Partner logo ${index + 1}`}
+                  className="h-[92%] w-auto object-contain"
+                />
+              </div>
+            );
+          })}
         </div>
       </section>
 

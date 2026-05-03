@@ -78,16 +78,17 @@ export default function ProgramPage() {
       featured: false,
     },
   ];
+const partners = [
+  "/logos/gov_1.png",     
+  "/logos/pyec_1.png",   
 
-  const partners = [
-    "/logos/gov_1.png",
-    "/logos/seth_1.png",
-    "/logos/emangweni_1.png",
-    "/logos/baisago_1.png",
-    "/logos/ub_1.png",
-    "/logos/bera_1.png",
-    "/logos/ter_1.png",
-  ];
+  "/logos/seth_1.png",
+  "/logos/emangweni_1.png",
+  "/logos/baisago_1.png",
+  "/logos/ub_1.png",
+  "/logos/bera_1.png",
+  "/logos/ter_1.png",
+];
 
   const applicationRequirements = [
     {
@@ -498,7 +499,7 @@ export default function ProgramPage() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="grid grid-cols-2 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {partners.map((logo, index) => (
             <div
               key={index}

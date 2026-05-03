@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Turnstile } from "@marsidev/react-turnstile";
 import { supabase } from "@/src/lib/supabaseClient";
 
 type FormData = {
@@ -17,6 +18,7 @@ type FormData = {
   disabilityStatus: string;
   disabilityType: string;
   disabilityProofFile: string;
+  ovcStatus: string;
   constituency: string;
   district: string;
   townVillage: string;
@@ -148,6 +150,7 @@ const initialFormData: FormData = {
   disabilityStatus: "",
   disabilityType: "",
   disabilityProofFile: "",
+  ovcStatus: "",
   constituency: "",
   district: "",
   townVillage: "",
@@ -194,19 +197,25 @@ const steps = [
   "Review",
 ];
 
+const APPLICATION_CLOSE_DATE = new Date("2026-05-27T23:59:59");
+
 function countWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
 export default function ApplyPage() {
- const [loggedInEmail, setLoggedInEmail] = useState("");
-const [authChecked, setAuthChecked] = useState(false);
-const [currentStep, setCurrentStep] = useState(0);
+  const [loggedInEmail, setLoggedInEmail] = useState("");
+  const [authChecked, setAuthChecked] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [constituencyQuery, setConstituencyQuery] = useState("");
   const [showConstituencyResults, setShowConstituencyResults] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showFullPrivacy, setShowFullPrivacy] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [uploading, setUploading] = useState<UploadingState>({
     omangFile: false,
     cvFile: false,
@@ -252,70 +261,80 @@ const [currentStep, setCurrentStep] = useState(0);
   }, [constituencyQuery, availableConstituencies]);
 
   useEffect(() => {
-  let redirectTimer: ReturnType<typeof setTimeout>;
+    let redirectTimer: ReturnType<typeof setTimeout>;
 
-  async function checkSession() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (session?.user?.email) {
-      setLoggedInEmail(session.user.email);
-
-      setFormData((prev) => ({
-        ...prev,
-        email: session.user.email || "",
-      }));
-
-      setAuthChecked(true);
-      return;
-    }
-
-    redirectTimer = setTimeout(async () => {
+    async function checkSession() {
       const {
-        data: { session: delayedSession },
+        data: { session },
       } = await supabase.auth.getSession();
 
-      if (delayedSession?.user?.email) {
-        setLoggedInEmail(delayedSession.user.email);
+      if (session?.user?.email) {
+        setLoggedInEmail(session.user.email);
 
         setFormData((prev) => ({
           ...prev,
-          email: delayedSession.user.email || "",
+          email: session.user.email || "",
         }));
 
         setAuthChecked(true);
         return;
       }
 
-      window.location.href = "/login?redirect=/apply#application-form";
-    }, 1200);
-  }
+      redirectTimer = setTimeout(async () => {
+        const {
+          data: { session: delayedSession },
+        } = await supabase.auth.getSession();
 
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    if (session?.user?.email) {
-      clearTimeout(redirectTimer);
+        if (delayedSession?.user?.email) {
+          setLoggedInEmail(delayedSession.user.email);
 
-      setLoggedInEmail(session.user.email);
+          setFormData((prev) => ({
+            ...prev,
+            email: delayedSession.user.email || "",
+          }));
 
-      setFormData((prev) => ({
-        ...prev,
-        email: session.user.email || "",
-      }));
+          setAuthChecked(true);
+          return;
+        }
 
-      setAuthChecked(true);
+        window.location.href = "/login?redirect=/apply#application-form";
+      }, 1200);
     }
-  });
 
-  checkSession();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user?.email) {
+        clearTimeout(redirectTimer);
 
-  return () => {
-    clearTimeout(redirectTimer);
-    subscription.unsubscribe();
-  };
-}, []);
+        setLoggedInEmail(session.user.email);
+
+        setFormData((prev) => ({
+          ...prev,
+          email: session.user.email || "",
+        }));
+
+        setAuthChecked(true);
+      }
+    });
+
+    checkSession();
+
+    return () => {
+      clearTimeout(redirectTimer);
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+
+    const timer = setInterval(() => {
+      setCooldownSeconds((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -437,6 +456,14 @@ const [currentStep, setCurrentStep] = useState(0);
     }));
   }
 
+  function sanitizeFileName(fileName: string) {
+    return fileName
+      .toLowerCase()
+      .replace(/[^a-z0-9.]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
+
   async function handleFileUpload(
     e: React.ChangeEvent<HTMLInputElement>,
     fieldName:
@@ -451,27 +478,58 @@ const [currentStep, setCurrentStep] = useState(0);
     if (!file) return;
 
     setUploadError("");
+
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError("Only PDF, JPG, and PNG files are allowed.");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_SIZE) {
+      setUploadError("File size must be less than 5MB.");
+      e.target.value = "";
+      return;
+    }
+
     setUploading((prev) => ({ ...prev, [fieldName]: true }));
 
     try {
-      const payload = new FormData();
-      payload.append("file", file);
-      payload.append("fieldName", fieldName);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: payload,
-      });
+      const user = session?.user;
 
-      const result = await response.json();
+      if (!user?.id) {
+        throw new Error("Please log in again before uploading documents.");
+      }
 
-      if (!response.ok) {
-        throw new Error(result.error || "Upload failed");
+      const fileExtension = file.name.split(".").pop()?.toLowerCase() || "file";
+      const cleanName = sanitizeFileName(file.name);
+      const filePath = `${user.id}/${fieldName}-${Date.now()}-${cleanName || `document.${fileExtension}`}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("applications")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (uploadError) {
+        throw uploadError;
       }
 
       setFormData((prev) => ({
         ...prev,
-        [fieldName]: result.filePath,
+        [fieldName]: filePath,
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload failed";
@@ -534,6 +592,48 @@ const [currentStep, setCurrentStep] = useState(0);
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    if (isSubmitting) return;
+
+    if (new Date() > APPLICATION_CLOSE_DATE) {
+      alert("Applications are now closed.");
+      return;
+    }
+
+    if (!formData.declarationAccepted || !formData.consentAccepted) {
+      alert("Please accept the declaration and consent before submitting.");
+      return;
+    }
+
+    // 🔒 Cooldown (30 seconds)
+    try {
+      const key = `lastSubmit:${formData.email || "anon"}`;
+      const last = localStorage.getItem(key);
+      const remaining = last
+        ? Math.ceil((30000 - (Date.now() - Number(last))) / 1000)
+        : 0;
+
+      if (remaining > 0) {
+        setCooldownSeconds(remaining);
+        alert(`Please wait ${remaining} seconds before submitting again.`);
+        return;
+      }
+
+      localStorage.setItem(key, Date.now().toString());
+      setCooldownSeconds(30);
+    } catch {}
+
+    if (!captchaToken) {
+      alert("Please complete the security check before submitting.");
+      return;
+    }
+
+    if (!captchaToken) {
+      alert("Please complete the security check before submitting.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -541,8 +641,61 @@ const [currentStep, setCurrentStep] = useState(0);
     const user = session?.user;
 
     if (!user?.email) {
+      setIsSubmitting(false);
       alert("Please log in first.");
       window.location.href = "/login?redirect=/apply#application-form";
+      return;
+    }
+
+    const captchaResponse = await fetch("/api/verify-captcha", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: captchaToken }),
+    });
+
+    const captchaResult = await captchaResponse.json();
+
+    if (!captchaResponse.ok || !captchaResult.success) {
+      setIsSubmitting(false);
+      setCaptchaToken("");
+      alert("Security verification failed. Please try again.");
+      return;
+    }
+
+    const cooldownResponse = await fetch("/api/check-submit-cooldown", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: user.email }),
+    });
+
+    const cooldownResult = await cooldownResponse.json();
+
+    if (!cooldownResponse.ok || !cooldownResult.allowed) {
+      const waitTime = cooldownResult.remainingSeconds || 30;
+      setIsSubmitting(false);
+      setCooldownSeconds(waitTime);
+      alert(`Please wait ${waitTime} seconds before submitting again.`);
+      return;
+    }
+
+    const { data: existingApplication, error: checkError } = await supabase
+      .from("applications")
+      .select("application_id")
+      .eq("email", user.email)
+      .limit(1)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error("Application check error:", checkError);
+      setIsSubmitting(false);
+      alert("We could not check your application status. Please try again.");
+      return;
+    }
+
+    if (existingApplication) {
+      setIsSubmitting(false);
+      alert("You have already submitted an application.");
+      window.location.href = "/dashboard";
       return;
     }
 
@@ -564,6 +717,7 @@ const [currentStep, setCurrentStep] = useState(0);
       disability_status: formData.disabilityStatus,
       disability_type: formData.disabilityType,
       disability_proof_file: formData.disabilityProofFile,
+      ovc_status: formData.ovcStatus,
 
       constituency: formData.constituency,
       district: formData.district,
@@ -612,27 +766,31 @@ const [currentStep, setCurrentStep] = useState(0);
 
     if (error) {
       console.error("Supabase submit error:", error);
-      alert(error.message);
+      setIsSubmitting(false);
+      alert(error.message || "Submission failed. Please try again.");
       return;
     }
 
+    setIsSubmitting(false);
+    setCaptchaToken("");
     setShowSuccessModal(true);
   }
-  if (!authChecked) {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-6 text-center">
-      <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-blue-950">
-          Checking your login...
-        </h1>
 
-        <p className="mt-3 text-sm text-slate-600">
-          Please hold on while we confirm your account.
-        </p>
-      </div>
-    </main>
-  );
-}
+  if (!authChecked) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-6 text-center">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
+          <h1 className="text-2xl font-bold text-blue-950">
+            Checking your login...
+          </h1>
+
+          <p className="mt-3 text-sm text-slate-600">
+            Please hold on while we confirm your account.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f6f7fb] text-slate-900">
@@ -787,26 +945,31 @@ const [currentStep, setCurrentStep] = useState(0);
           </aside>
 
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm lg:p-8">
-  {/* Mobile Progress Bar Only */}
-  <div className="mb-6 block lg:hidden">
-    <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
-      <div
-        className="h-3 rounded-full bg-orange-500 transition-all duration-300"
-        style={{ width: `${progress}%` }}
-      />
-    </div>
+            <div className="mb-6 block lg:hidden">
+              <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-3 rounded-full bg-orange-500 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
 
-    <p className="mt-3 text-sm font-semibold text-slate-600">
-      Step {currentStep + 1} of {steps.length}
-    </p>
-  </div>
+              <p className="mt-3 text-sm font-semibold text-slate-600">
+                Step {currentStep + 1} of {steps.length}
+              </p>
+            </div>
 
-  {/* Logged In Box */}
-  <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-    Logged in as: <span className="font-bold">{loggedInEmail}</span>
-  </div>
+            <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+              Logged in as: <span className="font-bold">{loggedInEmail}</span>
+            </div>
 
-  <form onSubmit={handleSubmit}>
+            {new Date() > APPLICATION_CLOSE_DATE && (
+              <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                Applications are now closed. You can still access your dashboard
+                to track your submitted application.
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
               {currentStep === 0 && (
                 <section>
                   <h3 className="text-2xl font-bold text-blue-950">
@@ -881,6 +1044,14 @@ const [currentStep, setCurrentStep] = useState(0);
                       label="Do you have a disability?"
                       name="disabilityStatus"
                       value={formData.disabilityStatus}
+                      onChange={handleInputChange}
+                      options={["Select option", "Yes", "No"]}
+                    />
+
+                    <Select
+                      label="Are you an Orphan or Vulnerable Child (OVC)?"
+                      name="ovcStatus"
+                      value={formData.ovcStatus}
                       onChange={handleInputChange}
                       options={["Select option", "Yes", "No"]}
                     />
@@ -1108,8 +1279,6 @@ const [currentStep, setCurrentStep] = useState(0);
                         options={["Select option", "Yes", "No"]}
                       />
                     </div>
-
-                    
                   </div>
 
                   <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6">
@@ -1351,7 +1520,7 @@ const [currentStep, setCurrentStep] = useState(0);
 
                     <FileUploadCard
                       label="Curriculum Vitae (CV)"
-                      helper="Optional but recommended. Accepted formats: PDF, DOC, DOCX"
+                      helper="Optional but recommended. Accepted formats: PDF, JPG, PNG"
                       fileName={formData.cvFile}
                       inputId="cv-upload"
                       isUploading={uploading.cvFile}
@@ -1412,6 +1581,7 @@ const [currentStep, setCurrentStep] = useState(0);
                         ["Phone", formData.phone],
                         ["Email", loggedInEmail || formData.email],
                         ["Disability Status", formData.disabilityStatus],
+                        ["OVC Status", formData.ovcStatus],
                         [
                           "Disability / Accessibility Support",
                           formData.disabilityType,
@@ -1510,8 +1680,43 @@ const [currentStep, setCurrentStep] = useState(0);
                       ]}
                     />
 
+                    <div className="rounded-3xl border border-blue-100 bg-blue-50 p-6">
+                      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-600">
+                        Privacy &amp; Data Use
+                      </p>
+
+                      <h4 className="mt-3 text-xl font-bold text-blue-950">
+                        How your information will be used
+                      </h4>
+
+                      <p className="mt-3 text-sm leading-6 text-slate-700">
+                        Your information will be used for application review,
+                        programme administration, communication, reporting, and
+                        improving the effectiveness of the BYWC Oil &amp; Gas
+                        Training Programme.
+                      </p>
+
+                      <p className="mt-3 text-sm leading-6 text-slate-700">
+                        Your personal data will not be sold, used for unrelated
+                        commercial marketing, or publicly displayed without your
+                        consent.
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowFullPrivacy(true)}
+                        className="mt-4 text-sm font-bold text-blue-900 underline underline-offset-4 hover:text-blue-700"
+                      >
+                        Read full Privacy Notice
+                      </button>
+                    </div>
+
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-                      <label className="flex items-start gap-3">
+                      <p className="text-sm font-semibold text-blue-950">
+                        Declaration &amp; Consent
+                      </p>
+
+                      <label className="mt-4 flex items-start gap-3">
                         <input
                           type="checkbox"
                           name="declarationAccepted"
@@ -1519,7 +1724,7 @@ const [currentStep, setCurrentStep] = useState(0);
                           onChange={handleInputChange}
                           className="mt-1 h-4 w-4"
                         />
-                        <span className="text-sm text-slate-700">
+                        <span className="text-sm leading-6 text-slate-700">
                           I declare that the information provided in this
                           application is true and correct to the best of my
                           knowledge.
@@ -1534,11 +1739,31 @@ const [currentStep, setCurrentStep] = useState(0);
                           onChange={handleInputChange}
                           className="mt-1 h-4 w-4"
                         />
-                        <span className="text-sm text-slate-700">
-                          I consent to the review and processing of my
-                          application for program administration purposes.
+                        <span className="text-sm leading-6 text-slate-700">
+                          I have read and agree to the Privacy Notice and consent
+                          to the processing of my data.
                         </span>
                       </label>
+                    </div>
+
+                    <div className="rounded-3xl border border-slate-200 bg-white p-6">
+                      <p className="text-sm font-semibold text-slate-700">
+                        Security Check
+                      </p>
+                      <p className="mt-2 text-sm text-slate-500">
+                        Complete this check before submitting your application.
+                      </p>
+
+                      <div className="mt-4">
+                        <Turnstile
+                          siteKey={
+                            process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""
+                          }
+                          onSuccess={(token) => setCaptchaToken(token)}
+                          onExpire={() => setCaptchaToken("")}
+                          onError={() => setCaptchaToken("")}
+                        />
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -1548,9 +1773,9 @@ const [currentStep, setCurrentStep] = useState(0);
                 <button
                   type="button"
                   onClick={prevStep}
-                  disabled={currentStep === 0}
+                  disabled={currentStep === 0 || isSubmitting}
                   className={`rounded-full px-6 py-3 text-sm font-semibold ${
-                    currentStep === 0
+                    currentStep === 0 || isSubmitting
                       ? "cursor-not-allowed bg-slate-200 text-slate-400"
                       : "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
                   }`}
@@ -1563,24 +1788,160 @@ const [currentStep, setCurrentStep] = useState(0);
                     <button
                       type="button"
                       onClick={nextStep}
-                      className="rounded-full bg-orange-500 px-7 py-3 text-sm font-semibold text-white hover:bg-orange-600"
+                      disabled={isSubmitting}
+                      className="rounded-full bg-orange-500 px-7 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
                     >
                       Continue
                     </button>
                   ) : (
                     <button
                       type="submit"
-                      className="rounded-full bg-blue-900 px-7 py-3 text-sm font-semibold text-white hover:bg-blue-950"
+                      disabled={isSubmitting || cooldownSeconds > 0}
+                      className="rounded-full bg-blue-900 px-7 py-3 text-sm font-semibold text-white hover:bg-blue-950 disabled:cursor-not-allowed disabled:bg-blue-400"
                     >
-                      Submit Application
+                      {isSubmitting
+                        ? "Submitting..."
+                        : cooldownSeconds > 0
+                        ? `Wait ${cooldownSeconds}s`
+                        : "Submit Application"}
                     </button>
                   )}
                 </div>
+
+                {cooldownSeconds > 0 && (
+                  <p className="text-center text-xs font-semibold text-orange-600 sm:text-right">
+                    Submission cooldown active. Please wait {cooldownSeconds} seconds.
+                  </p>
+                )}
               </div>
             </form>
           </div>
         </div>
       </section>
+
+      {showFullPrivacy && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-[28px] bg-white p-8 shadow-[0_20px_60px_rgba(15,23,42,0.25)]">
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-600">
+                  BYWC Oil &amp; Gas Training Programme
+                </p>
+                <h2 className="mt-3 text-2xl font-bold text-blue-950">
+                  Full Privacy Notice
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowFullPrivacy(false)}
+                className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-5 text-sm leading-6 text-slate-700">
+              <p>
+                Your personal information is collected and processed in
+                accordance with the Data Protection Act of Botswana (2018). By
+                submitting this application, you acknowledge and agree to how
+                your information will be used for this programme.
+              </p>
+
+              <div>
+                <p className="font-bold text-blue-950">
+                  1. Purpose of Data Collection
+                </p>
+                <p className="mt-2">
+                  We collect your personal information strictly for assessing
+                  eligibility, communicating application outcomes, administering
+                  training and selection, supporting programme delivery, and
+                  generating internal reports for programme management and
+                  approved partners.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">
+                  2. Programme Improvement &amp; Personalisation
+                </p>
+                <p className="mt-2">
+                  We may use application data to improve the programme,
+                  understand applicant backgrounds, refine training content,
+                  personalise relevant communication, and match participants
+                  with suitable training, mentorship, or industry opportunities.
+                  Where possible, this analysis is conducted in aggregated or
+                  anonymised form.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">
+                  3. What We Will Not Do
+                </p>
+                <p className="mt-2">
+                  We will not sell your personal data, use your data for
+                  unrelated commercial marketing, share your data outside
+                  authorised programme stakeholders, or publicly display your
+                  personal information without your consent.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">
+                  4. Who May Access Your Data
+                </p>
+                <p className="mt-2">
+                  Your data may be accessed by programme administrators,
+                  approved training, funding, or implementation partners, and
+                  government or regulatory authorities where required by law.
+                  Access is limited to what is necessary for programme delivery,
+                  review, reporting, and audit.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">
+                  5. Data Storage &amp; Security
+                </p>
+                <p className="mt-2">
+                  Your information is stored using protected systems and access
+                  controls designed to prevent unauthorised access, misuse,
+                  loss, or unlawful disclosure.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">6. Data Retention</p>
+                <p className="mt-2">
+                  Your application data will be retained for up to 12 months
+                  after the application period closes for auditing, reporting,
+                  and programme administration. After this period, data may be
+                  securely deleted or anonymised.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">7. Your Rights</p>
+                <p className="mt-2">
+                  You may request access to your personal data, correction of
+                  inaccurate information, or withdrawal of your application where
+                  applicable by contacting the programme administrators.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowFullPrivacy(false)}
+              className="mt-7 w-full rounded-full bg-blue-900 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-950"
+            >
+              I Understand
+            </button>
+          </div>
+        </div>
+      )}
 
       {showSuccessModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 px-6">
@@ -1754,6 +2115,7 @@ function FileUploadCard({
         <input
           id={inputId}
           type="file"
+          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
           onChange={onFileChange}
           className="hidden"
         />

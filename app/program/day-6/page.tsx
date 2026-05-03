@@ -38,7 +38,7 @@ export default function DaySixPage() {
             <img
               src="/bywc-logo.png.png"
               alt="BYWC Logo"
-              className="h-20 w-auto object-contain"
+              className="h-16 w-auto object-contain md:h-20"
             />
           </Link>
 
@@ -72,40 +72,55 @@ export default function DaySixPage() {
       {/* PAGE CONTENT */}
       <section className="px-6 py-10 lg:px-10">
         <div className="mx-auto max-w-6xl overflow-hidden border border-slate-200 bg-white shadow-[0_25px_70px_rgba(15,23,42,0.12)]">
-          <div className="relative min-h-[920px] overflow-hidden px-8 py-10 lg:px-14">
+          <div className="relative overflow-hidden px-6 py-6 md:px-8 md:py-10 lg:min-h-[920px] lg:px-14">
             {/* BACKGROUND PATTERN */}
             <div className="absolute inset-0 opacity-[0.08]">
               <div className="h-full w-full bg-[radial-gradient(circle_at_1px_1px,#1e3a8a_1px,transparent_0)] [background-size:10px_10px]" />
             </div>
 
             {/* TOP HEADER */}
-            <div className="relative z-10 flex items-start justify-between">
+            <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <h1 className="text-4xl font-black uppercase leading-tight tracking-tight text-blue-900 lg:text-5xl">
+                <h1 className="text-3xl font-black uppercase leading-tight tracking-tight text-blue-900 md:text-4xl lg:text-5xl">
                   Ten-Day Masterclass
                   <br />
                   <span className="text-orange-500">Training Structure</span>
                 </h1>
 
-                <div className="mt-8 flex items-center gap-3">
-                  <div className="text-4xl text-blue-900">▣</div>
+                <div className="mt-4 flex items-center justify-between md:mt-8">
+                  <div className="flex items-center gap-3">
+                    <div className="text-3xl text-blue-900 md:text-4xl">▣</div>
 
-                  <h2 className="text-4xl font-black text-blue-900">
-                    Day 6
-                  </h2>
+                    <h2 className="text-3xl font-black text-blue-900 md:text-4xl">
+                      Day 6
+                    </h2>
+                  </div>
+
+                  <img
+                    src="/logo_2.png"
+                    alt="BYWC secondary logo"
+                    className="h-10 w-auto object-contain md:hidden"
+                  />
                 </div>
               </div>
 
               <img
                 src="/logo_2.png"
                 alt="BYWC secondary logo"
-                className="h-20 w-auto object-contain"
+                className="hidden h-20 w-auto object-contain md:block"
               />
             </div>
 
+            {/* MOBILE IMAGE */}
+            <img
+              src="/courses/C6.png"
+              alt="Energy sector training participant"
+              className="relative z-10 w-full max-h-[360px] object-contain md:hidden"
+            />
+
             {/* LEFT CONTENT BLOCK */}
-            <div className="relative z-10 mt-5 max-w-[720px] bg-[#e6e6e6] pb-8">
-              <div className="bg-blue-900 px-8 py-4">
+            <div className="relative z-10 -mt-2 max-w-[720px] bg-[#e6e6e6] pb-8 md:mt-5">
+              <div className="bg-blue-900 px-6 py-4 md:px-8">
                 <h3 className="text-lg font-black tracking-wide text-white">
                   Energy Sector Foundations{" "}
                   <span className="text-orange-400">
@@ -114,32 +129,32 @@ export default function DaySixPage() {
                 </h3>
               </div>
 
-              <div className="px-8 py-6">
-                <p className="max-w-xl text-lg leading-7 text-black">
+              <div className="px-6 py-6 md:px-8">
+                <p className="max-w-xl text-base leading-7 text-black md:text-lg">
                   This masterclass introduces participants to the structure and
                   functioning of the Oil, Gas and Fuel economy in Southern
                   Africa and Botswana specifically.
                 </p>
 
-                <p className="mt-4 text-lg text-black">
+                <p className="mt-4 text-base text-black md:text-lg">
                   Focus areas include:
                 </p>
 
-                <div className="mt-8 grid gap-3 md:grid-cols-5">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 md:mt-8 md:grid-cols-5">
                   {focusAreas.map((item) => (
                     <div
                       key={item.number}
-                      className="flex min-h-[210px] flex-col items-center bg-blue-900 px-4 py-5 text-center text-white"
+                      className="flex min-h-[170px] flex-col items-center justify-center bg-blue-900 px-4 py-5 text-center text-white md:min-h-[210px]"
                     >
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-orange-500">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-orange-500 md:h-16 md:w-16">
                         <img
                           src={item.icon}
                           alt={item.title}
-                          className="h-9 w-9 object-contain brightness-0 invert"
+                          className="h-8 w-8 object-contain brightness-0 invert md:h-9 md:w-9"
                         />
                       </div>
 
-                      <p className="mt-5 text-xs font-medium leading-5">
+                      <p className="mt-4 text-xs font-medium leading-5 md:mt-5">
                         {item.title}
                       </p>
                     </div>
@@ -148,11 +163,11 @@ export default function DaySixPage() {
               </div>
             </div>
 
-            {/* RIGHT MODEL IMAGE */}
+            {/* DESKTOP MODEL IMAGE */}
             <img
               src="/courses/C6.png"
               alt="Energy sector training participant"
-              className="absolute bottom-0 right-[-180px] z-20 max-h-[650px] w-auto object-contain lg:right-[-240px] lg:max-h-[720px]"
+              className="hidden md:block absolute bottom-0 right-[-180px] z-20 max-h-[650px] w-auto object-contain lg:right-[-240px] lg:max-h-[720px]"
             />
           </div>
         </div>

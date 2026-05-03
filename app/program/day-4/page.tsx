@@ -38,7 +38,7 @@ export default function DayFourPage() {
             <img
               src="/bywc-logo.png.png"
               alt="BYWC Logo"
-              className="h-20 w-auto object-contain"
+              className="h-16 w-auto object-contain md:h-20"
             />
           </Link>
 
@@ -70,81 +70,96 @@ export default function DayFourPage() {
       </nav>
 
       {/* PAGE CONTENT */}
-      <section className="px-6 py-10 lg:px-10">
+      <section className="px-4 py-6 md:px-6 md:py-10 lg:px-10">
         <div className="mx-auto max-w-6xl overflow-hidden border border-slate-200 bg-white shadow-[0_25px_70px_rgba(15,23,42,0.12)]">
-          <div className="relative min-h-[900px] overflow-hidden px-8 py-10 lg:px-14">
+          <div className="relative overflow-hidden px-6 py-6 md:min-h-[900px] md:px-8 md:py-10 lg:px-14">
             {/* BACKGROUND PATTERN */}
             <div className="absolute inset-0 opacity-[0.08]">
               <div className="h-full w-full bg-[radial-gradient(circle_at_1px_1px,#1e3a8a_1px,transparent_0)] [background-size:10px_10px]" />
             </div>
 
             {/* TOP HEADER */}
-            <div className="relative z-10 flex items-start justify-between">
-              <div>
-                <h1 className="text-4xl font-black uppercase leading-tight tracking-tight text-blue-900 lg:text-5xl">
+            <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="w-full">
+                <h1 className="text-3xl font-black uppercase leading-tight tracking-tight text-blue-900 md:text-4xl lg:text-5xl">
                   Ten-Day Masterclass
                   <br />
                   <span className="text-orange-500">Training Structure</span>
                 </h1>
 
-                <div className="mt-8 flex items-center gap-3">
-                  <div className="text-4xl text-blue-900">▣</div>
+                <div className="mt-5 flex items-center justify-between md:mt-8 md:block">
+                  <div className="flex items-center gap-3">
+                    <div className="text-3xl text-blue-900 md:text-4xl">▣</div>
 
-                  <h2 className="text-4xl font-black text-blue-900">
-                    Day 4
-                  </h2>
+                    <h2 className="text-3xl font-black text-blue-900 md:text-4xl">
+                      Day 4
+                    </h2>
+                  </div>
+
+                  <img
+                    src="/logo_2.png"
+                    alt="BYWC secondary logo"
+                    className="h-10 w-auto object-contain md:hidden"
+                  />
                 </div>
               </div>
 
               <img
                 src="/logo_2.png"
                 alt="BYWC secondary logo"
-                className="h-20 w-auto object-contain"
+                className="hidden h-20 w-auto object-contain md:block"
               />
             </div>
 
+            {/* MOBILE IMAGE */}
+            <img
+              src="/courses/C4.png"
+              alt="Hazardous materials management participant"
+              className="relative z-10 mx-auto w-full max-h-[360px] object-contain md:hidden"
+            />
+
             {/* MAIN CONTENT BLOCK */}
-            <div className="relative z-10 mt-5 max-w-[720px] bg-[#e6e6e6] pb-8">
-              <div className="bg-blue-900 px-8 py-4">
-                <h3 className="text-lg font-black uppercase tracking-wide text-white">
+            <div className="relative z-10 -mt-2 max-w-[720px] bg-[#e6e6e6] pb-8 md:mt-5">
+              <div className="bg-blue-900 px-6 py-4 md:px-8">
+                <h3 className="text-base font-black uppercase tracking-wide text-white md:text-lg">
                   Hazardous Materials Management
                 </h3>
               </div>
 
-              <div className="px-8 py-6">
-                <p className="max-w-xl text-lg leading-7 text-black">
+              <div className="px-6 py-6 md:px-8">
+                <p className="max-w-xl text-base leading-7 text-black md:text-lg">
                   This session addresses the safe handling and control of
                   hazardous substances commonly encountered in energy, fuel and
                   industrial operations.
                 </p>
 
-                <p className="mt-4 text-lg text-black">
+                <p className="mt-4 text-base text-black md:text-lg">
                   Focus areas include:
                 </p>
 
-                <div className="mt-6 space-y-2">
+                <div className="mt-6 space-y-3 md:space-y-2">
                   {focusAreas.map((item) => (
                     <div
                       key={item.number}
-                      className="grid min-h-[92px] grid-cols-[80px_1px_82px_1fr] items-center bg-blue-900 px-6 text-white"
+                      className="grid min-h-[76px] grid-cols-[48px_1px_58px_1fr] items-center bg-blue-900 px-4 py-3 text-white md:min-h-[92px] md:grid-cols-[80px_1px_82px_1fr] md:px-6 md:py-0"
                     >
-                      <div className="text-6xl font-black leading-none">
+                      <div className="text-3xl font-black leading-none md:text-6xl">
                         {item.number}
                       </div>
 
-                      <div className="h-16 w-[3px] bg-orange-500" />
+                      <div className="h-10 w-[3px] bg-orange-500 md:h-16" />
 
                       <div className="flex justify-center">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-orange-500">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full border-4 border-orange-500 md:h-16 md:w-16">
                           <img
                             src={item.icon}
                             alt={item.title}
-                            className="h-10 w-10 object-contain brightness-0 invert"
+                            className="h-6 w-6 object-contain brightness-0 invert md:h-10 md:w-10"
                           />
                         </div>
                       </div>
 
-                      <p className="pl-5 text-base font-medium leading-tight">
+                      <p className="pl-3 text-sm font-medium leading-tight md:pl-5 md:text-base">
                         {item.title}
                       </p>
                     </div>
@@ -153,11 +168,11 @@ export default function DayFourPage() {
               </div>
             </div>
 
-            {/* MODEL IMAGE */}
+            {/* DESKTOP MODEL IMAGE */}
             <img
               src="/courses/C4.png"
               alt="Hazardous materials management participant"
-              className="absolute bottom-0 right-[-80px] z-20 max-h-[680px] w-auto object-contain lg:right-[-120px] lg:max-h-[760px]"
+              className="absolute bottom-0 right-[-80px] z-20 hidden max-h-[680px] w-auto object-contain md:block lg:right-[-120px] lg:max-h-[760px]"
             />
           </div>
         </div>
