@@ -105,7 +105,7 @@ export default function DayEightPage() {
 
             {/* MOBILE PERSON IMAGE - FLUSH ABOVE CONTENT */}
             <img
-              src="/courses/C8.WEBP"
+              src="/courses/C8.webp"
               alt="LPG business participant"
               className="relative z-10 w-full max-h-[360px] object-contain md:hidden"
             />
