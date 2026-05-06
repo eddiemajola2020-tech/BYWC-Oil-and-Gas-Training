@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/src/lib/supabaseClient";
 import AttachmentLink from "@/components/AttachmentLink";
@@ -23,7 +23,8 @@ type AuditAction =
   | "status_change"
   | "auto_review"
   | "master_selection"
-  | "message_saved";
+  | "message_saved"
+  | "data_request_update";
 
 type AuditLog = {
   id: string | number;
@@ -118,6 +119,29 @@ type Application = {
   documentCompletenessScore?: number | null;
   submittedAt?: string | null;
   adminMessage?: string | null;
+};
+
+type DataRequestStatus = "pending" | "in_review" | "completed" | "rejected";
+
+type DataRequest = {
+  id: string;
+  userId?: string | null;
+  fullName?: string | null;
+  email: string;
+  phone?: string | null;
+  requestType:
+    | "access"
+    | "correction"
+    | "deletion"
+    | "restriction"
+    | "objection"
+    | "portability";
+  message?: string | null;
+  status: DataRequestStatus;
+  adminNotes?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  completedAt?: string | null;
 };
 
 const TOTAL_YOUTH_WOMEN = 435;
@@ -215,6 +239,18 @@ function isBotswanaCitizen(value?: string | null) {
 
 function isYes(value?: string | null) {
   return normalize(value) === "yes";
+}
+
+function maskOmang(value?: string | null) {
+  if (!value) return "-";
+
+  const clean = value.replace(/\s+/g, "");
+
+  if (clean.length <= 4) {
+    return "****";
+  }
+
+  return `****${clean.slice(-4)}`;
 }
 
 function getPriorityGroup(application: Application) {
@@ -394,6 +430,8 @@ function calculateEligibility(application: Application): ReviewDecision {
 
 export default function AdminPage() {
   const router = useRouter();
+  const complianceRef = useRef<HTMLElement | null>(null);
+  const auditRef = useRef<HTMLElement | null>(null);
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -412,7 +450,16 @@ export default function AdminPage() {
   );
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [showAuditLogs, setShowAuditLogs] = useState(true);
+  const [showAuditLogs, setShowAuditLogs] = useState(false);
+  const [dataRequests, setDataRequests] = useState<DataRequest[]>([]);
+  const [dataRequestsLoading, setDataRequestsLoading] = useState(false);
+  const [showDataRequests, setShowDataRequests] = useState(false);
+  const [savingDataRequestId, setSavingDataRequestId] = useState<string | null>(
+    null,
+  );
+  const [dataRequestNotes, setDataRequestNotes] = useState<
+    Record<string, string>
+  >({});
   const [fullBackupExporting, setFullBackupExporting] = useState(false);
   const [insightTab, setInsightTab] = useState<"quota" | "constituency">(
     "quota",
@@ -616,6 +663,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadAuditLogs();
+    loadDataRequests();
   }, []);
 
   const filteredApplications = applications;
@@ -683,12 +731,160 @@ export default function AdminPage() {
   }
 
   async function handleToggleAuditLogs() {
-    const nextState = !showAuditLogs;
-    setShowAuditLogs(nextState);
-
-    if (nextState) {
-      await loadAuditLogs(); // ALWAYS fetch when opening
+    if (!showAuditLogs) {
+      setShowAuditLogs(true);
+      await loadAuditLogs();
+      setTimeout(() => {
+        auditRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 120);
+      return;
     }
+
+    auditRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function formatDataRequest(item: any): DataRequest {
+    return {
+      id: item.id,
+      userId: item.user_id,
+      fullName: item.full_name,
+      email: item.email,
+      phone: item.phone,
+      requestType: item.request_type,
+      status: item.status || "pending",
+      message: item.message,
+      adminNotes: item.admin_notes,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+      completedAt: item.completed_at,
+    };
+  }
+
+  async function loadDataRequests() {
+    setDataRequestsLoading(true);
+
+    const { data, error } = await supabase
+      .from("data_requests")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error("Failed to load data requests:", error);
+      setDataRequestsLoading(false);
+      return;
+    }
+
+    const formattedRequests = (data || []).map(formatDataRequest);
+
+    setDataRequests(formattedRequests);
+    setDataRequestNotes(
+      formattedRequests.reduce(
+        (acc, request) => ({
+          ...acc,
+          [request.id]: request.adminNotes || "",
+        }),
+        {} as Record<string, string>,
+      ),
+    );
+    setDataRequestsLoading(false);
+  }
+
+  async function handleToggleDataRequests() {
+    setShowDataRequests(true);
+    await loadDataRequests();
+
+    setTimeout(() => {
+      complianceRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+  }
+
+  async function handleDataRequestUpdate(
+    request: DataRequest,
+    status: DataRequestStatus,
+  ) {
+    setSavingDataRequestId(request.id);
+
+    const now = new Date().toISOString();
+    const adminNotes = dataRequestNotes[request.id] || "";
+
+    const { error } = await supabase
+      .from("data_requests")
+      .update({
+        status,
+        admin_notes: adminNotes,
+        updated_at: now,
+        completed_at: status === "completed" ? now : null,
+      })
+      .eq("id", request.id);
+
+    if (error) {
+      console.error("Failed to update data request:", error);
+      alert(error.message);
+      setSavingDataRequestId(null);
+      return;
+    }
+
+    await logAdminAction({
+      action: "data_request_update",
+      details: {
+        dataRequestId: request.id,
+        requesterEmail: request.email,
+        requestType: request.requestType,
+        previousStatus: request.status,
+        newStatus: status,
+      },
+    });
+
+    setDataRequests((prev) =>
+      prev.map((item) =>
+        item.id === request.id
+          ? {
+              ...item,
+              status,
+              adminNotes,
+              updatedAt: now,
+              completedAt: status === "completed" ? now : null,
+            }
+          : item,
+      ),
+    );
+
+    setSavingDataRequestId(null);
+  }
+
+  function handleExportDataRequest(request: DataRequest) {
+    const payload = {
+      id: request.id,
+      fullName: request.fullName,
+      email: request.email,
+      phone: request.phone,
+      requestType: request.requestType,
+      status: request.status,
+      message: request.message,
+      adminNotes: dataRequestNotes[request.id] || request.adminNotes || "",
+      createdAt: request.createdAt,
+      updatedAt: request.updatedAt,
+      completedAt: request.completedAt,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    link.href = url;
+    link.download = `BYWC-data-request-${request.email}-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   async function updateReviewFields(
@@ -1416,6 +1612,9 @@ export default function AdminPage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const pageStart = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const pageEnd = Math.min(currentPage * PAGE_SIZE, totalCount);
+  const pendingRequestsCount = dataRequests.filter(
+    (request) => request.status === "pending",
+  ).length;
 
   if (loading) {
     return (
@@ -1453,7 +1652,9 @@ export default function AdminPage() {
                   <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-orange-300">
                     BYWC
                   </p>
-                  <p className="truncate text-[11px] font-bold">Admin Control</p>
+                  <p className="truncate text-[11px] font-bold">
+                    Admin Control
+                  </p>
                 </div>
               </div>
             </div>
@@ -1497,7 +1698,15 @@ export default function AdminPage() {
                 onClick={handleToggleAuditLogs}
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
               >
-                {showAuditLogs ? "Hide Activity" : "Activity"}
+                Activity Log
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleDataRequests}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
+              >
+                Compliance
               </button>
 
               <details className="group relative">
@@ -1520,7 +1729,9 @@ export default function AdminPage() {
                     disabled={fullBackupExporting}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-purple-300 transition hover:bg-white/10 disabled:opacity-50"
                   >
-                    {fullBackupExporting ? "Exporting Backup..." : "Full Backup"}
+                    {fullBackupExporting
+                      ? "Exporting Backup..."
+                      : "Full Backup"}
                   </button>
 
                   <button
@@ -1545,66 +1756,6 @@ export default function AdminPage() {
             </div>
           </div>
         </nav>
-
-        {showAuditLogs && (
-          <section className="mb-5 rounded-[24px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.22)]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
-                  Activity
-                </p>
-                <h2 className="mt-1 text-lg font-black text-white">
-                  Audit Log
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={loadAuditLogs}
-                disabled={auditLoading}
-                className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
-              >
-                {auditLoading ? "Loading" : "Refresh"}
-              </button>
-            </div>
-
-            {auditLoading ? (
-              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
-                Loading audit log...
-              </div>
-            ) : auditLogs.length === 0 ? (
-              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
-                No audit logs yet.
-              </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {auditLogs.slice(0, 8).map((log) => (
-                  <div
-                    key={log.id}
-                    className="rounded-xl border border-white/10 bg-white/5 p-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="break-all text-xs font-black text-white">
-                        {log.action}
-                      </p>
-                      <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9px] font-black text-orange-300">
-                        log
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] font-semibold text-slate-400">
-                      {log.createdAt
-                        ? new Date(log.createdAt).toLocaleString()
-                        : "-"}
-                    </p>
-                    <p className="mt-2 break-all text-[11px] leading-5 text-slate-400">
-                      {log.applicationId || "No application"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
 
         <header className="mb-5 rounded-[30px] border border-white/10 bg-[#0b1028] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] lg:p-6">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-center">
@@ -1662,6 +1813,32 @@ export default function AdminPage() {
           <StatCard title="Rejected" value={rejectedCount} />
         </section>
 
+
+        {pendingRequestsCount > 0 && (
+          <section className="mb-5 rounded-[24px] border border-orange-500/30 bg-orange-500/10 p-4 shadow-[0_18px_45px_rgba(249,115,22,0.12)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-orange-300">
+                  ⚠ {pendingRequestsCount} data protection request{pendingRequestsCount === 1 ? "" : "s"} pending
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">
+                  Review them in the Compliance section below.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDataRequests(true);
+                  loadDataRequests();
+                }}
+                className="w-fit rounded-2xl bg-orange-500 px-4 py-2 text-xs font-black text-white transition hover:bg-orange-600"
+              >
+                Open Compliance
+              </button>
+            </div>
+          </section>
+        )}
         <section className="rounded-[32px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.30)]">
           <div className="mb-4 grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(420px,640px)] 2xl:items-center">
             <div>
@@ -1751,7 +1928,7 @@ export default function AdminPage() {
                             {application.applicationId}
                           </p>
                           <p className="mt-1 break-words text-[11px] leading-4 text-slate-400">
-                            Omang: {application.omang || "-"}
+                            Omang: {maskOmang(application.omang)}
                           </p>
                         </td>
 
@@ -1996,6 +2173,214 @@ export default function AdminPage() {
             </div>
           )}
         </section>
+        <section
+          ref={complianceRef}
+          className="mb-5 scroll-mt-24 rounded-[24px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.22)]"
+        >
+          {showDataRequests ? (
+            <>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+                  Compliance
+                </p>
+                <h2 className="mt-1 text-lg font-black text-white">
+                  Data Protection Requests
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  Manage access, correction, deletion, restriction, objection
+                  and portability requests.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={loadDataRequests}
+                disabled={dataRequestsLoading}
+                className="w-fit rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                {dataRequestsLoading ? "Loading" : "Refresh Requests"}
+              </button>
+            </div>
+
+            {dataRequestsLoading ? (
+              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
+                Loading data requests...
+              </div>
+            ) : dataRequests.length === 0 ? (
+              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
+                No data protection requests yet.
+              </div>
+            ) : (
+              <div className="grid gap-3 xl:grid-cols-2">
+                {dataRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-orange-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-orange-300">
+                            {request.requestType}
+                          </span>
+                          <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-300">
+                            {request.status.replace("_", " ")}
+                          </span>
+                        </div>
+
+                        <h3 className="mt-3 break-words text-base font-black text-white">
+                          {request.fullName || "Unnamed requester"}
+                        </h3>
+                        <p className="mt-1 break-all text-xs font-semibold text-slate-400">
+                          {request.email}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {request.createdAt
+                            ? new Date(request.createdAt).toLocaleString()
+                            : "-"}
+                        </p>
+                      </div>
+
+                      <select
+                        value={request.status}
+                        onChange={(event) =>
+                          handleDataRequestUpdate(
+                            request,
+                            event.target.value as DataRequestStatus,
+                          )
+                        }
+                        disabled={savingDataRequestId === request.id}
+                        className="rounded-xl border border-white/10 bg-[#111827] px-3 py-2 text-xs font-bold text-white outline-none disabled:opacity-50"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in_review">In Review</option>
+                        <option value="completed">Completed</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+
+                    <div className="mt-4 rounded-xl bg-[#0f172a] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        Request Details
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-300">
+                        {request.message || "No message provided."}
+                      </p>
+                    </div>
+
+                    <div className="mt-4">
+                      <label className="mb-2 block text-xs font-black text-white">
+                        Admin Notes
+                      </label>
+                      <textarea
+                        value={dataRequestNotes[request.id] || ""}
+                        onChange={(event) =>
+                          setDataRequestNotes((prev) => ({
+                            ...prev,
+                            [request.id]: event.target.value,
+                          }))
+                        }
+                        className="min-h-24 w-full rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-xs text-white outline-none focus:border-orange-400"
+                        placeholder="Record what was done: data exported, corrected, deleted, rejected, etc."
+                      />
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDataRequestUpdate(request, request.status)
+                        }
+                        disabled={savingDataRequestId === request.id}
+                        className="rounded-xl bg-orange-500 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-600 disabled:opacity-50"
+                      >
+                        Save Notes
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleExportDataRequest(request)}
+                        className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700"
+                      >
+                        Export Request JSON
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            </>
+          ) : (
+            <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
+              Compliance section is ready. Click Compliance to load data protection requests.
+            </div>
+          )}
+        </section>
+
+        {showAuditLogs && (
+          <section
+            ref={auditRef}
+            className="mb-5 scroll-mt-6 rounded-[24px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.22)]"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+                  Activity
+                </p>
+                <h2 className="mt-1 text-lg font-black text-white">
+                  Audit Log
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={loadAuditLogs}
+                disabled={auditLoading}
+                className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                {auditLoading ? "Loading" : "Refresh"}
+              </button>
+            </div>
+
+            {auditLoading ? (
+              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
+                Loading audit log...
+              </div>
+            ) : auditLogs.length === 0 ? (
+              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
+                No audit logs yet.
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {auditLogs.slice(0, 8).map((log) => (
+                  <div
+                    key={log.id}
+                    className="rounded-xl border border-white/10 bg-white/5 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="break-all text-xs font-black text-white">
+                        {log.action}
+                      </p>
+                      <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9px] font-black text-orange-300">
+                        log
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-400">
+                      {log.createdAt
+                        ? new Date(log.createdAt).toLocaleString()
+                        : "-"}
+                    </p>
+                    <p className="mt-2 break-all text-[11px] leading-5 text-slate-400">
+                      {log.applicationId || "No application"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {selectedApplication && (
           <section className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center px-4">
             <div className="bg-[#0b1028] border border-white/10 rounded-2xl text-white max-w-5xl w-full max-h-[90vh] overflow-y-auto p-6">

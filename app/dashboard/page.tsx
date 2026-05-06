@@ -30,6 +30,7 @@ const navItems = [
   ["Home", "/home", "⌂", false],
   ["Dashboard", "/dashboard", "▦", true],
   ["Profile", "#profile", "◉", false],
+  ["Data Privacy", "/data-requests", "🔒", false],
   ["Messages", "/inbox", "✉", false],
   ["Tracker", "/tracker", "✓", false],
   ["Apply", "/apply", "+", false],
@@ -428,6 +429,28 @@ export default function DashboardPage() {
                       : "-"}
                   </span>
                 </div>
+              </div>
+
+              <div className="mt-6 rounded-[24px] border border-orange-200 bg-orange-50 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">
+                  Data Rights
+                </p>
+
+                <h3 className="mt-2 text-xl font-black text-blue-950">
+                  Your Data, Your Control
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Request access, correction, deletion, restriction, objection,
+                  or a portable copy of your personal data.
+                </p>
+
+                <Link
+                  href="/data-requests"
+                  className="mt-4 inline-flex rounded-full bg-blue-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-900"
+                >
+                  Manage My Data
+                </Link>
               </div>
             </div>
           </div>

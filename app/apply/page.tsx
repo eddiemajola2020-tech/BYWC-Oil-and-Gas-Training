@@ -15,6 +15,10 @@ type FormData = {
   citizenship: string;
   phone: string;
   email: string;
+  nextOfKinName: string;
+  nextOfKinRelationship: string;
+  nextOfKinPhone: string;
+  nextOfKinAltPhone: string;
   disabilityStatus: string;
   disabilityType: string;
   disabilityProofFile: string;
@@ -147,6 +151,10 @@ const initialFormData: FormData = {
   citizenship: "Botswana",
   phone: "",
   email: "",
+  nextOfKinName: "",
+  nextOfKinRelationship: "",
+  nextOfKinPhone: "",
+  nextOfKinAltPhone: "",
   disabilityStatus: "",
   disabilityType: "",
   disabilityProofFile: "",
@@ -198,6 +206,7 @@ const steps = [
 ];
 
 const APPLICATION_CLOSE_DATE = new Date("2026-05-27T23:59:59");
+const PRIVACY_NOTICE_VERSION = "BYWC-DPA-v1.0";
 
 function countWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -714,6 +723,11 @@ export default function ApplyPage() {
       phone: formData.phone,
       email: user.email,
 
+      next_of_kin_name: formData.nextOfKinName,
+      next_of_kin_relationship: formData.nextOfKinRelationship,
+      next_of_kin_phone: formData.nextOfKinPhone,
+      next_of_kin_alt_phone: formData.nextOfKinAltPhone,
+
       disability_status: formData.disabilityStatus,
       disability_type: formData.disabilityType,
       disability_proof_file: formData.disabilityProofFile,
@@ -758,6 +772,11 @@ export default function ApplyPage() {
 
       declaration_accepted: formData.declarationAccepted,
       consent_accepted: formData.consentAccepted,
+
+      // Compliance proof: what privacy notice was accepted and when
+      privacy_notice_version: PRIVACY_NOTICE_VERSION,
+      privacy_consent_given: formData.consentAccepted,
+      privacy_consent_at: new Date().toISOString(),
     };
 
     const { error } = await supabase
@@ -1039,7 +1058,58 @@ export default function ApplyPage() {
                       value={formData.email}
                       onChange={handleInputChange}
                     />
+                  </div>
 
+                  <div className="mt-8 rounded-3xl border border-orange-100 bg-orange-50 p-6">
+                    <h4 className="text-lg font-bold text-blue-950">
+                      Next of Kin / Emergency Contact
+                    </h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Provide someone we can contact in case of an emergency during programme administration, training, or official programme activities.
+                    </p>
+
+                    <div className="mt-6 grid gap-6 md:grid-cols-2">
+                      <Input
+                        label="Next of Kin Full Name"
+                        name="nextOfKinName"
+                        value={formData.nextOfKinName}
+                        onChange={handleInputChange}
+                      />
+
+                      <Select
+                        label="Relationship"
+                        name="nextOfKinRelationship"
+                        value={formData.nextOfKinRelationship}
+                        onChange={handleInputChange}
+                        options={[
+                          "Select relationship",
+                          "Parent",
+                          "Guardian",
+                          "Spouse",
+                          "Sibling",
+                          "Relative",
+                          "Friend",
+                          "Other",
+                        ]}
+                      />
+
+                      <Input
+                        label="Next of Kin Phone Number"
+                        name="nextOfKinPhone"
+                        value={formData.nextOfKinPhone}
+                        onChange={handleInputChange}
+                      />
+
+                      <Input
+                        label="Alternative Phone Number"
+                        name="nextOfKinAltPhone"
+                        value={formData.nextOfKinAltPhone}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-8 grid gap-6 md:grid-cols-2">
                     <Select
                       label="Do you have a disability?"
                       name="disabilityStatus"
@@ -1580,6 +1650,10 @@ export default function ApplyPage() {
                         ["Citizenship", formData.citizenship],
                         ["Phone", formData.phone],
                         ["Email", loggedInEmail || formData.email],
+                        ["Next of Kin Name", formData.nextOfKinName],
+                        ["Next of Kin Relationship", formData.nextOfKinRelationship],
+                        ["Next of Kin Phone", formData.nextOfKinPhone],
+                        ["Next of Kin Alternative Phone", formData.nextOfKinAltPhone],
                         ["Disability Status", formData.disabilityStatus],
                         ["OVC Status", formData.ovcStatus],
                         [
@@ -1691,15 +1765,23 @@ export default function ApplyPage() {
 
                       <p className="mt-3 text-sm leading-6 text-slate-700">
                         Your information will be used for application review,
-                        programme administration, communication, reporting, and
-                        improving the effectiveness of the BYWC Oil &amp; Gas
-                        Training Programme.
+                        eligibility screening, selection, communication,
+                        programme administration, reporting, audit, and delivery
+                        of the BYWC Oil &amp; Gas Training Programme. Disability
+                        information is collected only to support inclusion and
+                        reasonable assistance where required.
                       </p>
 
                       <p className="mt-3 text-sm leading-6 text-slate-700">
-                        Your personal data will not be sold, used for unrelated
+                        Your data will not be sold, used for unrelated
                         commercial marketing, or publicly displayed without your
-                        consent.
+                        consent. Your application data will be retained for up to
+                        12 months for programme administration and audit, unless
+                        a longer period is required by law.
+                      </p>
+
+                      <p className="mt-3 text-xs font-semibold text-slate-600">
+                        Privacy Notice Version: {PRIVACY_NOTICE_VERSION}
                       </p>
 
                       <button
@@ -1740,8 +1822,10 @@ export default function ApplyPage() {
                           className="mt-1 h-4 w-4"
                         />
                         <span className="text-sm leading-6 text-slate-700">
-                          I have read and agree to the Privacy Notice and consent
-                          to the processing of my data.
+                          I confirm that I have read and understood the Privacy
+                          Notice ({PRIVACY_NOTICE_VERSION}) and consent to the
+                          collection and processing of my personal data in
+                          accordance with it.
                         </span>
                       </label>
                     </div>
@@ -1830,6 +1914,9 @@ export default function ApplyPage() {
                 <h2 className="mt-3 text-2xl font-bold text-blue-950">
                   Full Privacy Notice
                 </h2>
+                <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                  Version: {PRIVACY_NOTICE_VERSION}
+                </p>
               </div>
 
               <button
@@ -1843,48 +1930,50 @@ export default function ApplyPage() {
 
             <div className="mt-6 space-y-5 text-sm leading-6 text-slate-700">
               <p>
-                Your personal information is collected and processed in
-                accordance with the Data Protection Act of Botswana (2018). By
-                submitting this application, you acknowledge and agree to how
-                your information will be used for this programme.
+                This Privacy Notice explains how personal data is collected and
+                processed for the BYWC Oil &amp; Gas Training Programme. It is
+                intended to support lawful, fair, transparent, and accountable
+                processing of applicant information.
               </p>
 
               <div>
                 <p className="font-bold text-blue-950">
-                  1. Purpose of Data Collection
+                  1. Data Controller
                 </p>
                 <p className="mt-2">
-                  We collect your personal information strictly for assessing
-                  eligibility, communicating application outcomes, administering
-                  training and selection, supporting programme delivery, and
-                  generating internal reports for programme management and
-                  approved partners.
+                  The data controller for this application process is the BYWC
+                  Oil &amp; Gas Training Programme / authorised programme office.
+                  Programme administrators are responsible for managing
+                  applications, access, review, reporting, and compliance
+                  actions connected to this intake.
                 </p>
               </div>
 
               <div>
                 <p className="font-bold text-blue-950">
-                  2. Programme Improvement &amp; Personalisation
+                  2. Purpose of Data Collection
                 </p>
                 <p className="mt-2">
-                  We may use application data to improve the programme,
-                  understand applicant backgrounds, refine training content,
-                  personalise relevant communication, and match participants
-                  with suitable training, mentorship, or industry opportunities.
-                  Where possible, this analysis is conducted in aggregated or
-                  anonymised form.
+                  We collect your personal information for eligibility
+                  screening, application review, candidate selection, identity
+                  and document verification, communication, programme delivery,
+                  reporting, audit, and related administration of the BYWC Oil
+                  &amp; Gas Training Programme.
                 </p>
               </div>
 
               <div>
                 <p className="font-bold text-blue-950">
-                  3. What We Will Not Do
+                  3. Categories of Personal Data Collected
                 </p>
                 <p className="mt-2">
-                  We will not sell your personal data, use your data for
-                  unrelated commercial marketing, share your data outside
-                  authorised programme stakeholders, or publicly display your
-                  personal information without your consent.
+                  We may collect identity details, contact details, Omang / ID
+                  number, date of birth, gender, citizenship, district,
+                  constituency, education information, employment background,
+                  motivation responses, uploaded documents, and application
+                  status information. Disability information and proof are
+                  collected only where voluntarily provided and only to support
+                  inclusion, accessibility, and appropriate assistance.
                 </p>
               </div>
 
@@ -1893,44 +1982,74 @@ export default function ApplyPage() {
                   4. Who May Access Your Data
                 </p>
                 <p className="mt-2">
-                  Your data may be accessed by programme administrators,
-                  approved training, funding, or implementation partners, and
-                  government or regulatory authorities where required by law.
-                  Access is limited to what is necessary for programme delivery,
-                  review, reporting, and audit.
+                  Your data may be accessed by authorised programme
+                  administrators, approved training, funding, implementation,
+                  audit, or reporting partners, and government or regulatory
+                  authorities where required by law. Access is limited to what is
+                  necessary for programme delivery, review, reporting, and
+                  compliance.
                 </p>
               </div>
 
               <div>
                 <p className="font-bold text-blue-950">
-                  5. Data Storage &amp; Security
+                  5. What We Will Not Do
                 </p>
                 <p className="mt-2">
-                  Your information is stored using protected systems and access
-                  controls designed to prevent unauthorised access, misuse,
-                  loss, or unlawful disclosure.
+                  We will not sell your personal data, use it for unrelated
+                  commercial marketing, share it outside authorised programme
+                  purposes, or publicly display your personal information without
+                  your consent, unless required by law.
                 </p>
               </div>
 
               <div>
-                <p className="font-bold text-blue-950">6. Data Retention</p>
+                <p className="font-bold text-blue-950">
+                  6. Storage, Security &amp; Cross-Border Processing
+                </p>
+                <p className="mt-2">
+                  Your information is stored using protected systems with access
+                  controls, authentication, secure transmission, and restricted
+                  administrative access. Some systems used to process or store
+                  programme data may be located outside Botswana. Where this is
+                  the case, appropriate safeguards are used to protect your
+                  information.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">7. Data Retention</p>
                 <p className="mt-2">
                   Your application data will be retained for up to 12 months
-                  after the application period closes for auditing, reporting,
-                  and programme administration. After this period, data may be
-                  securely deleted or anonymised.
+                  after the application period closes for programme
+                  administration, audit, reporting, and compliance purposes.
+                  After this period, data may be securely deleted or anonymised
+                  unless a longer retention period is required by law.
                 </p>
               </div>
 
               <div>
-                <p className="font-bold text-blue-950">7. Your Rights</p>
+                <p className="font-bold text-blue-950">8. Your Rights</p>
                 <p className="mt-2">
                   You may request access to your personal data, correction of
-                  inaccurate information, or withdrawal of your application where
-                  applicable by contacting the programme administrators.
+                  inaccurate data, deletion where applicable, restriction of
+                  processing, objection to certain processing, or a portable copy
+                  of your data. These requests can be submitted through the
+                  Manage My Data section in your applicant profile.
                 </p>
               </div>
-            </div>
+
+              <div>
+                <p className="font-bold text-blue-950">
+                  9. Complaints &amp; Concerns
+                </p>
+                <p className="mt-2">
+                  If you have concerns about how your personal data is handled,
+                  you may contact the programme administrators. You may also
+                  raise a complaint with the relevant data protection authority
+                  where applicable.
+                </p>
+              </div>            </div>
 
             <button
               type="button"
