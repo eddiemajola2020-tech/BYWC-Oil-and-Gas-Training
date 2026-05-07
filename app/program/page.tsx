@@ -78,17 +78,63 @@ export default function ProgramPage() {
       featured: false,
     },
   ];
-const partners = [
-  "/logos/gov_1.png",     
-  "/logos/pyec_1.png",   
 
-  "/logos/seth_1.png",
-  "/logos/emangweni_1.png",
-  "/logos/baisago_1.png",
-  "/logos/ub_1.png",
-  "/logos/bera_1.png",
-  "/logos/ter_1.png",
-];
+  const partners = [
+    "/logos/gov_1.png",
+    "/logos/pyec_1.png",
+    "/logos/seth_1.png",
+    "/logos/emangweni_1.png",
+    "/logos/baisago_1.png",
+    "/logos/ub_1.png",
+    "/logos/bera_1.png",
+    "/logos/ter_1.png",
+  ];
+
+  const pathwayCards = [
+    {
+      title: "Cooperative Formation",
+      text: "Support to establish oil and gas cooperatives and enterprises across all 61 constituencies.",
+    },
+    {
+      title: "Government Registration Support",
+      text: "Assistance with formal formation, registration and setup through the Ministry of Trade and Entrepreneurship.",
+    },
+    {
+      title: "Internships & Mentorship",
+      text: "Exposure to real oil and gas operating environments through internship and mentorship opportunities.",
+    },
+    {
+      title: "Project & Infrastructure Coordination",
+      text: "Seth Resources Petroleum will coordinate cooperative projects, project management and infrastructure development.",
+    },
+  ];
+
+  const participantBenefitCards = [
+    {
+      title: "Free Training Access",
+      icon: "📘",
+      text: "Access the full 10-day BYWC Oil & Gas Training Programme at no cost, covering safety systems, oil and gas operations, LPG, logistics, fuel retail, and enterprise activation.",
+      featured: true,
+    },
+    {
+      title: "Meals Throughout Training",
+      icon: "🍽️",
+      text: "Participants receive breakfast, lunch, and dinner throughout the programme to support full-day participation during the training period.",
+      featured: false,
+    },
+    {
+      title: "Government & Industry Backing",
+      icon: "🤝",
+      text: "The programme is supported through collaboration between PYEC, government institutions, and industry partners working to create structured entry into Botswana’s energy sector.",
+      featured: false,
+    },
+    {
+      title: "Internships, Mentorship & Enterprise Pathways",
+      icon: "🛢️",
+      text: "Selected participants may access mentorship, internship exposure, cooperative formation support, and structured pathways into enterprise development within the oil and gas sector.",
+      featured: true,
+    },
+  ];
 
   const applicationRequirements = [
     {
@@ -115,6 +161,15 @@ const partners = [
       title: "Selection & Onboarding",
       text: "Successful applicants may be contacted for further vetting, confirmation, and onboarding before final participation.",
     },
+  ];
+
+  const programmeBenefits = [
+    "10-day intensive training",
+    "Internship and mentorship exposure",
+    "Government registration support",
+    "Cooperative and enterprise setup guidance",
+    "Free meals 3 times a day during training",
+    "Representation across all 61 constituencies",
   ];
 
   const curriculumRows = [
@@ -229,7 +284,7 @@ const partners = [
               <img
                 src="/banner_2.webp"
                 alt="Programme Banner"
-               className="h-full w-full object-cover object-[32%_35%] md:object-center"
+                className="h-full w-full object-cover object-[32%_35%] md:object-center"
               />
 
               <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/35 via-black/25 to-black/45 md:bg-gradient-to-r md:from-black/40 md:via-black/10 md:to-transparent" />
@@ -272,9 +327,9 @@ const partners = [
 
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="text-base font-bold text-blue-950 lg:text-lg">
-                    Partner-Led
+                    3 Meals
                   </p>
-                  <p className="mt-1 text-sm text-slate-600">Selection</p>
+                  <p className="mt-1 text-sm text-slate-600">Daily Support</p>
                 </div>
               </div>
             </div>
@@ -305,44 +360,34 @@ const partners = [
           <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
-                Program Launch
+                Programme Launch
               </p>
 
               <h2 className="mt-3 text-4xl font-bold tracking-tight text-blue-950 lg:text-5xl">
-                Program Launch &<br className="hidden lg:block" />
-                Leadership Engagement
+                Programme Launch &<br className="hidden lg:block" />
+                Pathway to Enterprise
               </h2>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600">
-                The programme is positioned as a high-visibility national
-                platform, strengthened through leadership engagement and
-                public-sector alignment. Its launch is intended to signal
-                seriousness, national relevance, and long-term commitment to
-                expanding opportunity within Botswana’s energy economy.
+                BYWC, in collaboration with the Presidential Youth Economic
+                Campaign (PYEC), was launched as a national initiative to create
+                structured entry into Botswana’s oil and gas sector.
               </p>
 
               <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">
-                This leadership-backed positioning supports stronger public
-                confidence, deeper partner credibility, and a clearer sense that
-                the programme is not just training, but a coordinated pathway
-                into industry access, readiness, and economic participation.
+                Beyond training, this initiative is designed to move selected
+                participants into real participation in the industry through
+                cooperative formation, enterprise development, internships,
+                mentorship and project support across all 61 constituencies.
               </p>
 
-              <div className="mt-8 flex flex-wrap gap-4">
-                <Link
-                  href="/apply"
-                  className="rounded-full bg-orange-500 px-7 py-3.5 text-sm font-semibold text-white hover:bg-orange-600"
-                >
-                  Apply Now
-                </Link>
-
-                <Link
-                  href="/program"
-                  className="rounded-full border-2 border-blue-900 px-7 py-3.5 text-sm font-semibold text-blue-900 hover:bg-blue-50"
-                >
-                  View Programme
-                </Link>
-              </div>
+              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">
+                The Ministry of Trade and Entrepreneurship will assist with the
+                formation, registration and setup of cooperatives in accordance
+                with the laws of Botswana. Seth Resources Petroleum will
+                coordinate cooperative projects, project management and
+                infrastructure development.
+              </p>
             </div>
 
             <div className="relative">
@@ -356,6 +401,66 @@ const partners = [
                   className="h-[380px] w-full object-cover object-center md:h-[520px]"
                 />
               </div>
+
+
+            </div>
+          </div>
+
+          <div className="mt-20">
+            <div className="mx-auto mb-14 max-w-4xl text-center">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">
+                What You Get
+              </p>
+
+              <h2 className="mt-3 text-3xl font-bold tracking-tight text-blue-950 md:text-4xl lg:text-[3.2rem]">
+                Programme Benefits &amp; Participant Support
+              </h2>
+
+              <p className="mx-auto mt-4 max-w-3xl text-base leading-8 text-slate-600">
+                The programme is designed to reduce barriers to participation by
+                combining training, operational exposure, industry support, and
+                participant-focused assistance within one structured national
+                initiative.
+              </p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              {participantBenefitCards.map((item, index) => (
+                <div
+                  key={item.title}
+                  className={`group min-h-[260px] rounded-[30px] border p-7 shadow-sm transition hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(15,23,42,0.10)] lg:p-8 ${
+                    index % 2 === 0
+                      ? "border-blue-950 bg-blue-950"
+                      : "border-orange-500 bg-orange-500"
+                  }`}
+                >
+                  <div
+                    className={`flex h-16 w-16 items-center justify-center rounded-2xl text-3xl ${
+                      index % 2 === 0
+                        ? "bg-white text-blue-950"
+                        : "bg-white text-orange-500"
+                    }`}
+                  >
+                    {item.icon}
+                  </div>
+
+                  <h3
+                    className={`mt-8 text-2xl font-black lg:text-3xl ${
+"text-white"
+                    }`}
+                  >
+                    {item.title}
+                  </h3>
+
+                  <p
+                    className={`mt-4 text-base leading-8 ${
+                      index % 2 === 0 ? "text-blue-100" : "text-orange-50"
+                    }`}
+                  >
+                    {item.text}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
