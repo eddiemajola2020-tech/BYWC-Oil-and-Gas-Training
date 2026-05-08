@@ -278,6 +278,77 @@ function getQualificationBonus(application: Application) {
   return 0;
 }
 
+const PROGRAMME_RELEVANT_FIELD_KEYWORDS = [
+  "bsc major in chemistry",
+  "bsc chemistry",
+  "chemistry",
+  "applied chemistry",
+  "chemical science",
+  "chemical engineering",
+
+  "petroleum",
+  "petroleum engineering",
+  "oil and gas",
+  "oil & gas",
+  "lpg",
+  "gas",
+  "fuel",
+  "energy",
+  "renewable energy",
+  "clean energy",
+
+  "fire and safety",
+  "fire safety",
+  "health and safety",
+  "occupational health and safety",
+  "occupational safety",
+  "safety management",
+  "risk management",
+  "emergency response",
+  "hazard management",
+
+  "cips",
+  "procurement",
+  "supply chain",
+  "logistics",
+  "transport management",
+  "distribution",
+  "warehouse",
+
+  "environmental science",
+  "environmental health",
+  "physics",
+  "geology",
+  "earth science",
+  "laboratory science",
+
+  "mechanical engineering",
+  "electrical engineering",
+  "industrial engineering",
+  "process engineering",
+  "operations management",
+];
+
+function getProgrammeRelevantFieldBonus(application: Application) {
+  const combinedFieldText = [
+    application.fieldOfStudy,
+    application.tertiaryEducation,
+    application.highestQualification,
+    application.interestArea,
+  ]
+    .map((value) => normalize(value))
+    .filter(Boolean)
+    .join(" ");
+
+  if (!combinedFieldText) return 0;
+
+  const hasProgrammeRelevantField = PROGRAMME_RELEVANT_FIELD_KEYWORDS.some(
+    (keyword) => combinedFieldText.includes(keyword),
+  );
+
+  return hasProgrammeRelevantField ? 5 : 0;
+}
+
 function calculateEligibility(application: Application): ReviewDecision {
   let score = 0;
   let documentCompletenessScore = 0;
@@ -375,6 +446,14 @@ function calculateEligibility(application: Application): ReviewDecision {
   if (hasValue(application.cvFile)) {
     score += 5;
     notes.push("CV uploaded");
+  }
+
+  const programmeRelevantFieldBonus =
+    getProgrammeRelevantFieldBonus(application);
+
+  if (programmeRelevantFieldBonus > 0) {
+    score += programmeRelevantFieldBonus;
+    notes.push("Programme-relevant study or technical background");
   }
 
   if (
