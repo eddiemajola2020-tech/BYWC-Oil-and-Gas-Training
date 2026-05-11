@@ -519,6 +519,7 @@ export default function AdminPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [masterSelecting, setMasterSelecting] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -1929,12 +1930,43 @@ export default function AdminPage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_180px]">
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search name, email, Omang or ID"
-                className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition focus:border-orange-400 focus:bg-[#0f172a]"
-              />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      setSearchTerm(searchInput.trim());
+                      setCurrentPage(1);
+                    }
+                  }}
+                  placeholder="Search name, email, Omang or ID"
+                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition focus:border-orange-400 focus:bg-[#0f172a]"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm(searchInput.trim());
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-2xl bg-orange-500 px-5 py-3 text-xs font-black text-white transition hover:bg-orange-600"
+                >
+                  Search
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchInput("");
+                    setSearchTerm("");
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-xs font-black text-white transition hover:bg-white/10"
+                >
+                  Clear
+                </button>
+              </div>
 
               <select
                 value={statusFilter}
