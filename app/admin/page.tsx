@@ -700,10 +700,45 @@ export default function AdminPage() {
     }
 
     if (cleanedSearch) {
-      const safeSearch = cleanedSearch.replace(/[%_,]/g, "");
-      query = query.or(
-        `first_name.ilike.%${safeSearch}%,last_name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%,omang.ilike.%${safeSearch}%,constituency.ilike.%${safeSearch}%,application_id.ilike.%${safeSearch}%`,
-      );
+      const safeSearch = cleanedSearch
+        .replace(/[%_,]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const searchParts = safeSearch.split(" ").filter(Boolean);
+
+      if (searchParts.length >= 2) {
+        const firstPart = searchParts[0];
+        const lastPart = searchParts.slice(1).join(" ");
+
+        query = query.or(
+          [
+            `first_name.ilike.%${firstPart}%`,
+            `last_name.ilike.%${lastPart}%`,
+            `first_name.ilike.%${lastPart}%`,
+            `last_name.ilike.%${firstPart}%`,
+            `email.ilike.%${safeSearch}%`,
+            `phone.ilike.%${safeSearch}%`,
+            `omang.ilike.%${safeSearch}%`,
+            `constituency.ilike.%${safeSearch}%`,
+            `district.ilike.%${safeSearch}%`,
+            `application_id.ilike.%${safeSearch}%`,
+          ].join(","),
+        );
+      } else {
+        query = query.or(
+          [
+            `first_name.ilike.%${safeSearch}%`,
+            `last_name.ilike.%${safeSearch}%`,
+            `email.ilike.%${safeSearch}%`,
+            `phone.ilike.%${safeSearch}%`,
+            `omang.ilike.%${safeSearch}%`,
+            `constituency.ilike.%${safeSearch}%`,
+            `district.ilike.%${safeSearch}%`,
+            `application_id.ilike.%${safeSearch}%`,
+          ].join(","),
+        );
+      }
     }
 
     const { data, error, count } = await query;
@@ -1491,6 +1526,206 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
+
+  async function handleExportStatsCsv() {
+    const confirmed = window.confirm(
+      "Export stats only? This downloads totals and constituency breakdowns without applicant names, Omang numbers, emails or phone numbers.",
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const batchSize = 1000;
+      let from = 0;
+      let statsRows: any[] = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("applications")
+          .select("gender,constituency,district,status,age,disability_status")
+          .order("created_at", { ascending: false })
+          .range(from, from + batchSize - 1);
+
+        if (error) {
+          console.error("Stats export failed:", error);
+          alert(error.message || "Stats export failed.");
+          return;
+        }
+
+        statsRows = [...statsRows, ...(data || [])];
+
+        if (!data || data.length < batchSize) break;
+
+        from += batchSize;
+      }
+
+      if (statsRows.length === 0) {
+        alert("No application stats found to export.");
+        return;
+      }
+
+      const genderCounts = statsRows.reduce(
+        (acc, row) => {
+          const gender = normalize(row.gender);
+
+          if (gender === "female") {
+            acc.women += 1;
+          } else if (gender === "male") {
+            acc.men += 1;
+          } else {
+            acc.otherOrUnknown += 1;
+          }
+
+          return acc;
+        },
+        { women: 0, men: 0, otherOrUnknown: 0 },
+      );
+
+      const statusCounts = statsRows.reduce(
+        (acc, row) => {
+          const key = row.status || "Unknown";
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      const constituencyBreakdown = statsRows.reduce(
+        (acc, row) => {
+          const constituency = row.constituency || "Unknown";
+          const gender = normalize(row.gender);
+          const age = Number(row.age);
+          const isYouth = !Number.isNaN(age) && age <= 35;
+          const hasDisability = isYes(row.disability_status);
+
+          if (!acc[constituency]) {
+            acc[constituency] = {
+              total: 0,
+              women: 0,
+              men: 0,
+              otherOrUnknown: 0,
+              youth: 0,
+              nonYouth: 0,
+              disability: 0,
+            };
+          }
+
+          acc[constituency].total += 1;
+
+          if (gender === "female") {
+            acc[constituency].women += 1;
+          } else if (gender === "male") {
+            acc[constituency].men += 1;
+          } else {
+            acc[constituency].otherOrUnknown += 1;
+          }
+
+          if (isYouth) {
+            acc[constituency].youth += 1;
+          } else {
+            acc[constituency].nonYouth += 1;
+          }
+
+          if (hasDisability) {
+            acc[constituency].disability += 1;
+          }
+
+          return acc;
+        },
+        {} as Record<
+          string,
+          {
+            total: number;
+            women: number;
+            men: number;
+            otherOrUnknown: number;
+            youth: number;
+            nonYouth: number;
+            disability: number;
+          }
+        >,
+      );
+
+      const sortedConstituencies = (
+        Object.entries(constituencyBreakdown) as [
+          string,
+          {
+            total: number;
+            women: number;
+            men: number;
+            otherOrUnknown: number;
+            youth: number;
+            nonYouth: number;
+            disability: number;
+          },
+        ][]
+      ).sort((a, b) => b[1].total - a[1].total);
+
+      const csvRows = [
+        ["BYWC Stats Export"],
+        ["Generated At", new Date().toISOString()],
+        [],
+        ["Summary"],
+        ["Metric", "Count"],
+        ["Total Applications", statsRows.length],
+        ["Women", genderCounts.women],
+        ["Men", genderCounts.men],
+        ["Other / Unknown Gender", genderCounts.otherOrUnknown],
+        ["Constituencies Represented", sortedConstituencies.length],
+        [],
+        ["Status Breakdown"],
+        ["Status", "Count"],
+        ...Object.entries(statusCounts).sort().map(([status, count]) => [status, count]),
+        [],
+        ["Constituency Breakdown"],
+        [
+          "Constituency",
+          "Total Applicants",
+          "Women",
+          "Men",
+          "Other / Unknown Gender",
+          "Youth",
+          "Non-Youth",
+          "Disability Declared",
+        ],
+        ...sortedConstituencies.map(([constituency, stats]) => [
+          constituency,
+          stats.total,
+          stats.women,
+          stats.men,
+          stats.otherOrUnknown,
+          stats.youth,
+          stats.nonYouth,
+          stats.disability,
+        ]),
+      ];
+
+      const csvContent = csvRows
+        .map((row) => row.map(escapeCsvValue).join(","))
+        .join("\n");
+
+      const blob = new Blob([csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+      link.href = url;
+      link.download = `BYWC-stats-only-export-${timestamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+      alert(`Stats export complete. ${statsRows.length} applications counted.`);
+    } catch (error) {
+      console.error("Stats export failed:", error);
+      alert("Stats export failed. Please try again.");
+    }
+  }
+
   async function handleExportFullBackupCsv() {
     const confirmed = window.confirm(
       "Export a full applications backup? This will fetch all records in safe batches and download one CSV file.",
@@ -1816,6 +2051,14 @@ export default function AdminPage() {
 
                   <button
                     type="button"
+                    onClick={handleExportStatsCsv}
+                    className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-orange-300 transition hover:bg-white/10"
+                  >
+                    Export Stats Only
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => loadApplications(false, currentPage)}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-blue-300 transition hover:bg-white/10"
                   >
@@ -2133,8 +2376,8 @@ export default function AdminPage() {
                 Page {currentPage} of {totalPages}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                Export Page downloads the visible filtered page. Full Backup
-                exports all records in batches.
+                Export Page downloads the visible filtered page. Export Stats Only
+                downloads totals and constituency breakdowns without applicant records.
               </p>
             </div>
 
