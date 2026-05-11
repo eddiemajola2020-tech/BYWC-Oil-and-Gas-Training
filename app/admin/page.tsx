@@ -144,6 +144,30 @@ type DataRequest = {
   completedAt?: string | null;
 };
 
+type ReportingConstituencyStats = {
+  total: number;
+  women: number;
+  men: number;
+  otherOrUnknown: number;
+  youth: number;
+  nonYouth: number;
+  disability: number;
+};
+
+type ReportingStats = {
+  generatedAt: Date;
+  total: number;
+  women: number;
+  men: number;
+  otherOrUnknown: number;
+  youth: number;
+  nonYouth: number;
+  disability: number;
+  constituenciesWithApplications: number;
+  constituencyRows: [string, ReportingConstituencyStats][];
+  extraConstituencyRows: [string, ReportingConstituencyStats][];
+};
+
 const TOTAL_YOUTH_WOMEN = 435;
 const TOTAL_YOUTH_MEN = 315;
 const TOTAL_NON_YOUTH = 250;
@@ -541,6 +565,10 @@ export default function AdminPage() {
     Record<string, string>
   >({});
   const [fullBackupExporting, setFullBackupExporting] = useState(false);
+  const [reportingStats, setReportingStats] = useState<ReportingStats | null>(
+    null,
+  );
+  const [reportingStatsLoading, setReportingStatsLoading] = useState(false);
   const [insightTab, setInsightTab] = useState<"quota" | "constituency">(
     "quota",
   );
@@ -657,6 +685,131 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error("Failed to load dashboard stats:", error);
+    }
+  }
+
+  function createEmptyReportingConstituencyStats(): ReportingConstituencyStats {
+    return {
+      total: 0,
+      women: 0,
+      men: 0,
+      otherOrUnknown: 0,
+      youth: 0,
+      nonYouth: 0,
+      disability: 0,
+    };
+  }
+
+  function buildReportingStats(rows: any[]): ReportingStats {
+    const constituencyBreakdown = rows.reduce(
+      (acc, row) => {
+        const constituency = row.constituency || "Unknown";
+        const gender = normalize(row.gender);
+        const age = Number(row.age);
+        const isYouth = !Number.isNaN(age) && age <= 35;
+        const hasDisability = isYes(row.disability_status);
+
+        if (!acc[constituency]) {
+          acc[constituency] = createEmptyReportingConstituencyStats();
+        }
+
+        acc[constituency].total += 1;
+
+        if (gender === "female") {
+          acc[constituency].women += 1;
+        } else if (gender === "male") {
+          acc[constituency].men += 1;
+        } else {
+          acc[constituency].otherOrUnknown += 1;
+        }
+
+        if (isYouth) {
+          acc[constituency].youth += 1;
+        } else {
+          acc[constituency].nonYouth += 1;
+        }
+
+        if (hasDisability) {
+          acc[constituency].disability += 1;
+        }
+
+        return acc;
+      },
+      {} as Record<string, ReportingConstituencyStats>,
+    );
+
+    const constituencyRows = constituencies.map((constituency) => [
+      constituency,
+      constituencyBreakdown[constituency] ||
+        createEmptyReportingConstituencyStats(),
+    ]) as [string, ReportingConstituencyStats][];
+
+    const extraConstituencyRows = (
+      Object.entries(constituencyBreakdown) as [
+        string,
+        ReportingConstituencyStats,
+      ][]
+    )
+      .filter(([constituency]) => !constituencies.includes(constituency))
+      .sort((a, b) => b[1].total - a[1].total);
+
+    const totals = constituencyRows
+      .concat(extraConstituencyRows)
+      .reduce((acc, [, stats]) => {
+        acc.total += stats.total;
+        acc.women += stats.women;
+        acc.men += stats.men;
+        acc.otherOrUnknown += stats.otherOrUnknown;
+        acc.youth += stats.youth;
+        acc.nonYouth += stats.nonYouth;
+        acc.disability += stats.disability;
+        return acc;
+      }, createEmptyReportingConstituencyStats());
+
+    return {
+      generatedAt: new Date(),
+      ...totals,
+      constituenciesWithApplications: constituencyRows.filter(
+        ([, stats]) => stats.total > 0,
+      ).length,
+      constituencyRows,
+      extraConstituencyRows,
+    };
+  }
+
+  async function loadReportingStats() {
+    setReportingStatsLoading(true);
+
+    try {
+      const batchSize = 1000;
+      let from = 0;
+      let rows: any[] = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("applications")
+          .select("gender,constituency,district,status,age,disability_status")
+          .order("created_at", { ascending: false })
+          .range(from, from + batchSize - 1);
+
+        if (error) {
+          console.error("Failed to load reporting stats:", error);
+          setReportingStatsLoading(false);
+          return;
+        }
+
+        rows = [...rows, ...(data || [])];
+
+        if (!data || data.length < batchSize) break;
+
+        from += batchSize;
+      }
+
+      setReportingStats(buildReportingStats(rows));
+    } catch (error) {
+      console.error("Failed to load reporting stats:", error);
+    } finally {
+      setReportingStatsLoading(false);
     }
   }
 
@@ -781,6 +934,16 @@ export default function AdminPage() {
     loadDataRequests();
   }, []);
 
+  useEffect(() => {
+    loadReportingStats();
+
+    const interval = setInterval(() => {
+      loadReportingStats();
+    }, REFRESH_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const filteredApplications = applications;
 
   async function logAdminAction({
@@ -850,7 +1013,10 @@ export default function AdminPage() {
       setShowAuditLogs(true);
       await loadAuditLogs();
       setTimeout(() => {
-        auditRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        auditRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
       }, 120);
       return;
     }
@@ -1526,7 +1692,6 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-
   async function handleExportStatsCsv() {
     const confirmed = window.confirm(
       "Export stats only? This downloads totals and constituency breakdowns without applicant names, Omang numbers, emails or phone numbers.",
@@ -1646,7 +1811,33 @@ export default function AdminPage() {
         >,
       );
 
-      const sortedConstituencies = (
+      const emptyConstituencyStats = {
+        total: 0,
+        women: 0,
+        men: 0,
+        otherOrUnknown: 0,
+        youth: 0,
+        nonYouth: 0,
+        disability: 0,
+      };
+
+      const officialConstituencyRows = constituencies.map((constituency) => [
+        constituency,
+        constituencyBreakdown[constituency] || emptyConstituencyStats,
+      ]) as [
+        string,
+        {
+          total: number;
+          women: number;
+          men: number;
+          otherOrUnknown: number;
+          youth: number;
+          nonYouth: number;
+          disability: number;
+        },
+      ][];
+
+      const extraConstituencyRows = (
         Object.entries(constituencyBreakdown) as [
           string,
           {
@@ -1659,7 +1850,13 @@ export default function AdminPage() {
             disability: number;
           },
         ][]
-      ).sort((a, b) => b[1].total - a[1].total);
+      )
+        .filter(([constituency]) => !constituencies.includes(constituency))
+        .sort((a, b) => b[1].total - a[1].total);
+
+      const constituenciesWithApplications = officialConstituencyRows.filter(
+        ([, stats]) => stats.total > 0,
+      ).length;
 
       const csvRows = [
         ["BYWC Stats Export"],
@@ -1671,13 +1868,19 @@ export default function AdminPage() {
         ["Women", genderCounts.women],
         ["Men", genderCounts.men],
         ["Other / Unknown Gender", genderCounts.otherOrUnknown],
-        ["Constituencies Represented", sortedConstituencies.length],
+        ["Official Constituencies Listed", constituencies.length],
+        [
+          "Official Constituencies With Applications",
+          constituenciesWithApplications,
+        ],
         [],
         ["Status Breakdown"],
         ["Status", "Count"],
-        ...Object.entries(statusCounts).sort().map(([status, count]) => [status, count]),
+        ...Object.entries(statusCounts)
+          .sort()
+          .map(([status, count]) => [status, count]),
         [],
-        ["Constituency Breakdown"],
+        ["Constituency Breakdown - All 61 Official Constituencies"],
         [
           "Constituency",
           "Total Applicants",
@@ -1688,7 +1891,7 @@ export default function AdminPage() {
           "Non-Youth",
           "Disability Declared",
         ],
-        ...sortedConstituencies.map(([constituency, stats]) => [
+        ...officialConstituencyRows.map(([constituency, stats]) => [
           constituency,
           stats.total,
           stats.women,
@@ -1698,6 +1901,32 @@ export default function AdminPage() {
           stats.nonYouth,
           stats.disability,
         ]),
+        ...(extraConstituencyRows.length > 0
+          ? [
+              [],
+              ["Extra / Unmatched Constituency Values From Database"],
+              [
+                "Constituency",
+                "Total Applicants",
+                "Women",
+                "Men",
+                "Other / Unknown Gender",
+                "Youth",
+                "Non-Youth",
+                "Disability Declared",
+              ],
+              ...extraConstituencyRows.map(([constituency, stats]) => [
+                constituency,
+                stats.total,
+                stats.women,
+                stats.men,
+                stats.otherOrUnknown,
+                stats.youth,
+                stats.nonYouth,
+                stats.disability,
+              ]),
+            ]
+          : []),
       ];
 
       const csvContent = csvRows
@@ -1888,41 +2117,98 @@ export default function AdminPage() {
   const womenCount = dashboardStats.women;
   const menCount = dashboardStats.men;
 
-  const youthWomenCount = applications.filter((item) => {
-    const age = Number(item.age);
-    return (
-      !Number.isNaN(age) && age <= 35 && normalize(item.gender) === "female"
-    );
-  }).length;
+  const youthWomenCount = reportingStats
+    ? reportingStats.constituencyRows.reduce(
+        (sum, [, stats]) => sum + stats.women,
+        0,
+      )
+    : applications.filter((item) => {
+        const age = Number(item.age);
+        return (
+          !Number.isNaN(age) && age <= 35 && normalize(item.gender) === "female"
+        );
+      }).length;
 
-  const youthMenCount = applications.filter((item) => {
-    const age = Number(item.age);
-    return !Number.isNaN(age) && age <= 35 && normalize(item.gender) === "male";
-  }).length;
+  const youthMenCount = reportingStats
+    ? reportingStats.constituencyRows.reduce(
+        (sum, [, stats]) => sum + stats.men,
+        0,
+      )
+    : applications.filter((item) => {
+        const age = Number(item.age);
+        return (
+          !Number.isNaN(age) && age <= 35 && normalize(item.gender) === "male"
+        );
+      }).length;
 
-  const nonYouthCount = applications.filter((item) => {
-    const age = Number(item.age);
-    return !Number.isNaN(age) && age > 35;
-  }).length;
+  const nonYouthCount = reportingStats
+    ? reportingStats.nonYouth
+    : applications.filter((item) => {
+        const age = Number(item.age);
+        return !Number.isNaN(age) && age > 35;
+      }).length;
 
-  const disabilityApplicantsCount = applications.filter((item) =>
-    isYes(item.disabilityStatus),
-  ).length;
+  const disabilityApplicantsCount = reportingStats
+    ? reportingStats.disability
+    : applications.filter((item) => isYes(item.disabilityStatus)).length;
 
-  const youthTotal = youthWomenCount + youthMenCount;
+  const youthTotal = reportingStats
+    ? reportingStats.youth
+    : youthWomenCount + youthMenCount;
 
   const constituencyStats = useMemo(() => {
+    if (reportingStats) {
+      return reportingStats.constituencyRows;
+    }
+
     const stats = applications.reduce(
       (acc, application) => {
         const key = application.constituency || "Unknown";
-        acc[key] = (acc[key] || 0) + 1;
+
+        if (!acc[key]) {
+          acc[key] = createEmptyReportingConstituencyStats();
+        }
+
+        acc[key].total += 1;
+
+        if (normalize(application.gender) === "female") {
+          acc[key].women += 1;
+        } else if (normalize(application.gender) === "male") {
+          acc[key].men += 1;
+        } else {
+          acc[key].otherOrUnknown += 1;
+        }
+
+        const age = Number(application.age);
+        if (!Number.isNaN(age) && age <= 35) {
+          acc[key].youth += 1;
+        } else {
+          acc[key].nonYouth += 1;
+        }
+
+        if (isYes(application.disabilityStatus)) {
+          acc[key].disability += 1;
+        }
+
         return acc;
       },
-      {} as Record<string, number>,
+      {} as Record<string, ReportingConstituencyStats>,
     );
 
-    return Object.entries(stats).sort((a, b) => Number(b[1]) - Number(a[1]));
-  }, [applications]);
+    return constituencies.map((constituency) => [
+      constituency,
+      stats[constituency] || createEmptyReportingConstituencyStats(),
+    ]) as [string, ReportingConstituencyStats][];
+  }, [applications, reportingStats]);
+
+  const topConstituencies = [...constituencyStats]
+    .filter(([, stats]) => stats.total > 0)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 10);
+
+  const lowestConstituencies = [...constituencyStats]
+    .sort((a, b) => a[1].total - b[1].total)
+    .slice(0, 10);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const pageStart = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
@@ -2136,13 +2422,197 @@ export default function AdminPage() {
           <StatCard title="Rejected" value={rejectedCount} />
         </section>
 
+        <section className="mb-5 rounded-[30px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+                National Reporting Snapshot
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">
+                Stats-only view, refreshed every 15 minutes
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-400">
+                This section shows reporting totals only. No names, Omang
+                numbers, phone numbers, emails or documents are displayed here.
+              </p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">
+                Last stats refresh:{" "}
+                {reportingStats?.generatedAt.toLocaleTimeString() ||
+                  "Loading..."}
+                {reportingStatsLoading
+                  ? " · Refreshing..."
+                  : " · Auto-refresh every 15 minutes"}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadReportingStats}
+                disabled={reportingStatsLoading}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-50"
+              >
+                {reportingStatsLoading ? "Refreshing..." : "Refresh Stats"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportStatsCsv}
+                className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
+              >
+                Export Stats Only
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <MiniStatCard
+              title="Stats Total"
+              value={reportingStats?.total ?? totalApplications}
+              helper="All counted applications"
+            />
+            <MiniStatCard
+              title="Women"
+              value={reportingStats?.women ?? womenCount}
+              helper="Female applicants"
+            />
+            <MiniStatCard
+              title="Men"
+              value={reportingStats?.men ?? menCount}
+              helper="Male applicants"
+            />
+            <MiniStatCard
+              title="Constituencies"
+              value={reportingStats?.constituenciesWithApplications ?? 0}
+              helper={`of ${constituencies.length} represented`}
+            />
+            <MiniStatCard
+              title="Youth"
+              value={reportingStats?.youth ?? youthTotal}
+              helper="35 and below"
+            />
+            <MiniStatCard
+              title="Non-Youth"
+              value={reportingStats?.nonYouth ?? nonYouthCount}
+              helper="Above 35"
+            />
+            <MiniStatCard
+              title="Disability Declared"
+              value={reportingStats?.disability ?? disabilityApplicantsCount}
+              helper="Declared disability"
+            />
+            <MiniStatCard
+              title="Other / Unknown"
+              value={reportingStats?.otherOrUnknown ?? 0}
+              helper="Gender not captured clearly"
+            />
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <div className="rounded-[24px] border border-white/10 bg-[#111827] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-black text-white">
+                  Top Constituencies
+                </h3>
+                <span className="rounded-full bg-orange-500/15 px-3 py-1 text-[10px] font-black text-orange-300">
+                  Top 10
+                </span>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-white/10">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-white/5 text-slate-300">
+                    <tr>
+                      <th className="px-3 py-2 font-black">Constituency</th>
+                      <th className="px-3 py-2 text-right font-black">Total</th>
+                      <th className="px-3 py-2 text-right font-black">Women</th>
+                      <th className="px-3 py-2 text-right font-black">Men</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topConstituencies.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="px-3 py-4 text-center font-semibold text-slate-400"
+                        >
+                          No stats loaded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      topConstituencies.map(([name, stats]) => (
+                        <tr key={name} className="border-t border-white/10">
+                          <td className="px-3 py-2 font-semibold text-slate-200">
+                            {name}
+                          </td>
+                          <td className="px-3 py-2 text-right font-black text-white">
+                            {stats.total}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-300">
+                            {stats.women}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-300">
+                            {stats.men}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-white/10 bg-[#111827] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-black text-white">
+                  Lowest Constituencies
+                </h3>
+                <span className="rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-black text-blue-300">
+                  Bottom 10
+                </span>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-white/10">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-white/5 text-slate-300">
+                    <tr>
+                      <th className="px-3 py-2 font-black">Constituency</th>
+                      <th className="px-3 py-2 text-right font-black">Total</th>
+                      <th className="px-3 py-2 text-right font-black">Women</th>
+                      <th className="px-3 py-2 text-right font-black">Men</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lowestConstituencies.map(([name, stats]) => (
+                      <tr key={name} className="border-t border-white/10">
+                        <td className="px-3 py-2 font-semibold text-slate-200">
+                          {name}
+                        </td>
+                        <td className="px-3 py-2 text-right font-black text-white">
+                          {stats.total}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-300">
+                          {stats.women}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-300">
+                          {stats.men}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {pendingRequestsCount > 0 && (
           <section className="mb-5 rounded-[24px] border border-orange-500/30 bg-orange-500/10 p-4 shadow-[0_18px_45px_rgba(249,115,22,0.12)]">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-black text-orange-300">
-                  ⚠ {pendingRequestsCount} data protection request{pendingRequestsCount === 1 ? "" : "s"} pending
+                  ⚠ {pendingRequestsCount} data protection request
+                  {pendingRequestsCount === 1 ? "" : "s"} pending
                 </p>
                 <p className="mt-1 text-xs leading-5 text-slate-300">
                   Review them in the Compliance section below.
@@ -2376,8 +2846,9 @@ export default function AdminPage() {
                 Page {currentPage} of {totalPages}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                Export Page downloads the visible filtered page. Export Stats Only
-                downloads totals and constituency breakdowns without applicant records.
+                Export Page downloads the visible filtered page. Export Stats
+                Only downloads totals and constituency breakdowns without
+                applicant records.
               </p>
             </div>
 
@@ -2494,36 +2965,77 @@ export default function AdminPage() {
                     Constituency Breakdown
                   </h2>
                   <p className="text-sm text-slate-400">
-                    Current page totals by constituency.
+                    Full national totals by constituency. This uses the
+                    reporting snapshot and refreshes every 15 minutes.
                   </p>
                 </div>
 
                 <p className="text-xs font-semibold text-slate-400">
-                  {constituencyStats.length} represented
+                  {reportingStats?.constituenciesWithApplications ?? 0} of{" "}
+                  {constituencies.length} represented
                 </p>
               </div>
 
-              {constituencyStats.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  No constituency data yet.
-                </p>
-              ) : (
-                <div className="grid max-h-80 gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
-                  {constituencyStats.map(([name, count]) => (
-                    <div
-                      key={name}
-                      className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
-                    >
-                      <span className="break-words font-semibold leading-5 text-slate-300">
-                        {name}
-                      </span>
-                      <span className="ml-3 rounded-full bg-orange-500/15 px-3 py-1 font-black text-orange-300">
-                        {count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="max-h-[520px] overflow-auto rounded-2xl border border-white/10">
+                <table className="w-full min-w-[760px] text-left text-xs">
+                  <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                    <tr>
+                      <th className="px-3 py-3 font-black">Constituency</th>
+                      <th className="px-3 py-3 text-right font-black">Total</th>
+                      <th className="px-3 py-3 text-right font-black">Women</th>
+                      <th className="px-3 py-3 text-right font-black">Men</th>
+                      <th className="px-3 py-3 text-right font-black">Youth</th>
+                      <th className="px-3 py-3 text-right font-black">
+                        Non-Youth
+                      </th>
+                      <th className="px-3 py-3 text-right font-black">
+                        Disability
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {constituencyStats.map(([name, stats]) => (
+                      <tr key={name} className="border-t border-white/10">
+                        <td className="px-3 py-2 font-semibold text-slate-200">
+                          {name}
+                        </td>
+                        <td className="px-3 py-2 text-right font-black text-white">
+                          {stats.total}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-300">
+                          {stats.women}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-300">
+                          {stats.men}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-300">
+                          {stats.youth}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-300">
+                          {stats.nonYouth}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-300">
+                          {stats.disability}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {reportingStats?.extraConstituencyRows &&
+                reportingStats.extraConstituencyRows.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-4">
+                    <p className="text-sm font-black text-orange-300">
+                      Unmatched constituency values found
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">
+                      These values exist in the database but do not match the
+                      official 61-name list exactly. Export Stats Only includes
+                      them separately for cleanup.
+                    </p>
+                  </div>
+                )}
             </div>
           )}
         </section>
@@ -2533,141 +3045,142 @@ export default function AdminPage() {
         >
           {showDataRequests ? (
             <>
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
-                  Compliance
-                </p>
-                <h2 className="mt-1 text-lg font-black text-white">
-                  Data Protection Requests
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-slate-400">
-                  Manage access, correction, deletion, restriction, objection
-                  and portability requests.
-                </p>
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+                    Compliance
+                  </p>
+                  <h2 className="mt-1 text-lg font-black text-white">
+                    Data Protection Requests
+                  </h2>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                    Manage access, correction, deletion, restriction, objection
+                    and portability requests.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadDataRequests}
+                  disabled={dataRequestsLoading}
+                  className="w-fit rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {dataRequestsLoading ? "Loading" : "Refresh Requests"}
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={loadDataRequests}
-                disabled={dataRequestsLoading}
-                className="w-fit rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
-              >
-                {dataRequestsLoading ? "Loading" : "Refresh Requests"}
-              </button>
-            </div>
+              {dataRequestsLoading ? (
+                <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
+                  Loading data requests...
+                </div>
+              ) : dataRequests.length === 0 ? (
+                <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
+                  No data protection requests yet.
+                </div>
+              ) : (
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {dataRequests.map((request) => (
+                    <div
+                      key={request.id}
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-orange-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-orange-300">
+                              {request.requestType}
+                            </span>
+                            <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-300">
+                              {request.status.replace("_", " ")}
+                            </span>
+                          </div>
 
-            {dataRequestsLoading ? (
-              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
-                Loading data requests...
-              </div>
-            ) : dataRequests.length === 0 ? (
-              <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
-                No data protection requests yet.
-              </div>
-            ) : (
-              <div className="grid gap-3 xl:grid-cols-2">
-                {dataRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-orange-500/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-orange-300">
-                            {request.requestType}
-                          </span>
-                          <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-300">
-                            {request.status.replace("_", " ")}
-                          </span>
+                          <h3 className="mt-3 break-words text-base font-black text-white">
+                            {request.fullName || "Unnamed requester"}
+                          </h3>
+                          <p className="mt-1 break-all text-xs font-semibold text-slate-400">
+                            {request.email}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {request.createdAt
+                              ? new Date(request.createdAt).toLocaleString()
+                              : "-"}
+                          </p>
                         </div>
 
-                        <h3 className="mt-3 break-words text-base font-black text-white">
-                          {request.fullName || "Unnamed requester"}
-                        </h3>
-                        <p className="mt-1 break-all text-xs font-semibold text-slate-400">
-                          {request.email}
+                        <select
+                          value={request.status}
+                          onChange={(event) =>
+                            handleDataRequestUpdate(
+                              request,
+                              event.target.value as DataRequestStatus,
+                            )
+                          }
+                          disabled={savingDataRequestId === request.id}
+                          className="rounded-xl border border-white/10 bg-[#111827] px-3 py-2 text-xs font-bold text-white outline-none disabled:opacity-50"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in_review">In Review</option>
+                          <option value="completed">Completed</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-[#0f172a] p-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                          Request Details
                         </p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {request.createdAt
-                            ? new Date(request.createdAt).toLocaleString()
-                            : "-"}
+                        <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-300">
+                          {request.message || "No message provided."}
                         </p>
                       </div>
 
-                      <select
-                        value={request.status}
-                        onChange={(event) =>
-                          handleDataRequestUpdate(
-                            request,
-                            event.target.value as DataRequestStatus,
-                          )
-                        }
-                        disabled={savingDataRequestId === request.id}
-                        className="rounded-xl border border-white/10 bg-[#111827] px-3 py-2 text-xs font-bold text-white outline-none disabled:opacity-50"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in_review">In Review</option>
-                        <option value="completed">Completed</option>
-                        <option value="rejected">Rejected</option>
-                      </select>
-                    </div>
+                      <div className="mt-4">
+                        <label className="mb-2 block text-xs font-black text-white">
+                          Admin Notes
+                        </label>
+                        <textarea
+                          value={dataRequestNotes[request.id] || ""}
+                          onChange={(event) =>
+                            setDataRequestNotes((prev) => ({
+                              ...prev,
+                              [request.id]: event.target.value,
+                            }))
+                          }
+                          className="min-h-24 w-full rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-xs text-white outline-none focus:border-orange-400"
+                          placeholder="Record what was done: data exported, corrected, deleted, rejected, etc."
+                        />
+                      </div>
 
-                    <div className="mt-4 rounded-xl bg-[#0f172a] p-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        Request Details
-                      </p>
-                      <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-300">
-                        {request.message || "No message provided."}
-                      </p>
-                    </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDataRequestUpdate(request, request.status)
+                          }
+                          disabled={savingDataRequestId === request.id}
+                          className="rounded-xl bg-orange-500 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-600 disabled:opacity-50"
+                        >
+                          Save Notes
+                        </button>
 
-                    <div className="mt-4">
-                      <label className="mb-2 block text-xs font-black text-white">
-                        Admin Notes
-                      </label>
-                      <textarea
-                        value={dataRequestNotes[request.id] || ""}
-                        onChange={(event) =>
-                          setDataRequestNotes((prev) => ({
-                            ...prev,
-                            [request.id]: event.target.value,
-                          }))
-                        }
-                        className="min-h-24 w-full rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-xs text-white outline-none focus:border-orange-400"
-                        placeholder="Record what was done: data exported, corrected, deleted, rejected, etc."
-                      />
+                        <button
+                          type="button"
+                          onClick={() => handleExportDataRequest(request)}
+                          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700"
+                        >
+                          Export Request JSON
+                        </button>
+                      </div>
                     </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDataRequestUpdate(request, request.status)
-                        }
-                        disabled={savingDataRequestId === request.id}
-                        className="rounded-xl bg-orange-500 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-600 disabled:opacity-50"
-                      >
-                        Save Notes
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleExportDataRequest(request)}
-                        className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700"
-                      >
-                        Export Request JSON
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <div className="rounded-xl bg-white/5 p-4 text-center text-xs font-semibold text-slate-300">
-              Compliance section is ready. Click Compliance to load data protection requests.
+              Compliance section is ready. Click Compliance to load data
+              protection requests.
             </div>
           )}
         </section>
@@ -2981,6 +3494,26 @@ export default function AdminPage() {
         )}
       </div>
     </main>
+  );
+}
+
+function MiniStatCard({
+  title,
+  value,
+  helper,
+}: {
+  title: string;
+  value: number;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">
+        {title}
+      </p>
+      <p className="mt-2 text-2xl font-black text-white">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p>
+    </div>
   );
 }
 
