@@ -206,10 +206,22 @@ const steps = [
 ];
 
 const APPLICATION_CLOSE_DATE = new Date("2026-05-27T23:59:59");
-const PRIVACY_NOTICE_VERSION = "BYWC-DPA-v1.0";
+const PRIVACY_NOTICE_VERSION = "BYWC-DPA-v1.1";
 
 function countWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function toNullableNumber(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const numericValue = Number(trimmedValue);
+
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 export default function ApplyPage() {
@@ -502,7 +514,7 @@ export default function ApplyPage() {
     }
 
     if (file.size > MAX_SIZE) {
-      setUploadError("File size must be less than 5MB.");
+      setUploadError("File exceeds the 5MB limit. Please compress the file or upload a smaller PDF, JPG, or PNG.");
       e.target.value = "";
       return;
     }
@@ -613,6 +625,29 @@ export default function ApplyPage() {
       return;
     }
 
+    const bgcsePointsNumber = toNullableNumber(formData.bgcsePoints);
+
+    if (formData.completedBgcseIgcse !== "Yes") {
+      setCurrentStep(1);
+      setTimeout(scrollToApplicationSection, 80);
+      alert("BGCSE / IGCSE completion is mandatory for eligibility screening. Please confirm that you completed BGCSE / IGCSE before submitting.");
+      return;
+    }
+
+    if (bgcsePointsNumber === null) {
+      setCurrentStep(1);
+      setTimeout(scrollToApplicationSection, 80);
+      alert("BGCSE / IGCSE points are mandatory for eligibility screening. Please enter your points before submitting your application.");
+      return;
+    }
+
+    if (!formData.bgcseCertificateFile && !formData.certificateFile) {
+      setCurrentStep(4);
+      setTimeout(scrollToApplicationSection, 80);
+      alert("BGCSE / IGCSE certificate or results slip is mandatory for eligibility screening. Please upload it before submitting.");
+      return;
+    }
+
     // 🔒 Cooldown (30 seconds)
     try {
       const key = `lastSubmit:${formData.email || "anon"}`;
@@ -717,7 +752,7 @@ export default function ApplyPage() {
       last_name: formData.lastName,
       omang: formData.omang,
       date_of_birth: formData.dateOfBirth,
-      age: formData.age,
+      age: toNullableNumber(formData.age),
       gender: formData.gender,
       citizenship: formData.citizenship,
       phone: formData.phone,
@@ -742,9 +777,9 @@ export default function ApplyPage() {
       completed_bgcse_igcse: formData.completedBgcseIgcse,
       examination_body: formData.examinationBody,
       bgcse_level: formData.bgcseLevel,
-      bgcse_points: formData.bgcsePoints,
+      bgcse_points: bgcsePointsNumber,
       school_name: formData.schoolName,
-      year_completed: formData.yearCompleted,
+      year_completed: toNullableNumber(formData.yearCompleted),
       preferred_language: formData.preferredLanguage,
       english_comfort: formData.englishComfort,
 
@@ -1240,6 +1275,10 @@ export default function ApplyPage() {
                     and proof are required for eligibility screening.
                   </p>
 
+                  <div className="mt-6 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-800">
+                    BGCSE / IGCSE points are mandatory for eligibility screening. Please enter your points before submitting your application.
+                  </div>
+
                   <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
                     <h4 className="text-lg font-bold text-blue-950">
                       Minimum Education Requirement
@@ -1289,13 +1328,18 @@ export default function ApplyPage() {
                             ]}
                           />
 
-                          <Input
-                            label="BGCSE / IGCSE Points"
-                            name="bgcsePoints"
-                            type="number"
-                            value={formData.bgcsePoints}
-                            onChange={handleInputChange}
-                          />
+                          <div>
+                            <Input
+                              label="BGCSE / IGCSE Points"
+                              name="bgcsePoints"
+                              type="number"
+                              value={formData.bgcsePoints}
+                              onChange={handleInputChange}
+                            />
+                            <p className="mt-2 text-xs font-semibold text-orange-600">
+                              Mandatory for eligibility screening.
+                            </p>
+                          </div>
 
                           <Input
                             label="School Name"
@@ -1555,7 +1599,7 @@ export default function ApplyPage() {
                   </h3>
                   <p className="mt-2 text-sm text-slate-600">
                     Attach your supporting documents. Some documents are
-                    critical for eligibility screening.
+                    critical for eligibility screening. Each file must be 5MB or less.
                   </p>
 
                   {uploadError && (
@@ -1766,18 +1810,23 @@ export default function ApplyPage() {
                       <p className="mt-3 text-sm leading-6 text-slate-700">
                         Your information will be used for application review,
                         eligibility screening, selection, communication,
-                        programme administration, reporting, audit, and delivery
-                        of the BYWC Oil &amp; Gas Training Programme. Disability
-                        information is collected only to support inclusion and
-                        reasonable assistance where required.
+                        programme administration, reporting, audit, compliance,
+                        and delivery of the BYWC Oil &amp; Gas Training Programme.
+                        Disability and OVC information is collected only to
+                        support inclusion, reasonable assistance, and programme
+                        administration where required.
                       </p>
 
                       <p className="mt-3 text-sm leading-6 text-slate-700">
                         Your data will not be sold, used for unrelated
                         commercial marketing, or publicly displayed without your
                         consent. Your application data will be retained for up to
-                        12 months for programme administration and audit, unless
-                        a longer period is required by law.
+                        12 months for programme administration, audit, reporting,
+                        and compliance, unless a longer period is required by law.
+                        The programme is taking steps to comply with applicable
+                        obligations under the Botswana Data Protection Act,
+                        including controller registration or notification
+                        obligations where applicable.
                       </p>
 
                       <p className="mt-3 text-xs font-semibold text-slate-600">
@@ -1932,8 +1981,9 @@ export default function ApplyPage() {
               <p>
                 This Privacy Notice explains how personal data is collected and
                 processed for the BYWC Oil &amp; Gas Training Programme. It is
-                intended to support lawful, fair, transparent, and accountable
-                processing of applicant information.
+                intended to support lawful, fair, transparent, secure, and
+                accountable processing of applicant information under applicable
+                data protection requirements.
               </p>
 
               <div>
@@ -1945,7 +1995,10 @@ export default function ApplyPage() {
                   Oil &amp; Gas Training Programme / authorised programme office.
                   Programme administrators are responsible for managing
                   applications, access, review, reporting, and compliance
-                  actions connected to this intake.
+                  actions connected to this intake. The programme is taking
+                  steps to comply with applicable obligations under the Botswana
+                  Data Protection Act, including controller registration or
+                  notification obligations where applicable.
                 </p>
               </div>
 
@@ -2009,11 +2062,13 @@ export default function ApplyPage() {
                 </p>
                 <p className="mt-2">
                   Your information is stored using protected systems with access
-                  controls, authentication, secure transmission, and restricted
-                  administrative access. Some systems used to process or store
-                  programme data may be located outside Botswana. Where this is
-                  the case, appropriate safeguards are used to protect your
-                  information.
+                  controls, authentication, secure transmission, role-based
+                  administrative access, and operational audit controls. Some
+                  systems used to process or store programme data may be located
+                  outside Botswana or operated by approved service providers.
+                  Where this is the case, appropriate safeguards are used to
+                  protect your information and limit processing to authorised
+                  programme purposes.
                 </p>
               </div>
 
@@ -2048,6 +2103,19 @@ export default function ApplyPage() {
                   you may contact the programme administrators. You may also
                   raise a complaint with the relevant data protection authority
                   where applicable.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-blue-950">
+                  10. Withdrawal and Data Removal Requests
+                </p>
+                <p className="mt-2">
+                  Applicants may request withdrawal of their application or ask
+                  about removal, correction, or restriction of their personal
+                  data. Requests will be assessed and actioned in line with
+                  programme administration needs, audit requirements, legal
+                  obligations, and applicable data protection rules.
                 </p>
               </div>            </div>
 

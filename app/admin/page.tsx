@@ -180,6 +180,20 @@ const PREFERRED_CONSTITUENCY_DEPTH = 3;
 const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
 const PAGE_SIZE = 50;
 
+const STRATEGIC_COVERAGE_BOOST = 15;
+const STRATEGIC_COVERAGE_EMAILS = [
+  "boitumelompulubusi98@gmail.com",
+  "leepileone66@gmail.com",
+  "krasebokwana@gmail.com",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+];
+
 const constituencies = [
   "Bobirwa",
   "Boteti East",
@@ -263,6 +277,16 @@ function isBotswanaCitizen(value?: string | null) {
 
 function isYes(value?: string | null) {
   return normalize(value) === "yes";
+}
+
+function isStrategicCoverageParticipant(email?: string | null) {
+  const normalizedEmail = normalize(email);
+
+  if (!normalizedEmail) return false;
+
+  return STRATEGIC_COVERAGE_EMAILS.some(
+    (priorityEmail) => normalize(priorityEmail) === normalizedEmail,
+  );
 }
 
 function maskOmang(value?: string | null) {
@@ -1308,12 +1332,17 @@ export default function AdminPage() {
     const reviewed = applications.map((application) => {
       const review = calculateEligibility(application);
       const age = Number(application.age);
-      const priorityGroup = review.priorityGroup;
+      const isStrategicCoverage =
+        !review.isHardRejected && isStrategicCoverageParticipant(application.email);
+      const rankingScore = review.score +
+        (isStrategicCoverage ? STRATEGIC_COVERAGE_BOOST : 0);
 
       return {
         ...application,
         review,
         score: review.score,
+        rankingScore,
+        isStrategicCoverage,
         isHardRejected: review.isHardRejected,
         isYouth: !Number.isNaN(age) && age <= 35,
         isFemale: normalize(application.gender) === "female",
@@ -1325,7 +1354,7 @@ export default function AdminPage() {
     const hardRejected = reviewed.filter((app) => app.isHardRejected);
     const eligible = reviewed
       .filter((app) => !app.isHardRejected)
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => b.rankingScore - a.rankingScore);
 
     const selected = new Map<string, (typeof eligible)[number]>();
     const constituencyCounts: Record<string, number> = {};
@@ -1381,13 +1410,31 @@ export default function AdminPage() {
       return added;
     }
 
+    function getNormalSelectionBucket(candidate: (typeof eligible)[number]) {
+      if (candidate.isYouth && candidate.isFemale) return "Youth Women Priority";
+      if (candidate.isYouth && candidate.isMale) return "Youth Men Priority";
+      return "Non-Youth Allocation";
+    }
+
+    const strategicCoveragePool = eligible.filter(
+      (app) => app.isStrategicCoverage,
+    );
+
+    for (const candidate of strategicCoveragePool) {
+      if (selected.size >= TOTAL_INTAKE) break;
+      if (!canSelect(candidate)) continue;
+
+      candidate.review.selectionBucket = getNormalSelectionBucket(candidate);
+      addSelected(candidate);
+    }
+
     // Phase 1: protect the national promise — at least one eligible applicant per constituency where available.
     for (const constituency of constituencies) {
       if (selected.size >= TOTAL_INTAKE) break;
 
       const candidate = eligible
         .filter((app) => app.constituency === constituency)
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => b.rankingScore - a.rankingScore)
         .find((app) => canSelect(app));
 
       if (!candidate) continue;
@@ -2243,7 +2290,7 @@ export default function AdminPage() {
     <main className="min-h-screen bg-[#050816] text-white">
       <div className="mx-auto min-h-screen max-w-[1800px] p-4 lg:p-6">
         <nav className="mb-5 rounded-[28px] border border-white/10 bg-[#0b1028] p-3 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
-          <div className="grid gap-4 xl:grid-cols-[170px_minmax(0,1fr)_220px] xl:items-start">
+          <div className="grid gap-4 2xl:grid-cols-[170px_minmax(0,1fr)_300px] 2xl:items-start">
             <div className="flex h-full items-start">
               <div className="flex w-full max-w-[160px] items-center gap-2 rounded-2xl border border-orange-500/25 bg-white/5 px-3 py-2 text-white">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-xs font-black">
@@ -2260,7 +2307,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="grid max-w-4xl grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:max-w-4xl">
               {statusNavItems.map((item) => {
                 const isActive = statusFilter === item.value;
 
@@ -2293,7 +2340,7 @@ export default function AdminPage() {
               })}
             </div>
 
-            <div className="flex items-start justify-start gap-2 xl:justify-end">
+            <div className="flex flex-wrap items-start justify-start gap-2 xl:col-span-2 2xl:col-span-1 2xl:justify-end">
               <button
                 type="button"
                 onClick={handleToggleAuditLogs}
