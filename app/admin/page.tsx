@@ -170,10 +170,12 @@ type ReportingStats = {
   extraConstituencyRows: [string, ReportingConstituencyStats][];
 };
 
+const BATCH_1_INTAKE = 500;
+const BATCH_2_INTAKE = 500;
 const TOTAL_YOUTH_WOMEN = 435;
 const TOTAL_YOUTH_MEN = 315;
 const TOTAL_NON_YOUTH = 250;
-const TOTAL_INTAKE = TOTAL_YOUTH_WOMEN + TOTAL_YOUTH_MEN + TOTAL_NON_YOUTH;
+const TOTAL_INTAKE = BATCH_1_INTAKE + BATCH_2_INTAKE;
 const DISABILITY_CAP = 8;
 const MIN_BGCSE_POINTS = 25;
 const MIN_MOTIVATION_WORDS = 40;
@@ -846,6 +848,33 @@ export default function AdminPage() {
     }
   }
 
+  async function fetchAllApplicationsForSelection(): Promise<Application[]> {
+    const batchSize = 1000;
+    let from = 0;
+    let allApplications: Application[] = [];
+
+    while (true) {
+      const { data, error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, from + batchSize - 1);
+
+      if (error) {
+        throw error;
+      }
+
+      const batch = (data || []).map(formatApplication);
+      allApplications = [...allApplications, ...batch];
+
+      if (!data || data.length < batchSize) break;
+
+      from += batchSize;
+    }
+
+    return allApplications;
+  }
+
   async function loadApplications(showFullLoader = false, page = currentPage) {
     const { data: sessionData } = await supabase.auth.getSession();
 
@@ -1338,7 +1367,22 @@ export default function AdminPage() {
 
     setMasterSelecting(true);
 
-    const reviewed = applications.map((application) => {
+    let selectionApplications: Application[] = [];
+
+    try {
+      selectionApplications = await fetchAllApplicationsForSelection();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load all applications for master selection";
+      console.error("Failed to load all applications for master selection:", error);
+      alert(message);
+      setMasterSelecting(false);
+      return;
+    }
+
+    const reviewed = selectionApplications.map((application) => {
       const review = calculateEligibility(application);
       const age = Number(application.age);
       const isStrategicCoverage =
@@ -1360,16 +1404,32 @@ export default function AdminPage() {
       };
     });
 
-    const hardRejected = reviewed.filter((app) => app.isHardRejected);
+    const protectedAccepted = reviewed.filter(
+      (app) => app.status === "Accepted",
+    );
+    const protectedRejected = reviewed.filter(
+      (app) => app.status === "Rejected",
+    );
+    const protectedDecisionIds = new Set(
+      [...protectedAccepted, ...protectedRejected].map(
+        (app) => app.applicationId,
+      ),
+    );
+
+    const hardRejected = reviewed.filter(
+      (app) => app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
+    );
     const eligible = reviewed
-      .filter((app) => !app.isHardRejected)
+      .filter(
+        (app) => !app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
+      )
       .sort((a, b) => b.rankingScore - a.rankingScore);
 
-    const selected = new Map<string, (typeof eligible)[number]>();
+    const selected = new Map<string, (typeof reviewed)[number]>();
     const constituencyCounts: Record<string, number> = {};
     let disabledSelected = 0;
 
-    function canSelect(candidate: (typeof eligible)[number]) {
+    function canSelect(candidate: (typeof reviewed)[number]) {
       if (selected.has(candidate.applicationId)) return false;
       if (candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
         return false;
@@ -1377,7 +1437,7 @@ export default function AdminPage() {
       return true;
     }
 
-    function addSelected(candidate: (typeof eligible)[number]) {
+    function addSelected(candidate: (typeof reviewed)[number]) {
       selected.set(candidate.applicationId, candidate);
       const constituency = candidate.constituency || "Unknown";
       constituencyCounts[constituency] =
@@ -1419,10 +1479,16 @@ export default function AdminPage() {
       return added;
     }
 
-    function getNormalSelectionBucket(candidate: (typeof eligible)[number]) {
+    function getNormalSelectionBucket(candidate: (typeof reviewed)[number]) {
       if (candidate.isYouth && candidate.isFemale) return "Youth Women Priority";
       if (candidate.isYouth && candidate.isMale) return "Youth Men Priority";
       return "Non-Youth Allocation";
+    }
+
+    for (const acceptedApplication of protectedAccepted) {
+      acceptedApplication.review.selectionBucket =
+        acceptedApplication.selectionBucket || "Manual Accepted - Protected";
+      addSelected(acceptedApplication);
     }
 
     const strategicCoveragePool = eligible.filter(
@@ -1455,7 +1521,7 @@ export default function AdminPage() {
     const selectedArray = () => Array.from(selected.values());
 
     function currentCount(
-      predicate: (app: (typeof eligible)[number]) => boolean,
+      predicate: (app: (typeof reviewed)[number]) => boolean,
     ) {
       return selectedArray().filter(predicate).length;
     }
@@ -1500,14 +1566,52 @@ export default function AdminPage() {
       );
     }
 
-    const acceptedIds = new Set(
-      selectedArray().map((app) => app.applicationId),
+    const autoSelectedForTwoBatches = selectedArray()
+      .filter((app) => !protectedDecisionIds.has(app.applicationId))
+      .sort((a, b) => {
+        if (b.rankingScore !== a.rankingScore) {
+          return b.rankingScore - a.rankingScore;
+        }
+
+        return (
+          (b.review.documentCompletenessScore || 0) -
+          (a.review.documentCompletenessScore || 0)
+        );
+      });
+
+    const protectedBatchOneSelected = protectedAccepted.slice(0, BATCH_1_INTAKE);
+    const protectedAcceptedOverBatchOne = protectedAccepted.slice(BATCH_1_INTAKE);
+    const batchOneAutoSlots = Math.max(
+      0,
+      BATCH_1_INTAKE - protectedBatchOneSelected.length,
+    );
+    const batchOneSelected = autoSelectedForTwoBatches.slice(
+      0,
+      batchOneAutoSlots,
+    );
+    const batchTwoRemainingSlots = Math.max(
+      0,
+      TOTAL_INTAKE - protectedAccepted.length - batchOneSelected.length,
+    );
+    const batchTwoSelected = autoSelectedForTwoBatches.slice(
+      batchOneAutoSlots,
+      batchOneAutoSlots + batchTwoRemainingSlots,
+    );
+    const selectedForTwoBatches = [
+      ...protectedBatchOneSelected,
+      ...protectedAcceptedOverBatchOne,
+      ...batchOneSelected,
+      ...batchTwoSelected,
+    ];
+
+    const selectedBatchIds = new Set(
+      selectedForTwoBatches.map((app) => app.applicationId),
     );
 
     const constituencyWaitingListCounts: Record<string, number> = {};
 
-    const remainingEligible = eligible.filter((app) => {
-      if (acceptedIds.has(app.applicationId)) {
+    const waitingListEligible = eligible.filter((app) => {
+      if (selectedBatchIds.has(app.applicationId)) {
         return false;
       }
 
@@ -1530,22 +1634,29 @@ export default function AdminPage() {
     });
 
     const updates = [
-      ...selectedArray().map((app) => ({
+      ...batchOneSelected.map((app) => ({
         app,
         status: "Accepted" as ApplicationStatus,
-        bucket: app.review.selectionBucket || "Batch 1 Accepted",
+        bucket: `Batch 1 - Accepted Now / ${app.review.selectionBucket || "Selected"}`,
       })),
-      ...remainingEligible.map((app) => ({
+      ...batchTwoSelected.map((app) => ({
         app,
         status: "Remaining Eligible" as ApplicationStatus,
-        bucket: "Constituency Remaining Eligible",
+        bucket: `Batch 2 - Later Cycle / ${app.review.selectionBucket || "Selected"}`,
+      })),
+      ...waitingListEligible.map((app) => ({
+        app,
+        status: "Remaining Eligible" as ApplicationStatus,
+        bucket: "Waiting List - Eligible Not In Batch 1 Or 2",
       })),
       ...hardRejected.map((app) => ({
         app,
         status: "Rejected" as ApplicationStatus,
         bucket: "Rejected - Hard Gate",
       })),
-    ];
+    ].filter(
+      (update) => !protectedDecisionIds.has(update.app.applicationId),
+    );
 
     for (const update of updates) {
       try {
@@ -1594,18 +1705,26 @@ export default function AdminPage() {
     await logAdminAction({
       action: "master_selection",
       details: {
-        accepted: selected.size,
-        remainingEligible: remainingEligible.length,
+        totalSelectedForBatches: selectedForTwoBatches.length,
+        protectedManualAccepted: protectedAccepted.length,
+        protectedManualRejected: protectedRejected.length,
+        batchOneAccepted: protectedBatchOneSelected.length + batchOneSelected.length,
+        batchOneAutoAccepted: batchOneSelected.length,
+        batchTwoLaterCycle: protectedAcceptedOverBatchOne.length + batchTwoSelected.length,
+        batchTwoAutoLaterCycle: batchTwoSelected.length,
+        waitingListEligible: waitingListEligible.length,
         rejected: hardRejected.length,
         disabledSelected,
         constituenciesRepresented: Object.keys(constituencyCounts).length,
         totalIntake: TOTAL_INTAKE,
+        batchOneIntake: BATCH_1_INTAKE,
+        batchTwoIntake: BATCH_2_INTAKE,
         remainingEligiblePerConstituency: WAITING_LIST_PER_CONSTITUENCY,
       },
     });
 
     alert(
-      `Batch 1 Selection Complete:\nAccepted: ${selected.size}\nRemaining Eligible: ${remainingEligible.length} (max ${WAITING_LIST_PER_CONSTITUENCY} per constituency)\nRejected: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}\nConstituencies Represented: ${Object.keys(constituencyCounts).length}`,
+      `Two-Batch Selection Complete:\nProtected Manual Accepted: ${protectedAccepted.length}\nProtected Manual Rejected: ${protectedRejected.length}\nBatch 1 Accepted Now: ${protectedBatchOneSelected.length + batchOneSelected.length} (${batchOneSelected.length} newly selected)\nBatch 2 Later Cycle: ${protectedAcceptedOverBatchOne.length + batchTwoSelected.length} (${batchTwoSelected.length} newly reserved)\nTotal Selected For Both Batches: ${selectedForTwoBatches.length}/${TOTAL_INTAKE}\nWaiting List: ${waitingListEligible.length} (max ${WAITING_LIST_PER_CONSTITUENCY} per constituency)\nNew Hard Rejects: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}\nConstituencies Represented: ${Object.keys(constituencyCounts).length}`,
     );
 
     setMasterSelecting(false);
