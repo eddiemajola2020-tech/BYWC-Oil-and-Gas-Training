@@ -29,6 +29,7 @@ type AuditAction =
   | "status_change"
   | "auto_review"
   | "master_selection"
+  | "selection_publish"
   | "message_saved"
   | "data_request_update";
 
@@ -595,6 +596,7 @@ export default function AdminPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [masterSelecting, setMasterSelecting] = useState(false);
+  const [publishingSelection, setPublishingSelection] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -1308,6 +1310,185 @@ export default function AdminPage() {
         throw failed.reason;
       }
     }
+  }
+
+  function getPublishedStatusFromSelectionBucket(
+    selectionBucket?: string | null,
+  ): ApplicationStatus | null {
+    const bucket = selectionBucket || "";
+
+    if (!bucket.includes("Internal Hold - Do Not Notify")) return null;
+    if (bucket.includes("Batch 1 -")) return "Accepted";
+    if (bucket.includes("Batch 2 -")) return "Remaining Eligible";
+    if (bucket.includes("Rejected -")) return "Rejected";
+
+    return null;
+  }
+
+  function getPublishedSelectionBucket(selectionBucket?: string | null) {
+    return (selectionBucket || "")
+      .replace("Internal Hold - Do Not Notify", "Published - Applicant Visible")
+      .trim();
+  }
+
+  async function updatePublishedSelectionStatusesInChunks(
+    updates: {
+      application: Application;
+      status: ApplicationStatus;
+      selectionBucket: string;
+    }[],
+    chunkSize = 150,
+  ) {
+    for (let index = 0; index < updates.length; index += chunkSize) {
+      const chunk = updates.slice(index, index + chunkSize);
+
+      const results = await Promise.allSettled(
+        chunk.map((update) =>
+          supabase
+            .from(APPLICATIONS_TABLE)
+            .update({
+              status: update.status,
+              selection_bucket: update.selectionBucket,
+            })
+            .eq("application_id", update.application.applicationId),
+        ),
+      );
+
+      const failedRequest = results.find((result) => {
+        if (result.status === "rejected") return true;
+        return Boolean(result.value.error);
+      });
+
+      if (failedRequest) {
+        if (failedRequest.status === "rejected") {
+          throw failedRequest.reason;
+        }
+
+        throw failedRequest.value.error;
+      }
+    }
+  }
+
+  async function handlePublishSelectionResults() {
+    const confirmed = window.confirm(
+      "Publish selection results to applicant dashboards? This will change visible statuses from Submitted to Accepted, Remaining Eligible, or Rejected based on the internal selection buckets. This does not send emails or SMS messages.",
+    );
+
+    if (!confirmed) return;
+
+    const secondConfirm = window.confirm(
+      "Final confirmation: applicants will be able to see their updated status after this. Continue?",
+    );
+
+    if (!secondConfirm) return;
+
+    setPublishingSelection(true);
+
+    let selectionApplications: Application[] = [];
+
+    try {
+      selectionApplications = await fetchAllApplicationsForSelection();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load applications for publishing";
+      console.error("Failed to load applications for publishing:", error);
+      alert(message);
+      setPublishingSelection(false);
+      return;
+    }
+
+    const updates = selectionApplications
+      .map((application) => {
+        const publishedStatus = getPublishedStatusFromSelectionBucket(
+          application.selectionBucket,
+        );
+
+        if (!publishedStatus) return null;
+
+        return {
+          application,
+          status: publishedStatus,
+          selectionBucket: getPublishedSelectionBucket(
+            application.selectionBucket,
+          ),
+        };
+      })
+      .filter(
+        (update): update is {
+          application: Application;
+          status: ApplicationStatus;
+          selectionBucket: string;
+        } => Boolean(update),
+      );
+
+    if (updates.length === 0) {
+      alert(
+        "No internal held selection results were found to publish. Run selection first, then publish.",
+      );
+      setPublishingSelection(false);
+      return;
+    }
+
+    try {
+      await updatePublishedSelectionStatusesInChunks(updates);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Selection publish failed";
+      console.error("Selection publish failed:", error);
+      alert(message);
+      setPublishingSelection(false);
+      return;
+    }
+
+    const acceptedCount = updates.filter(
+      (update) => update.status === "Accepted",
+    ).length;
+    const remainingEligibleCount = updates.filter(
+      (update) => update.status === "Remaining Eligible",
+    ).length;
+    const rejectedCount = updates.filter(
+      (update) => update.status === "Rejected",
+    ).length;
+
+    await logAdminAction({
+      action: "selection_publish",
+      details: {
+        totalPublished: updates.length,
+        accepted: acceptedCount,
+        remainingEligible: remainingEligibleCount,
+        rejected: rejectedCount,
+        sentEmailOrSms: false,
+      },
+    });
+
+    setApplications((prev) =>
+      prev.map((application) => {
+        const found = updates.find(
+          (update) =>
+            update.application.applicationId === application.applicationId,
+        );
+
+        if (!found) return application;
+
+        return {
+          ...application,
+          status: found.status,
+          selectionBucket: found.selectionBucket,
+        };
+      }),
+    );
+
+    await loadDashboardStats();
+
+    alert(
+      `Selection results published to applicant dashboards.\nAccepted: ${acceptedCount}\nRemaining Eligible: ${remainingEligibleCount}\nRejected: ${rejectedCount}\nEmails/SMS sent: NO`,
+    );
+
+    setPublishingSelection(false);
   }
 
   async function handleStatusChange(
@@ -2877,7 +3058,7 @@ BYWC Oil & Gas Training Programme Team`;
             </div>
 
             <div className="rounded-[24px] border border-orange-500/25 bg-orange-500/10 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
                     Selection Tools
@@ -2886,18 +3067,38 @@ BYWC Oil & Gas Training Programme Team`;
                     Master Selection
                   </h2>
                   <p className="mt-1 text-xs leading-5 text-slate-300">
-                    Quota-based status update. Records the action in the audit
-                    log.
+                    Run selection internally first. Applicants will still see
+                    Submitted until you manually publish the results.
                   </p>
                 </div>
 
-                <button
-                  onClick={handleMasterSelection}
-                  disabled={masterSelecting}
-                  className="rounded-2xl bg-orange-500 px-5 py-3 text-xs font-black text-white transition hover:bg-orange-600 disabled:opacity-50"
-                >
-                  {masterSelecting ? "Running..." : "Run Selection"}
-                </button>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={handleMasterSelection}
+                    disabled={masterSelecting || publishingSelection}
+                    className="rounded-2xl bg-orange-500 px-5 py-3 text-xs font-black text-white transition hover:bg-orange-600 disabled:opacity-50"
+                  >
+                    {masterSelecting ? "Running..." : "Run Hidden Selection"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePublishSelectionResults}
+                    disabled={masterSelecting || publishingSelection}
+                    className="rounded-2xl bg-emerald-500 px-5 py-3 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    {publishingSelection
+                      ? "Publishing..."
+                      : "Publish Results to Dashboard"}
+                  </button>
+                </div>
+
+                <p className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-xs font-semibold leading-5 text-slate-300">
+                  Current safety mode: hidden selection does not notify
+                  applicants. The publish button changes applicant dashboard
+                  statuses only; it does not send email, SMS or WhatsApp.
+                </p>
               </div>
             </div>
           </div>
