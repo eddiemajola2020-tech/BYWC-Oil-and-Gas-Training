@@ -14,11 +14,16 @@ const ADMIN_EMAILS = [
 
 type ApplicationStatus =
   | "Submitted"
-  | "Under Review"
-  | "Shortlisted"
-  | "Waiting List"
+  | "Remaining Eligible"
   | "Accepted"
   | "Rejected";
+
+function normalizeApplicationStatus(value?: string | null): ApplicationStatus {
+  if (value === "Accepted") return "Accepted";
+  if (value === "Remaining Eligible") return "Remaining Eligible";
+  if (value === "Rejected") return "Rejected";
+  return "Submitted";
+}
 
 type AuditAction =
   | "status_change"
@@ -41,9 +46,7 @@ type DashboardStats = {
   women: number;
   men: number;
   submitted: number;
-  underReview: number;
-  shortlisted: number;
-  waitingList: number;
+  remainingEligible: number;
   accepted: number;
   rejected: number;
 };
@@ -53,9 +56,7 @@ const EMPTY_DASHBOARD_STATS: DashboardStats = {
   women: 0,
   men: 0,
   submitted: 0,
-  underReview: 0,
-  shortlisted: 0,
-  waitingList: 0,
+  remainingEligible: 0,
   accepted: 0,
   rejected: 0,
 };
@@ -180,6 +181,8 @@ const MIN_POST_PROGRAM_WORDS = 30;
 const PREFERRED_CONSTITUENCY_DEPTH = 3;
 const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
 const PAGE_SIZE = 50;
+const APPLICATIONS_TABLE = "applications";
+const WAITING_LIST_PER_CONSTITUENCY = 50;
 
 const STRATEGIC_COVERAGE_BOOST = 15;
 const STRATEGIC_COVERAGE_EMAILS = [
@@ -528,7 +531,7 @@ function calculateEligibility(application: Application): ReviewDecision {
   const isHardRejected = hardRejectReasons.length > 0;
 
   let result = "Eligible for ranking";
-  let recommendedStatus: ApplicationStatus = "Under Review";
+  let recommendedStatus: ApplicationStatus = "Submitted";
 
   if (isHardRejected) {
     result = "Hard reject";
@@ -600,10 +603,21 @@ export default function AdminPage() {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>(
     EMPTY_DASHBOARD_STATS,
   );
+  const [showConstituencyDispatch, setShowConstituencyDispatch] =
+    useState(false);
+  const [dispatchApplications, setDispatchApplications] = useState<Application[]>(
+    [],
+  );
+  const [dispatchLoading, setDispatchLoading] = useState(false);
+  const [dispatchSavingKey, setDispatchSavingKey] = useState<string | null>(
+    null,
+  );
+  const [dispatchDueDiligenceConfirm, setDispatchDueDiligenceConfirm] =
+    useState<Record<string, boolean>>({});
 
   function formatApplication(item: any): Application {
     return {
-      id: item.id,
+      id: item.id?.toString() || item.application_id || item.email || crypto.randomUUID(),
       applicationId: item.application_id,
       firstName: item.first_name,
       lastName: item.last_name,
@@ -640,7 +654,7 @@ export default function AdminPage() {
       postProgramPlan: item.post_program_plan,
       motivationWordCount: item.motivation_word_count,
       postProgramWordCount: item.post_program_word_count,
-      status: item.status || "Submitted",
+      status: normalizeApplicationStatus(item.status),
       autoReviewScore: item.auto_review_score,
       autoReviewResult: item.auto_review_result,
       autoReviewNotes: item.auto_review_notes,
@@ -657,7 +671,7 @@ export default function AdminPage() {
     buildQuery?: (query: any) => any,
   ): Promise<number> {
     let query = supabase
-      .from("applications")
+      .from(APPLICATIONS_TABLE)
       .select("id", { count: "exact", head: true });
 
     if (buildQuery) {
@@ -680,9 +694,7 @@ export default function AdminPage() {
         women,
         men,
         submitted,
-        underReview,
-        shortlisted,
-        waitingList,
+        remainingEligible,
         accepted,
         rejected,
       ] = await Promise.all([
@@ -690,9 +702,7 @@ export default function AdminPage() {
         getApplicationCount((query) => query.ilike("gender", "female")),
         getApplicationCount((query) => query.ilike("gender", "male")),
         getApplicationCount((query) => query.eq("status", "Submitted")),
-        getApplicationCount((query) => query.eq("status", "Under Review")),
-        getApplicationCount((query) => query.eq("status", "Shortlisted")),
-        getApplicationCount((query) => query.eq("status", "Waiting List")),
+        getApplicationCount((query) => query.eq("status", "Remaining Eligible")),
         getApplicationCount((query) => query.eq("status", "Accepted")),
         getApplicationCount((query) => query.eq("status", "Rejected")),
       ]);
@@ -702,9 +712,7 @@ export default function AdminPage() {
         women,
         men,
         submitted,
-        underReview,
-        shortlisted,
-        waitingList,
+        remainingEligible,
         accepted,
         rejected,
       });
@@ -712,7 +720,6 @@ export default function AdminPage() {
       console.error("Failed to load dashboard stats:", error);
     }
   }
-
   function createEmptyReportingConstituencyStats(): ReportingConstituencyStats {
     return {
       total: 0,
@@ -812,7 +819,7 @@ export default function AdminPage() {
 
       while (true) {
         const { data, error } = await supabase
-          .from("applications")
+          .from(APPLICATIONS_TABLE)
           .select("gender,constituency,district,status,age,disability_status")
           .order("created_at", { ascending: false })
           .range(from, from + batchSize - 1);
@@ -868,7 +875,7 @@ export default function AdminPage() {
     const cleanedSearch = searchTerm.trim();
 
     let query = supabase
-      .from("applications")
+      .from(APPLICATIONS_TABLE)
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to);
@@ -1200,7 +1207,7 @@ export default function AdminPage() {
     selectionBucket = review.selectionBucket,
   ) {
     const { error } = await supabase
-      .from("applications")
+      .from(APPLICATIONS_TABLE)
       .update({
         status,
         auto_review_score: review.score,
@@ -1223,7 +1230,7 @@ export default function AdminPage() {
     setSavingId(application.id);
 
     const { error } = await supabase
-      .from("applications")
+      .from(APPLICATIONS_TABLE)
       .update({ status: newStatus })
       .eq("application_id", application.applicationId);
 
@@ -1492,24 +1499,45 @@ export default function AdminPage() {
       );
     }
 
-    const shortlistedIds = new Set(
+    const acceptedIds = new Set(
       selectedArray().map((app) => app.applicationId),
     );
 
-    const waitingList = eligible.filter(
-      (app) => !shortlistedIds.has(app.applicationId),
-    );
+    const constituencyWaitingListCounts: Record<string, number> = {};
+
+    const remainingEligible = eligible.filter((app) => {
+      if (acceptedIds.has(app.applicationId)) {
+        return false;
+      }
+
+      const constituency = app.constituency || "Unknown";
+
+      if (!constituencyWaitingListCounts[constituency]) {
+        constituencyWaitingListCounts[constituency] = 0;
+      }
+
+      if (
+        constituencyWaitingListCounts[constituency] >=
+        WAITING_LIST_PER_CONSTITUENCY
+      ) {
+        return false;
+      }
+
+      constituencyWaitingListCounts[constituency] += 1;
+
+      return true;
+    });
 
     const updates = [
       ...selectedArray().map((app) => ({
         app,
-        status: "Shortlisted" as ApplicationStatus,
-        bucket: app.review.selectionBucket || "Shortlisted",
+        status: "Accepted" as ApplicationStatus,
+        bucket: app.review.selectionBucket || "Batch 1 Accepted",
       })),
-      ...waitingList.map((app) => ({
+      ...remainingEligible.map((app) => ({
         app,
-        status: "Waiting List" as ApplicationStatus,
-        bucket: "Eligible Waiting List",
+        status: "Remaining Eligible" as ApplicationStatus,
+        bucket: "Constituency Remaining Eligible",
       })),
       ...hardRejected.map((app) => ({
         app,
@@ -1565,17 +1593,18 @@ export default function AdminPage() {
     await logAdminAction({
       action: "master_selection",
       details: {
-        shortlisted: selected.size,
-        waitingList: waitingList.length,
+        accepted: selected.size,
+        remainingEligible: remainingEligible.length,
         rejected: hardRejected.length,
         disabledSelected,
         constituenciesRepresented: Object.keys(constituencyCounts).length,
         totalIntake: TOTAL_INTAKE,
+        remainingEligiblePerConstituency: WAITING_LIST_PER_CONSTITUENCY,
       },
     });
 
     alert(
-      `Master Selection Complete:\nShortlisted: ${selected.size}\nWaiting List: ${waitingList.length}\nRejected: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}\nConstituencies Represented: ${Object.keys(constituencyCounts).length}`,
+      `Batch 1 Selection Complete:\nAccepted: ${selected.size}\nRemaining Eligible: ${remainingEligible.length} (max ${WAITING_LIST_PER_CONSTITUENCY} per constituency)\nRejected: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}\nConstituencies Represented: ${Object.keys(constituencyCounts).length}`,
     );
 
     setMasterSelecting(false);
@@ -1588,7 +1617,7 @@ export default function AdminPage() {
     setSavingId(application.id);
 
     const { error } = await supabase
-      .from("applications")
+      .from(APPLICATIONS_TABLE)
       .update({
         admin_message: message,
       })
@@ -1633,6 +1662,170 @@ export default function AdminPage() {
 
     alert("Message saved successfully");
     setSavingId(null);
+  }
+
+  async function loadConstituencyDispatch() {
+    setDispatchLoading(true);
+
+    try {
+      const batchSize = 1000;
+      let from = 0;
+      let allApplications: Application[] = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from(APPLICATIONS_TABLE)
+          .select("*")
+          .order("constituency", { ascending: true })
+          .order("status", { ascending: true })
+          .order("auto_review_score", { ascending: false })
+          .range(from, from + batchSize - 1);
+
+        if (error) {
+          console.error("Failed to load constituency dispatch:", error);
+          alert(error.message || "Failed to load constituency dispatch.");
+          setDispatchLoading(false);
+          return;
+        }
+
+        const batch = (data || []).map(formatApplication);
+        allApplications = [...allApplications, ...batch];
+
+        if (!data || data.length < batchSize) break;
+
+        from += batchSize;
+      }
+
+      setDispatchApplications(allApplications);
+    } catch (error) {
+      console.error("Failed to load constituency dispatch:", error);
+      alert("Failed to load constituency dispatch. Please try again.");
+    } finally {
+      setDispatchLoading(false);
+    }
+  }
+
+  async function handleToggleConstituencyDispatch() {
+    setShowConstituencyDispatch(true);
+    await loadConstituencyDispatch();
+  }
+
+  function getSuccessfulApplicantMessage(application: Application) {
+    const fullName = `${application.firstName || ""} ${
+      application.lastName || ""
+    }`
+      .replace(/\s+/g, " ")
+      .trim();
+    const displayName = fullName || "Participant";
+    const constituency = application.constituency || "your constituency";
+
+    return `Dear ${displayName},
+
+Congratulations.
+
+Following the completion of the BYWC Oil & Gas Training Programme selection process and constituency-level due diligence review for ${constituency}, you have been selected as one of the successful applicants for the programme.
+
+Please note that further communication will follow regarding the next steps, reporting arrangements, training schedule, and any additional verification or onboarding requirements.
+
+Kind regards,
+BYWC Oil & Gas Training Programme Team`;
+  }
+
+  async function handleSaveGroupMessage(
+    constituency: string,
+    status: ApplicationStatus,
+    groupApplications: Application[],
+  ) {
+    const groupKey = `${constituency}-${status}`;
+
+    if (!dispatchDueDiligenceConfirm[groupKey]) {
+      alert(
+        "Please confirm that due diligence has been completed for this constituency group before saving the group message.",
+      );
+      return;
+    }
+
+    if (groupApplications.length === 0) {
+      alert("There are no applicants in this group.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Save personalised successful-applicant messages for ${groupApplications.length} ${status} applicant(s) in ${constituency}?`,
+    );
+
+    if (!confirmed) return;
+
+    setDispatchSavingKey(groupKey);
+
+    try {
+      for (const application of groupApplications) {
+        const message = getSuccessfulApplicantMessage(application);
+
+        const { error } = await supabase
+          .from(APPLICATIONS_TABLE)
+          .update({
+            admin_message: message,
+          })
+          .eq("application_id", application.applicationId);
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      await logAdminAction({
+        action: "message_saved",
+        details: {
+          constituency,
+          status,
+          groupCount: groupApplications.length,
+          messageType: "constituency_successful_applicant_group_message",
+          dueDiligenceConfirmed: true,
+        },
+      });
+
+      setDispatchApplications((prev) =>
+        prev.map((application) => {
+          const shouldUpdate = groupApplications.some(
+            (item) => item.applicationId === application.applicationId,
+          );
+
+          if (!shouldUpdate) return application;
+
+          return {
+            ...application,
+            adminMessage: getSuccessfulApplicantMessage(application),
+          };
+        }),
+      );
+
+      setApplications((prev) =>
+        prev.map((application) => {
+          const shouldUpdate = groupApplications.some(
+            (item) => item.applicationId === application.applicationId,
+          );
+
+          if (!shouldUpdate) return application;
+
+          return {
+            ...application,
+            adminMessage: getSuccessfulApplicantMessage(application),
+          };
+        }),
+      );
+
+      alert(
+        `Group messages saved for ${groupApplications.length} applicant(s) in ${constituency}.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Group message save failed";
+      console.error("Group message save failed:", error);
+      alert(message);
+    } finally {
+      setDispatchSavingKey(null);
+    }
   }
 
   function escapeCsvValue(value?: unknown) {
@@ -1754,7 +1947,7 @@ export default function AdminPage() {
 
       while (true) {
         const { data, error } = await supabase
-          .from("applications")
+          .from(APPLICATIONS_TABLE)
           .select("gender,constituency,district,status,age,disability_status")
           .order("created_at", { ascending: false })
           .range(from, from + batchSize - 1);
@@ -2019,7 +2212,7 @@ export default function AdminPage() {
 
       while (true) {
         const { data, error } = await supabase
-          .from("applications")
+          .from(APPLICATIONS_TABLE)
           .select("*")
           .order("created_at", { ascending: false })
           .range(from, from + batchSize - 1);
@@ -2157,9 +2350,7 @@ export default function AdminPage() {
 
   const totalApplications = dashboardStats.total;
   const submittedCount = dashboardStats.submitted;
-  const reviewCount = dashboardStats.underReview;
-  const shortlistedCount = dashboardStats.shortlisted;
-  const waitingListCount = dashboardStats.waitingList;
+  const remainingEligibleCount = dashboardStats.remainingEligible;
   const acceptedCount = dashboardStats.accepted;
   const rejectedCount = dashboardStats.rejected;
   const womenCount = dashboardStats.women;
@@ -2265,6 +2456,35 @@ export default function AdminPage() {
     (request) => request.status === "pending",
   ).length;
 
+  const constituencyDispatchGroups = useMemo(() => {
+    const grouped = dispatchApplications.reduce(
+      (acc, application) => {
+        const constituency = application.constituency || "Unknown";
+        const status = normalizeApplicationStatus(application.status);
+
+        if (!acc[constituency]) {
+          acc[constituency] = {
+            "Remaining Eligible": [],
+            Rejected: [],
+            Submitted: [],
+            Accepted: [],
+          } as Record<ApplicationStatus, Application[]>;
+        }
+
+        if (!acc[constituency][status]) {
+          acc[constituency][status] = [];
+        }
+
+        acc[constituency][status].push(application);
+
+        return acc;
+      },
+      {} as Record<string, Record<ApplicationStatus, Application[]>>,
+    );
+
+    return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+  }, [dispatchApplications]);
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#050816] text-white">
@@ -2280,9 +2500,7 @@ export default function AdminPage() {
   const statusNavItems = [
     { label: "All Applications", value: "All", count: totalApplications },
     { label: "Submitted", value: "Submitted", count: submittedCount },
-    { label: "Under Review", value: "Under Review", count: reviewCount },
-    { label: "Shortlisted", value: "Shortlisted", count: shortlistedCount },
-    { label: "Waiting List", value: "Waiting List", count: waitingListCount },
+    { label: "Remaining Eligible", value: "Remaining Eligible", count: remainingEligibleCount },
     { label: "Accepted", value: "Accepted", count: acceptedCount },
     { label: "Rejected", value: "Rejected", count: rejectedCount },
   ];
@@ -2399,6 +2617,14 @@ export default function AdminPage() {
                     Refresh Dashboard
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={handleToggleConstituencyDispatch}
+                    className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-yellow-300 transition hover:bg-white/10"
+                  >
+                    Constituency Dispatch
+                  </button>
+
                   <div className="my-1 border-t border-white/10" />
 
                   <button
@@ -2466,7 +2692,7 @@ export default function AdminPage() {
           <StatCard title="Total" value={totalApplications} />
           <StatCard title="Women" value={womenCount} />
           <StatCard title="Men" value={menCount} />
-          <StatCard title="Under Review" value={reviewCount} />
+          <StatCard title="Submitted" value={submittedCount} />
           <StatCard title="Rejected" value={rejectedCount} />
         </section>
 
@@ -2736,10 +2962,9 @@ export default function AdminPage() {
               >
                 <option value="All">All Statuses</option>
                 <option value="Submitted">Submitted</option>
-                <option value="Under Review">Under Review</option>
-                <option value="Shortlisted">Shortlisted</option>
-                <option value="Waiting List">Waiting List</option>
+                <option value="Remaining Eligible">Remaining Eligible</option>
                 <option value="Accepted">Accepted</option>
+                <option value="Rejected">Rejected</option>
                 <option value="Rejected">Rejected</option>
               </select>
             </div>
@@ -2789,7 +3014,7 @@ export default function AdminPage() {
                   <tbody>
                     {filteredApplications.map((application) => (
                       <tr
-                        key={application.id}
+                        key={application.applicationId || application.id || application.email}
                         className="border-t border-white/10 transition hover:bg-white/[0.03]"
                       >
                         <td className="px-3 py-3 align-top">
@@ -2852,10 +3077,9 @@ export default function AdminPage() {
                             className="w-full rounded-xl border border-white/10 bg-[#111827] px-2 py-2 text-[12px] font-bold text-white outline-none disabled:opacity-50"
                           >
                             <option value="Submitted">Submitted</option>
-                            <option value="Under Review">Under Review</option>
-                            <option value="Shortlisted">Shortlisted</option>
-                            <option value="Waiting List">Waiting List</option>
+                            <option value="Remaining Eligible">Remaining Eligible</option>
                             <option value="Accepted">Accepted</option>
+                            <option value="Rejected">Rejected</option>
                             <option value="Rejected">Rejected</option>
                           </select>
                         </td>
@@ -2923,6 +3147,278 @@ export default function AdminPage() {
             </div>
           </div>
         </section>
+
+        {showConstituencyDispatch && (
+          <section className="mt-5 rounded-[30px] border border-yellow-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-yellow-300">
+                  Constituency Dispatch
+                </p>
+                <h2 className="mt-2 text-2xl font-black text-white">
+                  Grouped Due Diligence &amp; Messaging
+                </h2>
+                <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
+                  Use this after Master Selection. The selection outcome remains unchanged; this view only groups applicants by constituency so the team can verify documents first, then save personalised successful-applicant messages for each confirmed group.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={loadConstituencyDispatch}
+                  disabled={dispatchLoading}
+                  className="rounded-2xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {dispatchLoading ? "Refreshing..." : "Refresh Dispatch"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowConstituencyDispatch(false)}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
+                >
+                  Hide Dispatch
+                </button>
+              </div>
+            </div>
+
+            {dispatchLoading ? (
+              <div className="mt-5 rounded-3xl border border-white/10 bg-[#0f172a] p-8 text-center text-sm font-semibold text-slate-400">
+                Loading constituency groups...
+              </div>
+            ) : constituencyDispatchGroups.length === 0 ? (
+              <div className="mt-5 rounded-3xl border border-white/10 bg-[#0f172a] p-8 text-center text-sm font-semibold text-slate-400">
+                No dispatch groups loaded yet. Click Refresh Dispatch.
+              </div>
+            ) : (
+              <div className="mt-5 space-y-4">
+                {constituencyDispatchGroups.map(
+                  ([constituency, statusGroups]) => {
+                    const acceptedGroup = statusGroups.Accepted || [];
+                    const remainingEligibleGroup = statusGroups["Remaining Eligible"] || [];
+                    const rejectedGroup = statusGroups.Rejected || [];
+                    const submittedGroup = statusGroups.Submitted || [];
+                    const groupKey = `${constituency}-Accepted`;
+
+                    return (
+                      <details
+                        key={constituency}
+                        className="overflow-hidden rounded-3xl border border-white/10 bg-[#0f172a]"
+                      >
+                        <summary className="flex cursor-pointer list-none flex-col gap-3 bg-[#111827] px-5 py-4 text-white transition hover:bg-[#172033] md:flex-row md:items-center md:justify-between [&::-webkit-details-marker]:hidden">
+                          <div>
+                            <p className="text-lg font-black">
+                              {constituency}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-slate-400">
+                              Accepted: {acceptedGroup.length} • Remaining Eligible: {remainingEligibleGroup.length} • Rejected: {rejectedGroup.length}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 text-[11px] font-black">
+                            <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-300">
+                              {acceptedGroup.length} Accepted
+                            </span>
+                            <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-yellow-300">
+                              {remainingEligibleGroup.length} Remaining Eligible
+                            </span>
+                            <span className="rounded-full bg-red-500/15 px-3 py-1 text-red-300">
+                              {rejectedGroup.length} Rejected
+                            </span>
+                          </div>
+                        </summary>
+
+                        <div className="space-y-5 p-5">
+                          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                              <div>
+                                <h3 className="text-base font-black text-emerald-300">
+                                  Accepted — due diligence before messaging
+                                </h3>
+                                <p className="mt-2 text-xs leading-5 text-slate-400">
+                                  Check Omang, BGCSE/IGCSE proof, higher qualification evidence where applicable, disability proof where applicable, duplicate risks, and suspicious uploads. Only confirm this group after the review is complete.
+                                </p>
+                              </div>
+
+                              <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#111827] p-3 xl:w-[360px]">
+                                <label className="flex items-start gap-3 text-xs font-semibold leading-5 text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      dispatchDueDiligenceConfirm[groupKey] ||
+                                      false
+                                    }
+                                    onChange={(event) =>
+                                      setDispatchDueDiligenceConfirm((prev) => ({
+                                        ...prev,
+                                        [groupKey]: event.target.checked,
+                                      }))
+                                    }
+                                    className="mt-1 h-4 w-4"
+                                  />
+                                  I confirm due diligence is complete for accepted applicants in {constituency}.
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleSaveGroupMessage(
+                                      constituency,
+                                      "Accepted",
+                                      acceptedGroup,
+                                    )
+                                  }
+                                  disabled={
+                                    dispatchSavingKey === groupKey ||
+                                    acceptedGroup.length === 0 ||
+                                    !dispatchDueDiligenceConfirm[groupKey]
+                                  }
+                                  className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  {dispatchSavingKey === groupKey
+                                    ? "Saving Messages..."
+                                    : "Save Successful Messages"}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+                              {acceptedGroup.length === 0 ? (
+                                <div className="p-4 text-sm font-semibold text-slate-400">
+                                  No accepted applicants in this constituency.
+                                </div>
+                              ) : (
+                                <table className="w-full table-fixed text-[12px]">
+                                  <colgroup>
+                                    <col className="w-[24%]" />
+                                    <col className="w-[26%]" />
+                                    <col className="w-[16%]" />
+                                    <col className="w-[18%]" />
+                                    <col className="w-[16%]" />
+                                  </colgroup>
+                                  <thead className="bg-[#111827] text-slate-300">
+                                    <tr>
+                                      <th className="px-3 py-3 text-left font-black">
+                                        Name
+                                      </th>
+                                      <th className="px-3 py-3 text-left font-black">
+                                        Contact
+                                      </th>
+                                      <th className="px-3 py-3 text-left font-black">
+                                        Score
+                                      </th>
+                                      <th className="px-3 py-3 text-left font-black">
+                                        Documents
+                                      </th>
+                                      <th className="px-3 py-3 text-left font-black">
+                                        Action
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {acceptedGroup.map((application) => (
+                                      <tr
+                                        key={application.applicationId || application.id || application.email}
+                                        className="border-t border-white/10"
+                                      >
+                                        <td className="px-3 py-3 align-top">
+                                          <p className="font-black text-white">
+                                            {application.firstName}{" "}
+                                            {application.lastName}
+                                          </p>
+                                          <p className="mt-1 text-[10px] text-slate-400">
+                                            {application.applicationId}
+                                          </p>
+                                        </td>
+                                        <td className="px-3 py-3 align-top">
+                                          <p className="break-words font-semibold text-slate-300">
+                                            {application.email}
+                                          </p>
+                                          <p className="mt-1 text-[11px] text-slate-400">
+                                            {application.phone}
+                                          </p>
+                                        </td>
+                                        <td className="px-3 py-3 align-top">
+                                          <p className="font-black text-white">
+                                            {application.autoReviewScore ?? "-"}
+                                          </p>
+                                          <p className="mt-1 text-[11px] text-slate-400">
+                                            {application.selectionBucket || "-"}
+                                          </p>
+                                        </td>
+                                        <td className="px-3 py-3 align-top">
+                                          <p className="text-[11px] leading-5 text-slate-300">
+                                            Omang:{" "}
+                                            {application.omangFile ? "Yes" : "No"}
+                                          </p>
+                                          <p className="text-[11px] leading-5 text-slate-300">
+                                            BGCSE:{" "}
+                                            {application.bgcseCertificateFile ||
+                                            application.certificateFile
+                                              ? "Yes"
+                                              : "No"}
+                                          </p>
+                                          <p className="text-[11px] leading-5 text-slate-300">
+                                            Highest:{" "}
+                                            {application.highestQualificationFile
+                                              ? "Yes"
+                                              : "No"}
+                                          </p>
+                                        </td>
+                                        <td className="px-3 py-3 align-top">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setSelectedApplication(application)
+                                            }
+                                            className="rounded-xl bg-blue-600 px-3 py-2 text-[12px] font-bold text-white transition hover:bg-blue-700"
+                                          >
+                                            View
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 xl:grid-cols-2">
+                            <DispatchMiniGroup
+                              title="Remaining Eligible"
+                              count={remainingEligibleGroup.length}
+                              applications={remainingEligibleGroup}
+                              onView={setSelectedApplication}
+                            />
+
+                            <DispatchMiniGroup
+                              title="Rejected"
+                              count={rejectedGroup.length}
+                              applications={rejectedGroup}
+                              onView={setSelectedApplication}
+                              danger
+                            />
+
+                            {submittedGroup.length > 0 && (
+                              <DispatchMiniGroup
+                                title="Submitted"
+                                count={submittedGroup.length}
+                                applications={submittedGroup}
+                                onView={setSelectedApplication}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    );
+                  },
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="mt-5 rounded-[30px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
           <div className="mb-4 flex flex-wrap gap-2">
@@ -3529,12 +4025,12 @@ export default function AdminPage() {
 
                 <button
                   onClick={() =>
-                    handleStatusChange(selectedApplication, "Waiting List")
+                    handleStatusChange(selectedApplication, "Remaining Eligible")
                   }
                   disabled={savingId === selectedApplication.id}
                   className="bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-slate-600 transition disabled:opacity-50"
                 >
-                  Move to Waiting List
+                  Move to Remaining Eligible
                 </button>
               </div>
             </div>
@@ -3641,6 +4137,74 @@ function Detail({ label, value }: { label: string; value?: string | null }) {
     </div>
   );
 }
+
+function DispatchMiniGroup({
+  title,
+  count,
+  applications,
+  onView,
+  danger = false,
+}: {
+  title: string;
+  count: number;
+  applications: Application[];
+  onView: (application: Application) => void;
+  danger?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#111827] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3
+          className={`text-sm font-black ${
+            danger ? "text-red-300" : "text-slate-200"
+          }`}
+        >
+          {title}
+        </h3>
+        <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black text-slate-300">
+          {count}
+        </span>
+      </div>
+
+      {applications.length === 0 ? (
+        <p className="mt-4 text-xs font-semibold text-slate-500">
+          No applicants in this group.
+        </p>
+      ) : (
+        <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+          {applications.map((application) => (
+            <div
+              key={application.applicationId || application.id || application.email}
+              className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-[#0f172a] p-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-xs font-black text-white">
+                  {application.firstName} {application.lastName}
+                </p>
+                <p className="mt-1 break-words text-[11px] text-slate-400">
+                  {application.email}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Score: {application.autoReviewScore ?? "-"} •{" "}
+                  {application.selectionBucket || application.status}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onView(application)}
+                className="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-blue-700"
+              >
+                View
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function LongDetail({
   label,
