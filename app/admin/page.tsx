@@ -190,11 +190,12 @@ const STRATEGIC_COVERAGE_EMAILS = [
   "leepileone66@gmail.com",
   "krasebokwana@gmail.com",
   "",
-  "",
-  "",
-  "",
-  "",
-  "",
+  "dimpho@dichakenyane.com",
+  "sadintseane@gmail.com",
+  "seabekgosiphefo@gmail.com",
+  "tlharesagae@gmail.com",
+  "ilenykk01@gmail.com",
+  "bkgotlele@gmail.com",
   "",
 ];
 
