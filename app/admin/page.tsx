@@ -147,6 +147,24 @@ type DataRequest = {
   completedAt?: string | null;
 };
 
+type SelectionProgress = {
+  active: boolean;
+  title: string;
+  phase: string;
+  detail: string;
+  current: number;
+  total: number;
+};
+
+const EMPTY_SELECTION_PROGRESS: SelectionProgress = {
+  active: false,
+  title: "",
+  phase: "",
+  detail: "",
+  current: 0,
+  total: 0,
+};
+
 type ReportingConstituencyStats = {
   total: number;
   women: number;
@@ -597,6 +615,9 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [masterSelecting, setMasterSelecting] = useState(false);
   const [publishingSelection, setPublishingSelection] = useState(false);
+  const [selectionProgress, setSelectionProgress] = useState<SelectionProgress>(
+    EMPTY_SELECTION_PROGRESS,
+  );
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -1289,6 +1310,7 @@ export default function AdminPage() {
       bucket: string;
     }[],
     chunkSize = 150,
+    onProgress?: (completed: number, total: number) => void,
   ) {
     for (let index = 0; index < updates.length; index += chunkSize) {
       const chunk = updates.slice(index, index + chunkSize);
@@ -1309,6 +1331,8 @@ export default function AdminPage() {
       if (failed && failed.status === "rejected") {
         throw failed.reason;
       }
+
+      onProgress?.(Math.min(index + chunk.length, updates.length), updates.length);
     }
   }
 
@@ -1338,6 +1362,7 @@ export default function AdminPage() {
       selectionBucket: string;
     }[],
     chunkSize = 150,
+    onProgress?: (completed: number, total: number) => void,
   ) {
     for (let index = 0; index < updates.length; index += chunkSize) {
       const chunk = updates.slice(index, index + chunkSize);
@@ -1366,6 +1391,8 @@ export default function AdminPage() {
 
         throw failedRequest.value.error;
       }
+
+      onProgress?.(Math.min(index + chunk.length, updates.length), updates.length);
     }
   }
 
@@ -1383,6 +1410,14 @@ export default function AdminPage() {
     if (!secondConfirm) return;
 
     setPublishingSelection(true);
+    setSelectionProgress({
+      active: true,
+      title: "Publishing selection results",
+      phase: "Loading applications",
+      detail: "Fetching internal held selection results...",
+      current: 0,
+      total: 1,
+    });
 
     let selectionApplications: Application[] = [];
 
@@ -1396,8 +1431,18 @@ export default function AdminPage() {
       console.error("Failed to load applications for publishing:", error);
       alert(message);
       setPublishingSelection(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
       return;
     }
+
+    setSelectionProgress({
+      active: true,
+      title: "Publishing selection results",
+      phase: "Preparing updates",
+      detail: `Checking ${selectionApplications.length.toLocaleString()} applications for publishable internal results...`,
+      current: 0,
+      total: selectionApplications.length || 1,
+    });
 
     const updates = selectionApplications
       .map((application) => {
@@ -1428,11 +1473,30 @@ export default function AdminPage() {
         "No internal held selection results were found to publish. Run selection first, then publish.",
       );
       setPublishingSelection(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
       return;
     }
 
+    setSelectionProgress({
+      active: true,
+      title: "Publishing selection results",
+      phase: "Updating applicant dashboards",
+      detail: "Changing visible statuses in safe chunks. This does not send emails or SMS.",
+      current: 0,
+      total: updates.length || 1,
+    });
+
     try {
-      await updatePublishedSelectionStatusesInChunks(updates);
+      await updatePublishedSelectionStatusesInChunks(updates, 150, (completed, total) => {
+        setSelectionProgress({
+          active: true,
+          title: "Publishing selection results",
+          phase: "Updating applicant dashboards",
+          detail: `Published ${completed.toLocaleString()} of ${total.toLocaleString()} dashboard statuses.`,
+          current: completed,
+          total,
+        });
+      });
     } catch (error) {
       const message =
         error instanceof Error
@@ -1441,6 +1505,7 @@ export default function AdminPage() {
       console.error("Selection publish failed:", error);
       alert(message);
       setPublishingSelection(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
       return;
     }
 
@@ -1488,6 +1553,14 @@ export default function AdminPage() {
       `Selection results published to applicant dashboards.\nAccepted: ${acceptedCount}\nRemaining Eligible: ${remainingEligibleCount}\nRejected: ${rejectedCount}\nEmails/SMS sent: NO`,
     );
 
+    setSelectionProgress({
+      active: false,
+      title: "Publishing complete",
+      phase: "Complete",
+      detail: "Applicant dashboard statuses were updated. No emails or SMS were sent.",
+      current: updates.length,
+      total: updates.length || 1,
+    });
     setPublishingSelection(false);
   }
 
@@ -1604,6 +1677,14 @@ export default function AdminPage() {
     if (!confirmed) return;
 
     setMasterSelecting(true);
+    setSelectionProgress({
+      active: true,
+      title: "Running hidden selection",
+      phase: "Loading applications",
+      detail: "Fetching all applications from Supabase...",
+      current: 0,
+      total: 1,
+    });
 
     let selectionApplications: Application[] = [];
 
@@ -1620,10 +1701,30 @@ export default function AdminPage() {
       );
       alert(message);
       setMasterSelecting(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
       return;
     }
 
-    const reviewed = selectionApplications.map((application) => {
+    setSelectionProgress({
+      active: true,
+      title: "Running hidden selection",
+      phase: "Scoring applications",
+      detail: `Scoring ${selectionApplications.length.toLocaleString()} applications and checking hard-reject rules...`,
+      current: 0,
+      total: selectionApplications.length || 1,
+    });
+
+    const reviewed = selectionApplications.map((application, index) => {
+      if (index % 500 === 0) {
+        setSelectionProgress({
+          active: true,
+          title: "Running hidden selection",
+          phase: "Scoring applications",
+          detail: `Scoring application ${index.toLocaleString()} of ${selectionApplications.length.toLocaleString()}...`,
+          current: index,
+          total: selectionApplications.length || 1,
+        });
+      }
       const review = calculateEligibility(application);
       const age = Number(application.age);
       const isStrategicCoverage =
@@ -1644,6 +1745,15 @@ export default function AdminPage() {
         isMale: normalize(application.gender) === "male",
         hasDisability: isYes(application.disabilityStatus),
       };
+    });
+
+    setSelectionProgress({
+      active: true,
+      title: "Running hidden selection",
+      phase: "Building constituency batches",
+      detail: "Selecting 8 people per constituency for Batch 1 and Batch 2 internally.",
+      current: 0,
+      total: constituencies.length * 2,
     });
 
     const protectedAccepted = reviewed.filter(
@@ -1790,7 +1900,16 @@ export default function AdminPage() {
     }
 
     // Batch 1 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
-    for (const constituency of constituencies) {
+    for (const [constituencyIndex, constituency] of constituencies.entries()) {
+      setSelectionProgress({
+        active: true,
+        title: "Running hidden selection",
+        phase: "Building Batch 1",
+        detail: `Batch 1: processing ${constituency} (${constituencyIndex + 1}/${constituencies.length})`,
+        current: constituencyIndex + 1,
+        total: constituencies.length * 2,
+      });
+
       if (batchOneSelected.size >= BATCH_1_INTAKE) break;
 
       const batchQuota = getConstituencyBatchQuota(constituency, 1);
@@ -1816,7 +1935,16 @@ export default function AdminPage() {
     }
 
     // Batch 2 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
-    for (const constituency of constituencies) {
+    for (const [constituencyIndex, constituency] of constituencies.entries()) {
+      setSelectionProgress({
+        active: true,
+        title: "Running hidden selection",
+        phase: "Building Batch 2",
+        detail: `Batch 2: processing ${constituency} (${constituencyIndex + 1}/${constituencies.length})`,
+        current: constituencies.length + constituencyIndex + 1,
+        total: constituencies.length * 2,
+      });
+
       if (batchTwoSelected.size >= BATCH_2_INTAKE) break;
 
       const batchQuota = getConstituencyBatchQuota(constituency, 2);
@@ -1908,8 +2036,26 @@ export default function AdminPage() {
       })),
     ].filter((update) => !protectedDecisionIds.has(update.app.applicationId));
 
+    setSelectionProgress({
+      active: true,
+      title: "Running hidden selection",
+      phase: "Saving internal results",
+      detail: "Writing internal selection buckets in safe chunks. Applicants still see Submitted.",
+      current: 0,
+      total: updates.length || 1,
+    });
+
     try {
-      await updateReviewFieldsInChunks(updates);
+      await updateReviewFieldsInChunks(updates, 150, (completed, total) => {
+        setSelectionProgress({
+          active: true,
+          title: "Running hidden selection",
+          phase: "Saving internal results",
+          detail: `Saved ${completed.toLocaleString()} of ${total.toLocaleString()} internal selection records.`,
+          current: completed,
+          total,
+        });
+      });
     } catch (error) {
       const message =
         error instanceof Error
@@ -1918,8 +2064,18 @@ export default function AdminPage() {
       console.error("Master selection update failed:", error);
       alert(message);
       setMasterSelecting(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
       return;
     }
+
+    setSelectionProgress({
+      active: true,
+      title: "Running hidden selection",
+      phase: "Refreshing dashboard",
+      detail: "Updating admin view and dashboard stats...",
+      current: updates.length,
+      total: updates.length || 1,
+    });
 
     setApplications((prev) =>
       prev.map((application) => {
@@ -1999,6 +2155,14 @@ export default function AdminPage() {
       `Internal Two-Batch Selection Complete:\nApplicant-facing results visible: ${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "YES" : "NO"}\nProtected Manual Accepted: ${protectedAccepted.length}\nProtected Manual Rejected: ${protectedRejected.length}\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nBatch 1 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_1_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 1 Full Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nBatch 2 Internal Reserved: ${batchTwoSelected.size}/${BATCH_2_INTAKE}\nBatch 2 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_2_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 2 Full Constituency Quotas: ${constituenciesWithFullBatchTwoQuota}/${constituencies.length}\nTotal Auto-Selected For Both Batches: ${selectedForBothBatches.size}/${TOTAL_AUTO_SELECTED_INTAKE}\nProgramme Total: ${TOTAL_PROGRAMME_INTAKE} (${TOTAL_AUTO_SELECTED_INTAKE} auto-selected + ${BATCH_1_MANUAL_REMAINING_SEATS + BATCH_2_MANUAL_REMAINING_SEATS} manual seats)\nWaiting List Counted Only: ${waitingListEligible.length}\nNew Hard Rejects Counted Internally: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}`,
     );
 
+    setSelectionProgress({
+      active: false,
+      title: "Hidden selection complete",
+      phase: "Complete",
+      detail: "Internal selection buckets were saved. Applicants were not notified and visible statuses remain hidden.",
+      current: updates.length,
+      total: updates.length || 1,
+    });
     setMasterSelecting(false);
   }
 
@@ -2847,6 +3011,12 @@ BYWC Oil & Gas Training Programme Team`;
   const pendingRequestsCount = dataRequests.filter(
     (request) => request.status === "pending",
   ).length;
+  const selectionProgressPercent = selectionProgress.total
+    ? Math.min(
+        100,
+        Math.round((selectionProgress.current / selectionProgress.total) * 100),
+      )
+    : 0;
 
   const constituencyDispatchGroups = useMemo(() => {
     const grouped = dispatchApplications.reduce(
@@ -3099,6 +3269,42 @@ BYWC Oil & Gas Training Programme Team`;
                   applicants. The publish button changes applicant dashboard
                   statuses only; it does not send email, SMS or WhatsApp.
                 </p>
+
+                {(selectionProgress.active || masterSelecting || publishingSelection) && (
+                  <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+                          {selectionProgress.title || "Processing"}
+                        </p>
+                        <h3 className="mt-1 text-sm font-black text-white">
+                          {selectionProgress.phase || "Working..."}
+                        </h3>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-300">
+                          {selectionProgress.detail || "Please keep this page open while the operation runs."}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white">
+                        {selectionProgressPercent}%
+                      </div>
+                    </div>
+
+                    <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-orange-500 transition-all duration-300"
+                        style={{ width: `${selectionProgressPercent}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-400">
+                      <span>
+                        {selectionProgress.current.toLocaleString()} / {selectionProgress.total.toLocaleString()}
+                      </span>
+                      <span>Keep page open</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
