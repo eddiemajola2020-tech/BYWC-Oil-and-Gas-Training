@@ -170,12 +170,21 @@ type ReportingStats = {
   extraConstituencyRows: [string, ReportingConstituencyStats][];
 };
 
-const BATCH_1_INTAKE = 500;
-const BATCH_2_INTAKE = 500;
+const CONSTITUENCY_COUNT = 61;
+const BATCH_BASE_PER_CONSTITUENCY = 8;
+const BATCH_1_INTAKE = BATCH_BASE_PER_CONSTITUENCY * CONSTITUENCY_COUNT; // 488 automatic seats: 8 per constituency
+const BATCH_2_INTAKE = BATCH_BASE_PER_CONSTITUENCY * CONSTITUENCY_COUNT; // 488 automatic seats: 8 per constituency
+const BATCH_1_MANUAL_REMAINING_SEATS = 12;
+const BATCH_2_MANUAL_REMAINING_SEATS = 12;
+const TOTAL_PROGRAMME_INTAKE = 1000;
+const BATCH_EXTRA_CONSTITUENCIES = 0;
+const BATCH_1_EXTRA_START_INDEX = 0;
+const BATCH_2_EXTRA_START_INDEX = 0;
+const SELECTION_RESULTS_VISIBLE_TO_APPLICANTS = false;
 const TOTAL_YOUTH_WOMEN = 435;
 const TOTAL_YOUTH_MEN = 315;
 const TOTAL_NON_YOUTH = 250;
-const TOTAL_INTAKE = BATCH_1_INTAKE + BATCH_2_INTAKE;
+const TOTAL_AUTO_SELECTED_INTAKE = BATCH_1_INTAKE + BATCH_2_INTAKE;
 const DISABILITY_CAP = 8;
 const MIN_BGCSE_POINTS = 25;
 const MIN_MOTIVATION_WORDS = 40;
@@ -264,6 +273,14 @@ const constituencies = [
   "Tswapong North",
   "Tswapong South",
 ];
+
+const VALID_CONSTITUENCIES = constituencies.map((constituency) =>
+  normalize(constituency),
+);
+
+function isValidConstituency(value?: string | null) {
+  return VALID_CONSTITUENCIES.includes(normalize(value));
+}
 
 function countWords(text?: string | null) {
   return (text || "").trim().split(/\s+/).filter(Boolean).length;
@@ -419,6 +436,10 @@ function calculateEligibility(application: Application): ReviewDecision {
   const certificatePath =
     application.bgcseCertificateFile || application.certificateFile || "";
   const priorityGroup = getPriorityGroup(application);
+
+  if (!isValidConstituency(application.constituency)) {
+    hardRejectReasons.push("Invalid or unrecognised constituency");
+  }
 
   if (!hasValue(application.omang)) {
     hardRejectReasons.push("Missing Omang / ID number");
@@ -608,9 +629,9 @@ export default function AdminPage() {
   );
   const [showConstituencyDispatch, setShowConstituencyDispatch] =
     useState(false);
-  const [dispatchApplications, setDispatchApplications] = useState<Application[]>(
-    [],
-  );
+  const [dispatchApplications, setDispatchApplications] = useState<
+    Application[]
+  >([]);
   const [dispatchLoading, setDispatchLoading] = useState(false);
   const [dispatchSavingKey, setDispatchSavingKey] = useState<string | null>(
     null,
@@ -620,7 +641,11 @@ export default function AdminPage() {
 
   function formatApplication(item: any): Application {
     return {
-      id: item.id?.toString() || item.application_id || item.email || crypto.randomUUID(),
+      id:
+        item.id?.toString() ||
+        item.application_id ||
+        item.email ||
+        crypto.randomUUID(),
       applicationId: item.application_id,
       firstName: item.first_name,
       lastName: item.last_name,
@@ -705,7 +730,9 @@ export default function AdminPage() {
         getApplicationCount((query) => query.ilike("gender", "female")),
         getApplicationCount((query) => query.ilike("gender", "male")),
         getApplicationCount((query) => query.eq("status", "Submitted")),
-        getApplicationCount((query) => query.eq("status", "Remaining Eligible")),
+        getApplicationCount((query) =>
+          query.eq("status", "Remaining Eligible"),
+        ),
         getApplicationCount((query) => query.eq("status", "Accepted")),
         getApplicationCount((query) => query.eq("status", "Rejected")),
       ]);
@@ -1253,6 +1280,36 @@ export default function AdminPage() {
     if (error) throw error;
   }
 
+  async function updateReviewFieldsInChunks(
+    updates: {
+      app: Application & { review: ReviewDecision };
+      status: ApplicationStatus;
+      bucket: string;
+    }[],
+    chunkSize = 150,
+  ) {
+    for (let index = 0; index < updates.length; index += chunkSize) {
+      const chunk = updates.slice(index, index + chunkSize);
+
+      const results = await Promise.allSettled(
+        chunk.map((update) =>
+          updateReviewFields(
+            update.app,
+            update.app.review,
+            update.status,
+            update.bucket,
+          ),
+        ),
+      );
+
+      const failed = results.find((result) => result.status === "rejected");
+
+      if (failed && failed.status === "rejected") {
+        throw failed.reason;
+      }
+    }
+  }
+
   async function handleStatusChange(
     application: Application,
     newStatus: ApplicationStatus,
@@ -1360,7 +1417,7 @@ export default function AdminPage() {
 
   async function handleMasterSelection() {
     const confirmed = window.confirm(
-      "Run quota-based master selection? This will update applicant statuses.",
+      "Run internal quota-based master selection? This will rank applicants and save internal selection buckets. Applicant-facing results remain hidden until publishing is enabled.",
     );
 
     if (!confirmed) return;
@@ -1376,7 +1433,10 @@ export default function AdminPage() {
         error instanceof Error
           ? error.message
           : "Failed to load all applications for master selection";
-      console.error("Failed to load all applications for master selection:", error);
+      console.error(
+        "Failed to load all applications for master selection:",
+        error,
+      );
       alert(message);
       setMasterSelecting(false);
       return;
@@ -1386,9 +1446,10 @@ export default function AdminPage() {
       const review = calculateEligibility(application);
       const age = Number(application.age);
       const isStrategicCoverage =
-        !review.isHardRejected && isStrategicCoverageParticipant(application.email);
-      const rankingScore = review.score +
-        (isStrategicCoverage ? STRATEGIC_COVERAGE_BOOST : 0);
+        !review.isHardRejected &&
+        isStrategicCoverageParticipant(application.email);
+      const rankingScore =
+        review.score + (isStrategicCoverage ? STRATEGIC_COVERAGE_BOOST : 0);
 
       return {
         ...application,
@@ -1417,161 +1478,17 @@ export default function AdminPage() {
     );
 
     const hardRejected = reviewed.filter(
-      (app) => app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
+      (app) =>
+        app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
     );
     const eligible = reviewed
       .filter(
-        (app) => !app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
+        (app) =>
+          !app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
       )
-      .sort((a, b) => b.rankingScore - a.rankingScore);
-
-    const selected = new Map<string, (typeof reviewed)[number]>();
-    const constituencyCounts: Record<string, number> = {};
-    let disabledSelected = 0;
-
-    function canSelect(candidate: (typeof reviewed)[number]) {
-      if (selected.has(candidate.applicationId)) return false;
-      if (candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
-        return false;
-      }
-      return true;
-    }
-
-    function addSelected(candidate: (typeof reviewed)[number]) {
-      selected.set(candidate.applicationId, candidate);
-      const constituency = candidate.constituency || "Unknown";
-      constituencyCounts[constituency] =
-        (constituencyCounts[constituency] || 0) + 1;
-
-      if (candidate.hasDisability) {
-        disabledSelected += 1;
-      }
-    }
-
-    function selectBestFromPool(
-      pool: typeof eligible,
-      limit: number,
-      bucket: string,
-      preferUnderConstituencyLimit = true,
-    ) {
-      let added = 0;
-
-      for (const candidate of pool) {
-        if (added >= limit) break;
-        if (selected.size >= TOTAL_INTAKE) break;
-        if (!canSelect(candidate)) continue;
-
-        const constituency = candidate.constituency || "Unknown";
-        const currentConstituencyCount = constituencyCounts[constituency] || 0;
-
-        if (
-          preferUnderConstituencyLimit &&
-          currentConstituencyCount >= PREFERRED_CONSTITUENCY_DEPTH
-        ) {
-          continue;
-        }
-
-        candidate.review.selectionBucket = bucket;
-        addSelected(candidate);
-        added += 1;
-      }
-
-      return added;
-    }
-
-    function getNormalSelectionBucket(candidate: (typeof reviewed)[number]) {
-      if (candidate.isYouth && candidate.isFemale) return "Youth Women Priority";
-      if (candidate.isYouth && candidate.isMale) return "Youth Men Priority";
-      return "Non-Youth Allocation";
-    }
-
-    for (const acceptedApplication of protectedAccepted) {
-      acceptedApplication.review.selectionBucket =
-        acceptedApplication.selectionBucket || "Manual Accepted - Protected";
-      addSelected(acceptedApplication);
-    }
-
-    const strategicCoveragePool = eligible.filter(
-      (app) => app.isStrategicCoverage,
-    );
-
-    for (const candidate of strategicCoveragePool) {
-      if (selected.size >= TOTAL_INTAKE) break;
-      if (!canSelect(candidate)) continue;
-
-      candidate.review.selectionBucket = getNormalSelectionBucket(candidate);
-      addSelected(candidate);
-    }
-
-    // Phase 1: protect the national promise — at least one eligible applicant per constituency where available.
-    for (const constituency of constituencies) {
-      if (selected.size >= TOTAL_INTAKE) break;
-
-      const candidate = eligible
-        .filter((app) => app.constituency === constituency)
-        .sort((a, b) => b.rankingScore - a.rankingScore)
-        .find((app) => canSelect(app));
-
-      if (!candidate) continue;
-
-      candidate.review.selectionBucket = "Constituency Minimum";
-      addSelected(candidate);
-    }
-
-    const selectedArray = () => Array.from(selected.values());
-
-    function currentCount(
-      predicate: (app: (typeof reviewed)[number]) => boolean,
-    ) {
-      return selectedArray().filter(predicate).length;
-    }
-
-    const youthWomenPool = eligible.filter(
-      (app) => app.isYouth && app.isFemale,
-    );
-    const youthMenPool = eligible.filter((app) => app.isYouth && app.isMale);
-    const nonYouthPool = eligible.filter((app) => !app.isYouth);
-
-    selectBestFromPool(
-      youthWomenPool,
-      Math.max(
-        0,
-        TOTAL_YOUTH_WOMEN - currentCount((app) => app.isYouth && app.isFemale),
-      ),
-      "Youth Women Priority",
-    );
-
-    selectBestFromPool(
-      youthMenPool,
-      Math.max(
-        0,
-        TOTAL_YOUTH_MEN - currentCount((app) => app.isYouth && app.isMale),
-      ),
-      "Youth Men Priority",
-    );
-
-    selectBestFromPool(
-      nonYouthPool,
-      Math.max(0, TOTAL_NON_YOUTH - currentCount((app) => !app.isYouth)),
-      "Non-Youth Allocation",
-    );
-
-    // Phase 3: if there are still seats, fill by strongest eligible applicants regardless of constituency depth.
-    if (selected.size < TOTAL_INTAKE) {
-      selectBestFromPool(
-        eligible,
-        TOTAL_INTAKE - selected.size,
-        "Overflow Merit Fill",
-        false,
-      );
-    }
-
-    const autoSelectedForTwoBatches = selectedArray()
-      .filter((app) => !protectedDecisionIds.has(app.applicationId))
       .sort((a, b) => {
-        if (b.rankingScore !== a.rankingScore) {
+        if (b.rankingScore !== a.rankingScore)
           return b.rankingScore - a.rankingScore;
-        }
 
         return (
           (b.review.documentCompletenessScore || 0) -
@@ -1579,33 +1496,174 @@ export default function AdminPage() {
         );
       });
 
-    const protectedBatchOneSelected = protectedAccepted.slice(0, BATCH_1_INTAKE);
-    const protectedAcceptedOverBatchOne = protectedAccepted.slice(BATCH_1_INTAKE);
-    const batchOneAutoSlots = Math.max(
+    type ReviewedApplication = (typeof reviewed)[number];
+
+    const batchOneSelected = new Map<string, ReviewedApplication>();
+    const batchTwoSelected = new Map<string, ReviewedApplication>();
+    const selectedForBothBatches = new Map<string, ReviewedApplication>();
+    const batchOneConstituencyCounts: Record<string, number> = {};
+    const batchTwoConstituencyCounts: Record<string, number> = {};
+    const totalConstituencyCounts: Record<string, number> = {};
+    let disabledSelected = 0;
+
+    function countSelectedConstituency(candidate: ReviewedApplication) {
+      const constituency = candidate.constituency || "Unknown";
+      totalConstituencyCounts[constituency] =
+        (totalConstituencyCounts[constituency] || 0) + 1;
+    }
+
+    function canSelect(candidate: ReviewedApplication) {
+      if (selectedForBothBatches.has(candidate.applicationId)) return false;
+      if (candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
+        return false;
+      }
+      return true;
+    }
+
+    function getNormalSelectionBucket(candidate: ReviewedApplication) {
+      if (candidate.isYouth && candidate.isFemale)
+        return "Youth Women Priority";
+      if (candidate.isYouth && candidate.isMale) return "Youth Men Priority";
+      return "Non-Youth Allocation";
+    }
+
+    function getConstituencyBatchQuota(
+      constituency: string,
+      batchNumber: 1 | 2,
+    ) {
+      const constituencyIndex = constituencies.indexOf(constituency);
+
+      if (constituencyIndex === -1) return 0;
+
+      const extraStartIndex =
+        batchNumber === 1
+          ? BATCH_1_EXTRA_START_INDEX
+          : BATCH_2_EXTRA_START_INDEX;
+      const extraEndIndex = extraStartIndex + BATCH_EXTRA_CONSTITUENCIES;
+      const hasExtraSeat =
+        constituencyIndex >= extraStartIndex && constituencyIndex < extraEndIndex;
+
+      return BATCH_BASE_PER_CONSTITUENCY + (hasExtraSeat ? 1 : 0);
+    }
+
+    function addToBatchOne(candidate: ReviewedApplication, bucket: string) {
+      if (batchOneSelected.size >= BATCH_1_INTAKE) return false;
+      if (!canSelect(candidate)) return false;
+
+      candidate.review.selectionBucket = bucket;
+      batchOneSelected.set(candidate.applicationId, candidate);
+      selectedForBothBatches.set(candidate.applicationId, candidate);
+      countSelectedConstituency(candidate);
+
+      const constituency = candidate.constituency || "Unknown";
+      batchOneConstituencyCounts[constituency] =
+        (batchOneConstituencyCounts[constituency] || 0) + 1;
+
+      if (candidate.hasDisability) {
+        disabledSelected += 1;
+      }
+
+      return true;
+    }
+
+    function addToBatchTwo(candidate: ReviewedApplication, bucket: string) {
+      if (batchTwoSelected.size >= BATCH_2_INTAKE) return false;
+      if (!canSelect(candidate)) return false;
+
+      candidate.review.selectionBucket = bucket;
+      batchTwoSelected.set(candidate.applicationId, candidate);
+      selectedForBothBatches.set(candidate.applicationId, candidate);
+      countSelectedConstituency(candidate);
+
+      const constituency = candidate.constituency || "Unknown";
+      batchTwoConstituencyCounts[constituency] =
+        (batchTwoConstituencyCounts[constituency] || 0) + 1;
+
+      if (candidate.hasDisability) {
+        disabledSelected += 1;
+      }
+
+      return true;
+    }
+
+    const protectedBatchOneSelected = protectedAccepted.slice(
       0,
-      BATCH_1_INTAKE - protectedBatchOneSelected.length,
+      BATCH_1_INTAKE,
     );
-    const batchOneSelected = autoSelectedForTwoBatches.slice(
-      0,
-      batchOneAutoSlots,
-    );
-    const batchTwoRemainingSlots = Math.max(
-      0,
-      TOTAL_INTAKE - protectedAccepted.length - batchOneSelected.length,
-    );
-    const batchTwoSelected = autoSelectedForTwoBatches.slice(
-      batchOneAutoSlots,
-      batchOneAutoSlots + batchTwoRemainingSlots,
-    );
-    const selectedForTwoBatches = [
-      ...protectedBatchOneSelected,
-      ...protectedAcceptedOverBatchOne,
-      ...batchOneSelected,
-      ...batchTwoSelected,
-    ];
+    const protectedAcceptedOverBatchOne =
+      protectedAccepted.slice(BATCH_1_INTAKE);
+
+    for (const acceptedApplication of protectedBatchOneSelected) {
+      addToBatchOne(
+        acceptedApplication,
+        acceptedApplication.selectionBucket || "Manual Accepted - Protected",
+      );
+    }
+
+    for (const acceptedApplication of protectedAcceptedOverBatchOne) {
+      addToBatchTwo(
+        acceptedApplication,
+        acceptedApplication.selectionBucket ||
+          "Manual Accepted Over Batch 1 - Protected",
+      );
+    }
+
+    // Batch 1 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
+    for (const constituency of constituencies) {
+      if (batchOneSelected.size >= BATCH_1_INTAKE) break;
+
+      const batchQuota = getConstituencyBatchQuota(constituency, 1);
+      const constituencyPool = eligible.filter(
+        (app) => app.constituency === constituency,
+      );
+
+      for (const candidate of constituencyPool) {
+        if (batchOneSelected.size >= BATCH_1_INTAKE) break;
+
+        const currentConstituencyCount =
+          batchOneConstituencyCounts[constituency] || 0;
+
+        if (currentConstituencyCount >= batchQuota) {
+          break;
+        }
+
+        addToBatchOne(
+          candidate,
+          `Batch 1 - Constituency Quota ${batchQuota} / ${getNormalSelectionBucket(candidate)}`,
+        );
+      }
+    }
+
+    // Batch 2 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
+    for (const constituency of constituencies) {
+      if (batchTwoSelected.size >= BATCH_2_INTAKE) break;
+
+      const batchQuota = getConstituencyBatchQuota(constituency, 2);
+      const constituencyPool = eligible.filter(
+        (app) => app.constituency === constituency,
+      );
+
+      for (const candidate of constituencyPool) {
+        if (batchTwoSelected.size >= BATCH_2_INTAKE) break;
+
+        const currentConstituencyCount =
+          batchTwoConstituencyCounts[constituency] || 0;
+
+        if (currentConstituencyCount >= batchQuota) {
+          break;
+        }
+
+        addToBatchTwo(
+          candidate,
+          `Batch 2 - Constituency Quota ${batchQuota} / ${getNormalSelectionBucket(candidate)}`,
+        );
+      }
+    }
 
     const selectedBatchIds = new Set(
-      selectedForTwoBatches.map((app) => app.applicationId),
+      Array.from(selectedForBothBatches.values()).map(
+        (app) => app.applicationId,
+      ),
     );
 
     const constituencyWaitingListCounts: Record<string, number> = {};
@@ -1633,49 +1691,53 @@ export default function AdminPage() {
       return true;
     });
 
+    const hiddenApplicantStatus: ApplicationStatus = "Submitted";
+    const batchOneStatus: ApplicationStatus =
+      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
+        ? "Accepted"
+        : hiddenApplicantStatus;
+    const batchTwoStatus: ApplicationStatus =
+      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
+        ? "Remaining Eligible"
+        : hiddenApplicantStatus;
+    const rejectedStatus: ApplicationStatus =
+      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
+        ? "Rejected"
+        : hiddenApplicantStatus;
+
     const updates = [
-      ...batchOneSelected.map((app) => ({
+      ...Array.from(batchOneSelected.values()).map((app) => ({
         app,
-        status: "Accepted" as ApplicationStatus,
-        bucket: `Batch 1 - Accepted Now / ${app.review.selectionBucket || "Selected"}`,
+        status: batchOneStatus,
+        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / ${app.review.selectionBucket || "Batch 1 Selected"}`,
       })),
-      ...batchTwoSelected.map((app) => ({
+      ...Array.from(batchTwoSelected.values()).map((app) => ({
         app,
-        status: "Remaining Eligible" as ApplicationStatus,
-        bucket: `Batch 2 - Later Cycle / ${app.review.selectionBucket || "Selected"}`,
-      })),
-      ...waitingListEligible.map((app) => ({
-        app,
-        status: "Remaining Eligible" as ApplicationStatus,
-        bucket: "Waiting List - Eligible Not In Batch 1 Or 2",
+        status: batchTwoStatus,
+        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / ${app.review.selectionBucket || "Batch 2 Selected"}`,
       })),
       ...hardRejected.map((app) => ({
         app,
-        status: "Rejected" as ApplicationStatus,
-        bucket: "Rejected - Hard Gate",
+        status: rejectedStatus,
+        bucket: app.review.hardRejectReason.includes(
+          "Invalid or unrecognised constituency",
+        )
+          ? "Internal Hold - Do Not Notify / Rejected - Invalid Constituency"
+          : "Internal Hold - Do Not Notify / Rejected - Hard Gate",
       })),
-    ].filter(
-      (update) => !protectedDecisionIds.has(update.app.applicationId),
-    );
+    ].filter((update) => !protectedDecisionIds.has(update.app.applicationId));
 
-    for (const update of updates) {
-      try {
-        await updateReviewFields(
-          update.app,
-          update.app.review,
-          update.status,
-          update.bucket,
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Master selection update failed";
-        console.error("Master selection update failed:", error);
-        alert(message);
-        setMasterSelecting(false);
-        return;
-      }
+    try {
+      await updateReviewFieldsInChunks(updates);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Master selection update failed";
+      console.error("Master selection update failed:", error);
+      alert(message);
+      setMasterSelecting(false);
+      return;
     }
 
     setApplications((prev) =>
@@ -1702,29 +1764,58 @@ export default function AdminPage() {
 
     loadDashboardStats();
 
+    const batchOneQuotaNineConstituencies = constituencies.filter(
+      (constituency) => getConstituencyBatchQuota(constituency, 1) === 9,
+    ).length;
+    const batchTwoQuotaNineConstituencies = constituencies.filter(
+      (constituency) => getConstituencyBatchQuota(constituency, 2) === 9,
+    ).length;
+    const constituenciesWithFullBatchOneQuota = constituencies.filter(
+      (constituency) =>
+        (batchOneConstituencyCounts[constituency] || 0) >=
+        getConstituencyBatchQuota(constituency, 1),
+    ).length;
+    const constituenciesWithFullBatchTwoQuota = constituencies.filter(
+      (constituency) =>
+        (batchTwoConstituencyCounts[constituency] || 0) >=
+        getConstituencyBatchQuota(constituency, 2),
+    ).length;
+
     await logAdminAction({
       action: "master_selection",
       details: {
-        totalSelectedForBatches: selectedForTwoBatches.length,
+        resultsVisibleToApplicants: SELECTION_RESULTS_VISIBLE_TO_APPLICANTS,
+        batchOneRule:
+          "Constituency quota only: all 61 constituencies receive 8 automatic seats; 12 seats remain for manual admin allocation",
+        batchTwoRule:
+          "Constituency quota only: all 61 constituencies receive 8 automatic seats; 12 seats remain for manual admin allocation",
+        totalSelectedForBatches: selectedForBothBatches.size,
         protectedManualAccepted: protectedAccepted.length,
         protectedManualRejected: protectedRejected.length,
-        batchOneAccepted: protectedBatchOneSelected.length + batchOneSelected.length,
-        batchOneAutoAccepted: batchOneSelected.length,
-        batchTwoLaterCycle: protectedAcceptedOverBatchOne.length + batchTwoSelected.length,
-        batchTwoAutoLaterCycle: batchTwoSelected.length,
+        batchOneSelected: batchOneSelected.size,
+        batchTwoSelected: batchTwoSelected.size,
         waitingListEligible: waitingListEligible.length,
         rejected: hardRejected.length,
         disabledSelected,
-        constituenciesRepresented: Object.keys(constituencyCounts).length,
-        totalIntake: TOTAL_INTAKE,
+        constituenciesRepresented: Object.keys(totalConstituencyCounts).length,
+        constituenciesWithFullBatchOneQuota,
+        constituenciesWithFullBatchTwoQuota,
+        totalIntake: TOTAL_AUTO_SELECTED_INTAKE,
         batchOneIntake: BATCH_1_INTAKE,
         batchTwoIntake: BATCH_2_INTAKE,
+        batchBasePerConstituency: BATCH_BASE_PER_CONSTITUENCY,
+        batchExtraConstituencies: BATCH_EXTRA_CONSTITUENCIES,
+        batchOneManualRemainingSeats: BATCH_1_MANUAL_REMAINING_SEATS,
+        batchTwoManualRemainingSeats: BATCH_2_MANUAL_REMAINING_SEATS,
+        totalProgrammeIntake: TOTAL_PROGRAMME_INTAKE,
+        batchOneQuotaNineConstituencies,
+        batchTwoQuotaNineConstituencies,
         remainingEligiblePerConstituency: WAITING_LIST_PER_CONSTITUENCY,
       },
     });
 
     alert(
-      `Two-Batch Selection Complete:\nProtected Manual Accepted: ${protectedAccepted.length}\nProtected Manual Rejected: ${protectedRejected.length}\nBatch 1 Accepted Now: ${protectedBatchOneSelected.length + batchOneSelected.length} (${batchOneSelected.length} newly selected)\nBatch 2 Later Cycle: ${protectedAcceptedOverBatchOne.length + batchTwoSelected.length} (${batchTwoSelected.length} newly reserved)\nTotal Selected For Both Batches: ${selectedForTwoBatches.length}/${TOTAL_INTAKE}\nWaiting List: ${waitingListEligible.length} (max ${WAITING_LIST_PER_CONSTITUENCY} per constituency)\nNew Hard Rejects: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}\nConstituencies Represented: ${Object.keys(constituencyCounts).length}`,
+      `Internal Two-Batch Selection Complete:\nApplicant-facing results visible: ${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "YES" : "NO"}\nProtected Manual Accepted: ${protectedAccepted.length}\nProtected Manual Rejected: ${protectedRejected.length}\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nBatch 1 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_1_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 1 Full Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nBatch 2 Internal Reserved: ${batchTwoSelected.size}/${BATCH_2_INTAKE}\nBatch 2 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_2_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 2 Full Constituency Quotas: ${constituenciesWithFullBatchTwoQuota}/${constituencies.length}\nTotal Auto-Selected For Both Batches: ${selectedForBothBatches.size}/${TOTAL_AUTO_SELECTED_INTAKE}\nProgramme Total: ${TOTAL_PROGRAMME_INTAKE} (${TOTAL_AUTO_SELECTED_INTAKE} auto-selected + ${BATCH_1_MANUAL_REMAINING_SEATS + BATCH_2_MANUAL_REMAINING_SEATS} manual seats)\nWaiting List Counted Only: ${waitingListEligible.length}\nNew Hard Rejects Counted Internally: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}`,
     );
 
     setMasterSelecting(false);
@@ -2620,7 +2711,11 @@ BYWC Oil & Gas Training Programme Team`;
   const statusNavItems = [
     { label: "All Applications", value: "All", count: totalApplications },
     { label: "Submitted", value: "Submitted", count: submittedCount },
-    { label: "Remaining Eligible", value: "Remaining Eligible", count: remainingEligibleCount },
+    {
+      label: "Remaining Eligible",
+      value: "Remaining Eligible",
+      count: remainingEligibleCount,
+    },
     { label: "Accepted", value: "Accepted", count: acceptedCount },
     { label: "Rejected", value: "Rejected", count: rejectedCount },
   ];
@@ -3134,7 +3229,11 @@ BYWC Oil & Gas Training Programme Team`;
                   <tbody>
                     {filteredApplications.map((application) => (
                       <tr
-                        key={application.applicationId || application.id || application.email}
+                        key={
+                          application.applicationId ||
+                          application.id ||
+                          application.email
+                        }
                         className="border-t border-white/10 transition hover:bg-white/[0.03]"
                       >
                         <td className="px-3 py-3 align-top">
@@ -3197,7 +3296,9 @@ BYWC Oil & Gas Training Programme Team`;
                             className="w-full rounded-xl border border-white/10 bg-[#111827] px-2 py-2 text-[12px] font-bold text-white outline-none disabled:opacity-50"
                           >
                             <option value="Submitted">Submitted</option>
-                            <option value="Remaining Eligible">Remaining Eligible</option>
+                            <option value="Remaining Eligible">
+                              Remaining Eligible
+                            </option>
                             <option value="Accepted">Accepted</option>
                             <option value="Rejected">Rejected</option>
                             <option value="Rejected">Rejected</option>
@@ -3279,7 +3380,10 @@ BYWC Oil & Gas Training Programme Team`;
                   Grouped Due Diligence &amp; Messaging
                 </h2>
                 <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
-                  Use this after Master Selection. The selection outcome remains unchanged; this view only groups applicants by constituency so the team can verify documents first, then save personalised successful-applicant messages for each confirmed group.
+                  Use this after Master Selection. The selection outcome remains
+                  unchanged; this view only groups applicants by constituency so
+                  the team can verify documents first, then save personalised
+                  successful-applicant messages for each confirmed group.
                 </p>
               </div>
 
@@ -3316,7 +3420,8 @@ BYWC Oil & Gas Training Programme Team`;
                 {constituencyDispatchGroups.map(
                   ([constituency, statusGroups]) => {
                     const acceptedGroup = statusGroups.Accepted || [];
-                    const remainingEligibleGroup = statusGroups["Remaining Eligible"] || [];
+                    const remainingEligibleGroup =
+                      statusGroups["Remaining Eligible"] || [];
                     const rejectedGroup = statusGroups.Rejected || [];
                     const submittedGroup = statusGroups.Submitted || [];
                     const groupKey = `${constituency}-Accepted`;
@@ -3328,11 +3433,11 @@ BYWC Oil & Gas Training Programme Team`;
                       >
                         <summary className="flex cursor-pointer list-none flex-col gap-3 bg-[#111827] px-5 py-4 text-white transition hover:bg-[#172033] md:flex-row md:items-center md:justify-between [&::-webkit-details-marker]:hidden">
                           <div>
-                            <p className="text-lg font-black">
-                              {constituency}
-                            </p>
+                            <p className="text-lg font-black">{constituency}</p>
                             <p className="mt-1 text-xs font-semibold text-slate-400">
-                              Accepted: {acceptedGroup.length} • Remaining Eligible: {remainingEligibleGroup.length} • Rejected: {rejectedGroup.length}
+                              Accepted: {acceptedGroup.length} • Remaining
+                              Eligible: {remainingEligibleGroup.length} •
+                              Rejected: {rejectedGroup.length}
                             </p>
                           </div>
 
@@ -3357,7 +3462,11 @@ BYWC Oil & Gas Training Programme Team`;
                                   Accepted — due diligence before messaging
                                 </h3>
                                 <p className="mt-2 text-xs leading-5 text-slate-400">
-                                  Check Omang, BGCSE/IGCSE proof, higher qualification evidence where applicable, disability proof where applicable, duplicate risks, and suspicious uploads. Only confirm this group after the review is complete.
+                                  Check Omang, BGCSE/IGCSE proof, higher
+                                  qualification evidence where applicable,
+                                  disability proof where applicable, duplicate
+                                  risks, and suspicious uploads. Only confirm
+                                  this group after the review is complete.
                                 </p>
                               </div>
 
@@ -3370,14 +3479,17 @@ BYWC Oil & Gas Training Programme Team`;
                                       false
                                     }
                                     onChange={(event) =>
-                                      setDispatchDueDiligenceConfirm((prev) => ({
-                                        ...prev,
-                                        [groupKey]: event.target.checked,
-                                      }))
+                                      setDispatchDueDiligenceConfirm(
+                                        (prev) => ({
+                                          ...prev,
+                                          [groupKey]: event.target.checked,
+                                        }),
+                                      )
                                     }
                                     className="mt-1 h-4 w-4"
                                   />
-                                  I confirm due diligence is complete for accepted applicants in {constituency}.
+                                  I confirm due diligence is complete for
+                                  accepted applicants in {constituency}.
                                 </label>
 
                                 <button
@@ -3439,7 +3551,11 @@ BYWC Oil & Gas Training Programme Team`;
                                   <tbody>
                                     {acceptedGroup.map((application) => (
                                       <tr
-                                        key={application.applicationId || application.id || application.email}
+                                        key={
+                                          application.applicationId ||
+                                          application.id ||
+                                          application.email
+                                        }
                                         className="border-t border-white/10"
                                       >
                                         <td className="px-3 py-3 align-top">
@@ -3470,7 +3586,9 @@ BYWC Oil & Gas Training Programme Team`;
                                         <td className="px-3 py-3 align-top">
                                           <p className="text-[11px] leading-5 text-slate-300">
                                             Omang:{" "}
-                                            {application.omangFile ? "Yes" : "No"}
+                                            {application.omangFile
+                                              ? "Yes"
+                                              : "No"}
                                           </p>
                                           <p className="text-[11px] leading-5 text-slate-300">
                                             BGCSE:{" "}
@@ -3490,7 +3608,9 @@ BYWC Oil & Gas Training Programme Team`;
                                           <button
                                             type="button"
                                             onClick={() =>
-                                              setSelectedApplication(application)
+                                              setSelectedApplication(
+                                                application,
+                                              )
                                             }
                                             className="rounded-xl bg-blue-600 px-3 py-2 text-[12px] font-bold text-white transition hover:bg-blue-700"
                                           >
@@ -3579,7 +3699,7 @@ BYWC Oil & Gas Training Programme Team`;
                 </div>
 
                 <span className="w-fit rounded-full bg-orange-500/15 px-3 py-1 text-xs font-black text-orange-300">
-                  Target: {TOTAL_INTAKE}
+                  Target: {TOTAL_AUTO_SELECTED_INTAKE}
                 </span>
               </div>
 
@@ -4145,7 +4265,10 @@ BYWC Oil & Gas Training Programme Team`;
 
                 <button
                   onClick={() =>
-                    handleStatusChange(selectedApplication, "Remaining Eligible")
+                    handleStatusChange(
+                      selectedApplication,
+                      "Remaining Eligible",
+                    )
                   }
                   disabled={savingId === selectedApplication.id}
                   className="bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-slate-600 transition disabled:opacity-50"
@@ -4294,7 +4417,9 @@ function DispatchMiniGroup({
         <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
           {applications.map((application) => (
             <div
-              key={application.applicationId || application.id || application.email}
+              key={
+                application.applicationId || application.id || application.email
+              }
               className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-[#0f172a] p-3"
             >
               <div className="min-w-0">
@@ -4324,7 +4449,6 @@ function DispatchMiniGroup({
     </div>
   );
 }
-
 
 function LongDetail({
   label,
