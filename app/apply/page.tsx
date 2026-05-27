@@ -205,7 +205,7 @@ const steps = [
   "Review",
 ];
 
-const APPLICATION_CLOSE_DATE = new Date("2026-05-27T23:59:59");
+const APPLICATION_CLOSE_DATE = new Date("2026-05-27T06:36:00");
 const PRIVACY_NOTICE_VERSION = "BYWC-DPA-v1.1";
 
 function countWords(text: string) {
