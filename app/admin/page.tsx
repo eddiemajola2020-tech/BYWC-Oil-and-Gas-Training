@@ -1280,15 +1280,94 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
+  function formatSelectionUpdateError(
+    application: Application,
+    action: string,
+    error: unknown,
+  ) {
+    const applicantName = `${application.firstName || ""} ${application.lastName || ""}`
+      .replace(/\s+/g, " ")
+      .trim();
+    const applicantLabel = [
+      applicantName || "Unknown applicant",
+      application.email || "no email",
+      application.applicationId || "no application_id",
+    ].join(" | ");
+
+    if (error instanceof Error) {
+      return new Error(`${action} failed for ${applicantLabel}: ${error.message}`);
+    }
+
+    if (error && typeof error === "object" && "message" in error) {
+      return new Error(
+        `${action} failed for ${applicantLabel}: ${String(
+          (error as { message?: unknown }).message,
+        )}`,
+      );
+    }
+
+    return new Error(`${action} failed for ${applicantLabel}.`);
+  }
+
+  async function updateApplicationBySafeKey(
+    application: Application,
+    payload: Record<string, unknown>,
+    actionLabel: string,
+  ) {
+    const updateByIdFirst = Boolean(application.id);
+
+    if (updateByIdFirst) {
+      const { data, error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .update(payload)
+        .eq("id", application.id)
+        .select("id,application_id")
+        .maybeSingle();
+
+      if (error) {
+        throw formatSelectionUpdateError(application, actionLabel, error);
+      }
+
+      if (data) return;
+    }
+
+    if (!application.applicationId) {
+      throw formatSelectionUpdateError(
+        application,
+        actionLabel,
+        new Error("Missing both database id and application_id for update."),
+      );
+    }
+
+    const { data, error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update(payload)
+      .eq("application_id", application.applicationId)
+      .select("id,application_id")
+      .maybeSingle();
+
+    if (error) {
+      throw formatSelectionUpdateError(application, actionLabel, error);
+    }
+
+    if (!data) {
+      throw formatSelectionUpdateError(
+        application,
+        actionLabel,
+        new Error("No matching database row was updated."),
+      );
+    }
+  }
+
   async function updateReviewFields(
     application: Application,
     review: ReviewDecision,
     status: ApplicationStatus,
     selectionBucket = review.selectionBucket,
   ) {
-    const { error } = await supabase
-      .from(APPLICATIONS_TABLE)
-      .update({
+    await updateApplicationBySafeKey(
+      application,
+      {
         status,
         auto_review_score: review.score,
         auto_review_result: review.result,
@@ -1297,10 +1376,29 @@ export default function AdminPage() {
         selection_bucket: selectionBucket,
         hard_reject_reason: review.hardRejectReason,
         document_completeness_score: review.documentCompletenessScore,
-      })
-      .eq("application_id", application.applicationId);
+      },
+      "Applicant review update",
+    );
+  }
 
-    if (error) throw error;
+  async function updateInternalSelectionFields(
+    application: Application,
+    review: ReviewDecision,
+    selectionBucket = review.selectionBucket,
+  ) {
+    await updateApplicationBySafeKey(
+      application,
+      {
+        auto_review_score: review.score,
+        auto_review_result: review.result,
+        auto_review_notes: review.notes,
+        priority_group: review.priorityGroup,
+        selection_bucket: selectionBucket,
+        hard_reject_reason: review.hardRejectReason,
+        document_completeness_score: review.documentCompletenessScore,
+      },
+      "Internal selection update",
+    );
   }
 
   async function updateReviewFieldsInChunks(
@@ -1309,27 +1407,18 @@ export default function AdminPage() {
       status: ApplicationStatus;
       bucket: string;
     }[],
-    chunkSize = 150,
+    chunkSize = 50,
     onProgress?: (completed: number, total: number) => void,
   ) {
     for (let index = 0; index < updates.length; index += chunkSize) {
       const chunk = updates.slice(index, index + chunkSize);
 
-      const results = await Promise.allSettled(
-        chunk.map((update) =>
-          updateReviewFields(
-            update.app,
-            update.app.review,
-            update.status,
-            update.bucket,
-          ),
-        ),
-      );
-
-      const failed = results.find((result) => result.status === "rejected");
-
-      if (failed && failed.status === "rejected") {
-        throw failed.reason;
+      for (const update of chunk) {
+        await updateInternalSelectionFields(
+          update.app,
+          update.app.review,
+          update.bucket,
+        );
       }
 
       onProgress?.(Math.min(index + chunk.length, updates.length), updates.length);
@@ -2025,6 +2114,11 @@ export default function AdminPage() {
         status: batchTwoStatus,
         bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / ${app.review.selectionBucket || "Batch 2 Selected"}`,
       })),
+      ...waitingListEligible.map((app) => ({
+        app,
+        status: hiddenApplicantStatus,
+        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / Remaining Eligible - Constituency Reserve`,
+      })),
       ...hardRejected.map((app) => ({
         app,
         status: rejectedStatus,
@@ -2046,7 +2140,7 @@ export default function AdminPage() {
     });
 
     try {
-      await updateReviewFieldsInChunks(updates, 150, (completed, total) => {
+      await updateReviewFieldsInChunks(updates, 50, (completed, total) => {
         setSelectionProgress({
           active: true,
           title: "Running hidden selection",
@@ -2267,24 +2361,17 @@ export default function AdminPage() {
   }
 
   function getSuccessfulApplicantMessage(application: Application) {
-    const fullName = `${application.firstName || ""} ${
-      application.lastName || ""
-    }`
-      .replace(/\s+/g, " ")
-      .trim();
-    const displayName = fullName || "Participant";
-    const constituency = application.constituency || "your constituency";
+    return `Congratulations! 🎉
 
-    return `Dear ${displayName},
+You have been successfully selected to participate in the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026.
 
-Congratulations.
+Participants are expected to arrive at the University of Botswana, Gaborone Campus on 31 May 2026 before 12:00 noon to allow for accommodation allocation and settling in well on time.
 
-Following the completion of the BYWC Oil & Gas Training Programme selection process and constituency-level due diligence review for ${constituency}, you have been selected as one of the successful applicants for the programme.
+Participants are expected to attend the official programme launch on 01 June 2026 at Ba Isago University from 8:00 AM.
 
-Please note that further communication will follow regarding the next steps, reporting arrangements, training schedule, and any additional verification or onboarding requirements.
+Please bring your Omang/ID card or a copy for registration and verification purposes.
 
-Kind regards,
-BYWC Oil & Gas Training Programme Team`;
+Welcome to the programme.`;
   }
 
   async function handleSaveGroupMessage(
