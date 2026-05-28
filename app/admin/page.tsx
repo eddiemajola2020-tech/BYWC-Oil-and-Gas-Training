@@ -255,7 +255,7 @@ const STRATEGIC_COVERAGE_EMAILS = [
   "tlharesagae@gmail.com",
   "ilenykk01@gmail.com",
   "bkgotlele@gmail.com",
-  "lindiwematlhaku@gmail.com",
+  "",
 ];
 
 const constituencies = [
@@ -2057,35 +2057,7 @@ export default function AdminPage() {
         (app) => app.constituency === constituency,
       );
 
-      const strategicCoveragePool = constituencyPool.filter(
-        (app) => app.isStrategicCoverage,
-      );
-      const standardConstituencyPool = constituencyPool.filter(
-        (app) => !app.isStrategicCoverage,
-      );
-
-      // Priority influencer / sponsor-critical candidates are selected first,
-      // but only after passing hard eligibility gates and still inside the
-      // same 8-per-constituency Batch 1 cap. This keeps the priority logic
-      // hidden while preventing sponsor-critical applicants from being pushed
-      // out by normal ranking alone.
-      for (const candidate of strategicCoveragePool) {
-        if (batchOneSelected.size >= BATCH_1_INTAKE) break;
-
-        const currentConstituencyCount =
-          batchOneConstituencyCounts[constituency] || 0;
-
-        if (currentConstituencyCount >= BATCH_BASE_PER_CONSTITUENCY) {
-          break;
-        }
-
-        addToBatchOne(
-          candidate,
-          `Batch 1 - Constituency Quota ${BATCH_BASE_PER_CONSTITUENCY} / Strategic Coverage Priority / ${getNormalSelectionBucket(candidate)}`,
-        );
-      }
-
-      for (const candidate of standardConstituencyPool) {
+      for (const candidate of constituencyPool) {
         if (batchOneSelected.size >= BATCH_1_INTAKE) break;
 
         const currentConstituencyCount =
@@ -3116,32 +3088,60 @@ Welcome to the programme.`;
     : 0;
 
   const constituencyDispatchGroups = useMemo(() => {
-    const grouped = dispatchApplications.reduce(
-      (acc, application) => {
-        const constituency = application.constituency || "Unknown";
-        const status = getAdminSelectionStatus(application);
+    const createEmptyDispatchStatusGroup = () =>
+      ({
+        "Remaining Eligible": [],
+        Rejected: [],
+        Submitted: [],
+        Accepted: [],
+      }) as Record<ApplicationStatus, Application[]>;
 
-        if (!acc[constituency]) {
-          acc[constituency] = {
-            "Remaining Eligible": [],
-            Rejected: [],
-            Submitted: [],
-            Accepted: [],
-          } as Record<ApplicationStatus, Application[]>;
-        }
-
-        if (!acc[constituency][status]) {
-          acc[constituency][status] = [];
-        }
-
-        acc[constituency][status].push(application);
-
+    const grouped = constituencies.reduce(
+      (acc, constituency) => {
+        acc[constituency] = createEmptyDispatchStatusGroup();
         return acc;
       },
       {} as Record<string, Record<ApplicationStatus, Application[]>>,
     );
 
-    return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+    const otherConstituencyGroup = "Other / Invalid Constituencies";
+
+    for (const application of dispatchApplications) {
+      const rawConstituency = application.constituency || "";
+      const officialConstituency = constituencies.find(
+        (constituency) => normalize(constituency) === normalize(rawConstituency),
+      );
+      const dispatchConstituency = officialConstituency || otherConstituencyGroup;
+      const status = getAdminSelectionStatus(application);
+
+      if (!grouped[dispatchConstituency]) {
+        grouped[dispatchConstituency] = createEmptyDispatchStatusGroup();
+      }
+
+      grouped[dispatchConstituency][status].push(application);
+    }
+
+    const officialGroups = constituencies.map((constituency) => [
+      constituency,
+      grouped[constituency] || createEmptyDispatchStatusGroup(),
+    ]) as [string, Record<ApplicationStatus, Application[]>][];
+
+    const otherGroup = grouped[otherConstituencyGroup];
+    const otherGroupTotal = otherGroup
+      ? Object.values(otherGroup).reduce((total, list) => total + list.length, 0)
+      : 0;
+
+    if (otherGroup && otherGroupTotal > 0) {
+      return [
+        ...officialGroups,
+        [otherConstituencyGroup, otherGroup] as [
+          string,
+          Record<ApplicationStatus, Application[]>,
+        ],
+      ];
+    }
+
+    return officialGroups;
   }, [dispatchApplications]);
 
   if (loading) {
