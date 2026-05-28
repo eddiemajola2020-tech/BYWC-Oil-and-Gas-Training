@@ -76,6 +76,7 @@ type ReviewDecision = {
 
 type Application = {
   id: string;
+  databaseId?: string | null;
   applicationId: string;
   firstName: string;
   lastName: string;
@@ -669,6 +670,7 @@ export default function AdminPage() {
         item.application_id ||
         item.email ||
         crypto.randomUUID(),
+      databaseId: item.id?.toString() || null,
       applicationId: item.application_id,
       firstName: item.first_name,
       lastName: item.last_name,
@@ -1309,18 +1311,73 @@ export default function AdminPage() {
     return new Error(`${action} failed for ${applicantLabel}.`);
   }
 
+  function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function isRetryableSelectionError(error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : error && typeof error === "object" && "message" in error
+          ? String((error as { message?: unknown }).message)
+          : String(error || "");
+
+    return [
+      "ERR_CONNECTION_CLOSED",
+      "Failed to fetch",
+      "NetworkError",
+      "Load failed",
+      "timeout",
+      "connection",
+      "fetch",
+      "503",
+      "504",
+      "502",
+      "429",
+    ].some((fragment) =>
+      message.toLowerCase().includes(fragment.toLowerCase()),
+    );
+  }
+
+  async function retrySelectionUpdate(
+    action: () => Promise<void>,
+    maxAttempts = 4,
+  ) {
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await action();
+        return;
+      } catch (error) {
+        lastError = error;
+
+        if (!isRetryableSelectionError(error) || attempt === maxAttempts) {
+          throw error;
+        }
+
+        await sleep(500 * attempt);
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Selection update failed after retry attempts.");
+  }
+
   async function updateApplicationBySafeKey(
     application: Application,
     payload: Record<string, unknown>,
     actionLabel: string,
   ) {
-    const updateByIdFirst = Boolean(application.id);
+    const updateByIdFirst = Boolean(application.databaseId);
 
     if (updateByIdFirst) {
       const { data, error } = await supabase
         .from(APPLICATIONS_TABLE)
         .update(payload)
-        .eq("id", application.id)
+        .eq("id", application.databaseId)
         .select("id,application_id")
         .maybeSingle();
 
@@ -1407,22 +1464,42 @@ export default function AdminPage() {
       status: ApplicationStatus;
       bucket: string;
     }[],
-    chunkSize = 50,
-    onProgress?: (completed: number, total: number) => void,
+    chunkSize = 25,
+    onProgress?: (completed: number, total: number, failed: number) => void,
   ) {
+    const failures: string[] = [];
+    let completed = 0;
+
     for (let index = 0; index < updates.length; index += chunkSize) {
       const chunk = updates.slice(index, index + chunkSize);
 
       for (const update of chunk) {
-        await updateInternalSelectionFields(
-          update.app,
-          update.app.review,
-          update.bucket,
-        );
+        try {
+          await retrySelectionUpdate(() =>
+            updateInternalSelectionFields(
+              update.app,
+              update.app.review,
+              update.bucket,
+            ),
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Unknown internal selection update failure";
+
+          failures.push(message);
+          console.error("Internal selection row failed:", message, update.app);
+        } finally {
+          completed += 1;
+          onProgress?.(completed, updates.length, failures.length);
+        }
       }
 
-      onProgress?.(Math.min(index + chunk.length, updates.length), updates.length);
+      await sleep(250);
     }
+
+    return failures;
   }
 
   function getPublishedStatusFromSelectionBucket(
@@ -1450,39 +1527,45 @@ export default function AdminPage() {
       status: ApplicationStatus;
       selectionBucket: string;
     }[],
-    chunkSize = 150,
-    onProgress?: (completed: number, total: number) => void,
+    chunkSize = 25,
+    onProgress?: (completed: number, total: number, failed: number) => void,
   ) {
+    const failures: string[] = [];
+    let completed = 0;
+
     for (let index = 0; index < updates.length; index += chunkSize) {
       const chunk = updates.slice(index, index + chunkSize);
 
-      const results = await Promise.allSettled(
-        chunk.map((update) =>
-          supabase
-            .from(APPLICATIONS_TABLE)
-            .update({
-              status: update.status,
-              selection_bucket: update.selectionBucket,
-            })
-            .eq("application_id", update.application.applicationId),
-        ),
-      );
+      for (const update of chunk) {
+        try {
+          await retrySelectionUpdate(() =>
+            updateApplicationBySafeKey(
+              update.application,
+              {
+                status: update.status,
+                selection_bucket: update.selectionBucket,
+              },
+              "Selection publish update",
+            ),
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Unknown selection publish update failure";
 
-      const failedRequest = results.find((result) => {
-        if (result.status === "rejected") return true;
-        return Boolean(result.value.error);
-      });
-
-      if (failedRequest) {
-        if (failedRequest.status === "rejected") {
-          throw failedRequest.reason;
+          failures.push(message);
+          console.error("Selection publish row failed:", message, update.application);
+        } finally {
+          completed += 1;
+          onProgress?.(completed, updates.length, failures.length);
         }
-
-        throw failedRequest.value.error;
       }
 
-      onProgress?.(Math.min(index + chunk.length, updates.length), updates.length);
+      await sleep(250);
     }
+
+    return failures;
   }
 
   async function handlePublishSelectionResults() {
@@ -1575,13 +1658,15 @@ export default function AdminPage() {
       total: updates.length || 1,
     });
 
+    let publishFailures: string[] = [];
+
     try {
-      await updatePublishedSelectionStatusesInChunks(updates, 150, (completed, total) => {
+      publishFailures = await updatePublishedSelectionStatusesInChunks(updates, 25, (completed, total, failed) => {
         setSelectionProgress({
           active: true,
           title: "Publishing selection results",
           phase: "Updating applicant dashboards",
-          detail: `Published ${completed.toLocaleString()} of ${total.toLocaleString()} dashboard statuses.`,
+          detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} dashboard statuses. Failed: ${failed.toLocaleString()}.`,
           current: completed,
           total,
         });
@@ -1611,7 +1696,9 @@ export default function AdminPage() {
     await logAdminAction({
       action: "selection_publish",
       details: {
-        totalPublished: updates.length,
+        totalPublished: updates.length - publishFailures.length,
+        failedToPublish: publishFailures.length,
+        firstPublishFailures: publishFailures.slice(0, 10),
         accepted: acceptedCount,
         remainingEligible: remainingEligibleCount,
         rejected: rejectedCount,
@@ -2139,13 +2226,15 @@ export default function AdminPage() {
       total: updates.length || 1,
     });
 
+    let internalSelectionFailures: string[] = [];
+
     try {
-      await updateReviewFieldsInChunks(updates, 50, (completed, total) => {
+      internalSelectionFailures = await updateReviewFieldsInChunks(updates, 25, (completed, total, failed) => {
         setSelectionProgress({
           active: true,
           title: "Running hidden selection",
           phase: "Saving internal results",
-          detail: `Saved ${completed.toLocaleString()} of ${total.toLocaleString()} internal selection records.`,
+          detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} internal selection records. Failed: ${failed.toLocaleString()}.`,
           current: completed,
           total,
         });
@@ -2216,6 +2305,10 @@ export default function AdminPage() {
       action: "master_selection",
       details: {
         resultsVisibleToApplicants: SELECTION_RESULTS_VISIBLE_TO_APPLICANTS,
+        internalSelectionUpdatesAttempted: updates.length,
+        internalSelectionUpdatesSaved: updates.length - internalSelectionFailures.length,
+        internalSelectionUpdatesFailed: internalSelectionFailures.length,
+        firstInternalSelectionFailures: internalSelectionFailures.slice(0, 10),
         batchOneRule:
           "Constituency quota only: all 61 constituencies receive 8 automatic seats; 12 seats remain for manual admin allocation",
         batchTwoRule:
@@ -2253,7 +2346,9 @@ export default function AdminPage() {
       active: false,
       title: "Hidden selection complete",
       phase: "Complete",
-      detail: "Internal selection buckets were saved. Applicants were not notified and visible statuses remain hidden.",
+      detail: internalSelectionFailures.length
+        ? "Internal selection completed with some failed row updates. Applicants were not notified and visible statuses remain hidden."
+        : "Internal selection buckets were saved. Applicants were not notified and visible statuses remain hidden.",
       current: updates.length,
       total: updates.length || 1,
     });
