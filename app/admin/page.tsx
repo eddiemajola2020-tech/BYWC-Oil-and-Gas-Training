@@ -25,30 +25,30 @@ function normalizeApplicationStatus(value?: string | null): ApplicationStatus {
   return "Submitted";
 }
 
-function getAdminSelectionLabel(application: Pick<Application, "status" | "selectionBucket">) {
+function getAdminSelectionStatus(application: {
+  status?: string | null;
+  selectionBucket?: string | null;
+}): ApplicationStatus {
   const bucket = application.selectionBucket || "";
 
-  if (bucket.includes("Batch 1 -")) return "Batch 1 Selected";
-  if (bucket.includes("Batch 2 -")) return "Batch 2 Reserved";
+  if (bucket.includes("Batch 1 -")) return "Accepted";
   if (bucket.includes("Remaining Eligible")) return "Remaining Eligible";
   if (bucket.includes("Rejected -")) return "Rejected";
 
   return normalizeApplicationStatus(application.status);
 }
 
-function getAdminSelectionStatus(application: Pick<Application, "status" | "selectionBucket">): ApplicationStatus {
-  const label = getAdminSelectionLabel(application);
+function getAdminSelectionLabel(application: {
+  status?: string | null;
+  selectionBucket?: string | null;
+}) {
+  const adminStatus = getAdminSelectionStatus(application);
 
-  if (label === "Batch 1 Selected") return "Accepted";
-  if (label === "Batch 2 Reserved") return "Remaining Eligible";
-  if (label === "Remaining Eligible") return "Remaining Eligible";
-  if (label === "Rejected") return "Rejected";
+  if (adminStatus === "Accepted") return "Batch 1 Selected";
+  if (adminStatus === "Remaining Eligible") return "Remaining Eligible";
+  if (adminStatus === "Rejected") return "Internal Rejected";
 
-  return normalizeApplicationStatus(application.status);
-}
-
-function isInternalBatchOneSelection(selectionBucket?: string | null) {
-  return Boolean((selectionBucket || "").includes("Batch 1 -"));
+  return "Submitted";
 }
 
 type AuditAction =
@@ -73,7 +73,6 @@ type DashboardStats = {
   women: number;
   men: number;
   submitted: number;
-  internalBatchOne: number;
   remainingEligible: number;
   accepted: number;
   rejected: number;
@@ -84,7 +83,6 @@ const EMPTY_DASHBOARD_STATS: DashboardStats = {
   women: 0,
   men: 0,
   submitted: 0,
-  internalBatchOne: 0,
   remainingEligible: 0,
   accepted: 0,
   rejected: 0,
@@ -104,7 +102,6 @@ type ReviewDecision = {
 
 type Application = {
   id: string;
-  databaseId?: string | null;
   applicationId: string;
   firstName: string;
   lastName: string;
@@ -698,7 +695,6 @@ export default function AdminPage() {
         item.application_id ||
         item.email ||
         crypto.randomUUID(),
-      databaseId: item.id?.toString() || null,
       applicationId: item.application_id,
       firstName: item.first_name,
       lastName: item.last_name,
@@ -775,7 +771,6 @@ export default function AdminPage() {
         women,
         men,
         submitted,
-        internalBatchOne,
         remainingEligible,
         accepted,
         rejected,
@@ -783,15 +778,20 @@ export default function AdminPage() {
         getApplicationCount(),
         getApplicationCount((query) => query.ilike("gender", "female")),
         getApplicationCount((query) => query.ilike("gender", "male")),
-        getApplicationCount((query) => query.eq("status", "Submitted")),
         getApplicationCount((query) =>
-          query.ilike("selection_bucket", "%Batch 1 -%"),
+          query
+            .eq("status", "Submitted")
+            .or("selection_bucket.is.null,selection_bucket.eq."),
         ),
         getApplicationCount((query) =>
-          query.eq("status", "Remaining Eligible"),
+          query.ilike("selection_bucket", "%Remaining Eligible%"),
         ),
-        getApplicationCount((query) => query.eq("status", "Accepted")),
-        getApplicationCount((query) => query.eq("status", "Rejected")),
+        getApplicationCount((query) =>
+          query.ilike("selection_bucket", "%Batch 1%"),
+        ),
+        getApplicationCount((query) =>
+          query.or("status.eq.Rejected,selection_bucket.ilike.%Rejected%"),
+        ),
       ]);
 
       setDashboardStats({
@@ -799,7 +799,6 @@ export default function AdminPage() {
         women,
         men,
         submitted,
-        internalBatchOne,
         remainingEligible,
         accepted,
         rejected,
@@ -995,14 +994,16 @@ export default function AdminPage() {
       .order("created_at", { ascending: false })
       .range(from, to);
 
-    if (statusFilter === "Internal Batch 1") {
-      query = query.ilike("selection_bucket", "%Batch 1 -%");
-    } else if (statusFilter === "Internal Remaining Eligible") {
+    if (statusFilter === "Submitted") {
+      query = query
+        .eq("status", "Submitted")
+        .or("selection_bucket.is.null,selection_bucket.eq.");
+    } else if (statusFilter === "Batch 1 Selected") {
+      query = query.ilike("selection_bucket", "%Batch 1%");
+    } else if (statusFilter === "Remaining Eligible") {
       query = query.ilike("selection_bucket", "%Remaining Eligible%");
-    } else if (statusFilter === "Internal Rejected") {
-      query = query.ilike("selection_bucket", "%Rejected -%");
-    } else if (statusFilter !== "All") {
-      query = query.eq("status", statusFilter);
+    } else if (statusFilter === "Rejected") {
+      query = query.or("status.eq.Rejected,selection_bucket.ilike.%Rejected%");
     }
 
     if (cleanedSearch) {
@@ -1321,149 +1322,15 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-  function formatSelectionUpdateError(
-    application: Application,
-    action: string,
-    error: unknown,
-  ) {
-    const applicantName = `${application.firstName || ""} ${application.lastName || ""}`
-      .replace(/\s+/g, " ")
-      .trim();
-    const applicantLabel = [
-      applicantName || "Unknown applicant",
-      application.email || "no email",
-      application.applicationId || "no application_id",
-    ].join(" | ");
-
-    if (error instanceof Error) {
-      return new Error(`${action} failed for ${applicantLabel}: ${error.message}`);
-    }
-
-    if (error && typeof error === "object" && "message" in error) {
-      return new Error(
-        `${action} failed for ${applicantLabel}: ${String(
-          (error as { message?: unknown }).message,
-        )}`,
-      );
-    }
-
-    return new Error(`${action} failed for ${applicantLabel}.`);
-  }
-
-  function sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  function isRetryableSelectionError(error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : error && typeof error === "object" && "message" in error
-          ? String((error as { message?: unknown }).message)
-          : String(error || "");
-
-    return [
-      "ERR_CONNECTION_CLOSED",
-      "Failed to fetch",
-      "NetworkError",
-      "Load failed",
-      "timeout",
-      "connection",
-      "fetch",
-      "503",
-      "504",
-      "502",
-      "429",
-    ].some((fragment) =>
-      message.toLowerCase().includes(fragment.toLowerCase()),
-    );
-  }
-
-  async function retrySelectionUpdate(
-    action: () => Promise<void>,
-    maxAttempts = 4,
-  ) {
-    let lastError: unknown = null;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        await action();
-        return;
-      } catch (error) {
-        lastError = error;
-
-        if (!isRetryableSelectionError(error) || attempt === maxAttempts) {
-          throw error;
-        }
-
-        await sleep(500 * attempt);
-      }
-    }
-
-    throw lastError instanceof Error
-      ? lastError
-      : new Error("Selection update failed after retry attempts.");
-  }
-
-  async function updateApplicationBySafeKey(
-    application: Application,
-    payload: Record<string, unknown>,
-    actionLabel: string,
-  ) {
-    const updateByIdFirst = Boolean(application.databaseId);
-
-    if (updateByIdFirst) {
-      const { data, error } = await supabase
-        .from(APPLICATIONS_TABLE)
-        .update(payload)
-        .eq("id", application.databaseId)
-        .select("id,application_id")
-        .maybeSingle();
-
-      if (error) {
-        throw formatSelectionUpdateError(application, actionLabel, error);
-      }
-
-      if (data) return;
-    }
-
-    if (!application.applicationId) {
-      throw formatSelectionUpdateError(
-        application,
-        actionLabel,
-        new Error("Missing both database id and application_id for update."),
-      );
-    }
-
-    const { data, error } = await supabase
-      .from(APPLICATIONS_TABLE)
-      .update(payload)
-      .eq("application_id", application.applicationId)
-      .select("id,application_id")
-      .maybeSingle();
-
-    if (error) {
-      throw formatSelectionUpdateError(application, actionLabel, error);
-    }
-
-    if (!data) {
-      throw formatSelectionUpdateError(
-        application,
-        actionLabel,
-        new Error("No matching database row was updated."),
-      );
-    }
-  }
-
   async function updateReviewFields(
     application: Application,
     review: ReviewDecision,
     status: ApplicationStatus,
     selectionBucket = review.selectionBucket,
   ) {
-    await updateApplicationBySafeKey(
-      application,
-      {
+    const { error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update({
         status,
         auto_review_score: review.score,
         auto_review_result: review.result,
@@ -1472,29 +1339,10 @@ export default function AdminPage() {
         selection_bucket: selectionBucket,
         hard_reject_reason: review.hardRejectReason,
         document_completeness_score: review.documentCompletenessScore,
-      },
-      "Applicant review update",
-    );
-  }
+      })
+      .eq("application_id", application.applicationId);
 
-  async function updateInternalSelectionFields(
-    application: Application,
-    review: ReviewDecision,
-    selectionBucket = review.selectionBucket,
-  ) {
-    await updateApplicationBySafeKey(
-      application,
-      {
-        auto_review_score: review.score,
-        auto_review_result: review.result,
-        auto_review_notes: review.notes,
-        priority_group: review.priorityGroup,
-        selection_bucket: selectionBucket,
-        hard_reject_reason: review.hardRejectReason,
-        document_completeness_score: review.documentCompletenessScore,
-      },
-      "Internal selection update",
-    );
+    if (error) throw error;
   }
 
   async function updateReviewFieldsInChunks(
@@ -1503,42 +1351,31 @@ export default function AdminPage() {
       status: ApplicationStatus;
       bucket: string;
     }[],
-    chunkSize = 25,
-    onProgress?: (completed: number, total: number, failed: number) => void,
+    chunkSize = 150,
+    onProgress?: (completed: number, total: number) => void,
   ) {
-    const failures: string[] = [];
-    let completed = 0;
-
     for (let index = 0; index < updates.length; index += chunkSize) {
       const chunk = updates.slice(index, index + chunkSize);
 
-      for (const update of chunk) {
-        try {
-          await retrySelectionUpdate(() =>
-            updateInternalSelectionFields(
-              update.app,
-              update.app.review,
-              update.bucket,
-            ),
-          );
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Unknown internal selection update failure";
+      const results = await Promise.allSettled(
+        chunk.map((update) =>
+          updateReviewFields(
+            update.app,
+            update.app.review,
+            update.status,
+            update.bucket,
+          ),
+        ),
+      );
 
-          failures.push(message);
-          console.error("Internal selection row failed:", message, update.app);
-        } finally {
-          completed += 1;
-          onProgress?.(completed, updates.length, failures.length);
-        }
+      const failed = results.find((result) => result.status === "rejected");
+
+      if (failed && failed.status === "rejected") {
+        throw failed.reason;
       }
 
-      await sleep(250);
+      onProgress?.(Math.min(index + chunk.length, updates.length), updates.length);
     }
-
-    return failures;
   }
 
   function getPublishedStatusFromSelectionBucket(
@@ -1566,45 +1403,39 @@ export default function AdminPage() {
       status: ApplicationStatus;
       selectionBucket: string;
     }[],
-    chunkSize = 25,
-    onProgress?: (completed: number, total: number, failed: number) => void,
+    chunkSize = 150,
+    onProgress?: (completed: number, total: number) => void,
   ) {
-    const failures: string[] = [];
-    let completed = 0;
-
     for (let index = 0; index < updates.length; index += chunkSize) {
       const chunk = updates.slice(index, index + chunkSize);
 
-      for (const update of chunk) {
-        try {
-          await retrySelectionUpdate(() =>
-            updateApplicationBySafeKey(
-              update.application,
-              {
-                status: update.status,
-                selection_bucket: update.selectionBucket,
-              },
-              "Selection publish update",
-            ),
-          );
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Unknown selection publish update failure";
+      const results = await Promise.allSettled(
+        chunk.map((update) =>
+          supabase
+            .from(APPLICATIONS_TABLE)
+            .update({
+              status: update.status,
+              selection_bucket: update.selectionBucket,
+            })
+            .eq("application_id", update.application.applicationId),
+        ),
+      );
 
-          failures.push(message);
-          console.error("Selection publish row failed:", message, update.application);
-        } finally {
-          completed += 1;
-          onProgress?.(completed, updates.length, failures.length);
+      const failedRequest = results.find((result) => {
+        if (result.status === "rejected") return true;
+        return Boolean(result.value.error);
+      });
+
+      if (failedRequest) {
+        if (failedRequest.status === "rejected") {
+          throw failedRequest.reason;
         }
+
+        throw failedRequest.value.error;
       }
 
-      await sleep(250);
+      onProgress?.(Math.min(index + chunk.length, updates.length), updates.length);
     }
-
-    return failures;
   }
 
   async function handlePublishSelectionResults() {
@@ -1697,15 +1528,13 @@ export default function AdminPage() {
       total: updates.length || 1,
     });
 
-    let publishFailures: string[] = [];
-
     try {
-      publishFailures = await updatePublishedSelectionStatusesInChunks(updates, 25, (completed, total, failed) => {
+      await updatePublishedSelectionStatusesInChunks(updates, 150, (completed, total) => {
         setSelectionProgress({
           active: true,
           title: "Publishing selection results",
           phase: "Updating applicant dashboards",
-          detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} dashboard statuses. Failed: ${failed.toLocaleString()}.`,
+          detail: `Published ${completed.toLocaleString()} of ${total.toLocaleString()} dashboard statuses.`,
           current: completed,
           total,
         });
@@ -1735,9 +1564,7 @@ export default function AdminPage() {
     await logAdminAction({
       action: "selection_publish",
       details: {
-        totalPublished: updates.length - publishFailures.length,
-        failedToPublish: publishFailures.length,
-        firstPublishFailures: publishFailures.slice(0, 10),
+        totalPublished: updates.length,
         accepted: acceptedCount,
         remainingEligible: remainingEligibleCount,
         rejected: rejectedCount,
@@ -1886,7 +1713,7 @@ export default function AdminPage() {
 
   async function handleMasterSelection() {
     const confirmed = window.confirm(
-      "Run Batch 1 hidden selection now? This will select up to 488 applicants internally only: 8 per constituency. Applicant-facing statuses will remain unchanged until you publish results later.",
+      "Run internal quota-based master selection? This will rank applicants and save internal selection buckets. Applicant-facing results remain hidden until publishing is enabled.",
     );
 
     if (!confirmed) return;
@@ -1894,7 +1721,7 @@ export default function AdminPage() {
     setMasterSelecting(true);
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
+      title: "Running hidden selection",
       phase: "Loading applications",
       detail: "Fetching all applications from Supabase...",
       current: 0,
@@ -1909,9 +1736,9 @@ export default function AdminPage() {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to load all applications for Batch 1 selection";
+          : "Failed to load all applications for master selection";
       console.error(
-        "Failed to load all applications for Batch 1 selection:",
+        "Failed to load all applications for master selection:",
         error,
       );
       alert(message);
@@ -1922,7 +1749,7 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
+      title: "Running hidden selection",
       phase: "Scoring applications",
       detail: `Scoring ${selectionApplications.length.toLocaleString()} applications and checking hard-reject rules...`,
       current: 0,
@@ -1933,14 +1760,13 @@ export default function AdminPage() {
       if (index % 500 === 0) {
         setSelectionProgress({
           active: true,
-          title: "Running Batch 1 hidden selection",
+          title: "Running hidden selection",
           phase: "Scoring applications",
           detail: `Scoring application ${index.toLocaleString()} of ${selectionApplications.length.toLocaleString()}...`,
           current: index,
           total: selectionApplications.length || 1,
         });
       }
-
       const review = calculateEligibility(application);
       const age = Number(application.age);
       const isStrategicCoverage =
@@ -1965,22 +1791,37 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
-      phase: "Building Batch 1",
-      detail: "Selecting up to 8 eligible applicants per constituency for today's Batch 1 only.",
+      title: "Running hidden selection",
+      phase: "Building constituency batches",
+      detail: "Selecting 8 people per constituency for Batch 1 and Batch 2 internally.",
       current: 0,
-      total: constituencies.length,
+      total: constituencies.length * 2,
     });
 
-    type ReviewedApplication = (typeof reviewed)[number];
+    const protectedAccepted = reviewed.filter(
+      (app) => app.status === "Accepted",
+    );
+    const protectedRejected = reviewed.filter(
+      (app) => app.status === "Rejected",
+    );
+    const protectedDecisionIds = new Set(
+      [...protectedAccepted, ...protectedRejected].map(
+        (app) => app.applicationId,
+      ),
+    );
 
-    const hardRejected = reviewed.filter((app) => app.isHardRejected);
+    const hardRejected = reviewed.filter(
+      (app) =>
+        app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
+    );
     const eligible = reviewed
-      .filter((app) => !app.isHardRejected)
+      .filter(
+        (app) =>
+          !app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
+      )
       .sort((a, b) => {
-        if (b.rankingScore !== a.rankingScore) {
+        if (b.rankingScore !== a.rankingScore)
           return b.rankingScore - a.rankingScore;
-        }
 
         return (
           (b.review.documentCompletenessScore || 0) -
@@ -1988,13 +1829,24 @@ export default function AdminPage() {
         );
       });
 
+    type ReviewedApplication = (typeof reviewed)[number];
+
     const batchOneSelected = new Map<string, ReviewedApplication>();
+    const batchTwoSelected = new Map<string, ReviewedApplication>();
+    const selectedForBothBatches = new Map<string, ReviewedApplication>();
     const batchOneConstituencyCounts: Record<string, number> = {};
+    const batchTwoConstituencyCounts: Record<string, number> = {};
+    const totalConstituencyCounts: Record<string, number> = {};
     let disabledSelected = 0;
 
+    function countSelectedConstituency(candidate: ReviewedApplication) {
+      const constituency = candidate.constituency || "Unknown";
+      totalConstituencyCounts[constituency] =
+        (totalConstituencyCounts[constituency] || 0) + 1;
+    }
+
     function canSelect(candidate: ReviewedApplication) {
-      if (!candidate.applicationId) return false;
-      if (batchOneSelected.has(candidate.applicationId)) return false;
+      if (selectedForBothBatches.has(candidate.applicationId)) return false;
       if (candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
         return false;
       }
@@ -2002,11 +1854,29 @@ export default function AdminPage() {
     }
 
     function getNormalSelectionBucket(candidate: ReviewedApplication) {
-      if (candidate.isYouth && candidate.isFemale) {
+      if (candidate.isYouth && candidate.isFemale)
         return "Youth Women Priority";
-      }
       if (candidate.isYouth && candidate.isMale) return "Youth Men Priority";
       return "Non-Youth Allocation";
+    }
+
+    function getConstituencyBatchQuota(
+      constituency: string,
+      batchNumber: 1 | 2,
+    ) {
+      const constituencyIndex = constituencies.indexOf(constituency);
+
+      if (constituencyIndex === -1) return 0;
+
+      const extraStartIndex =
+        batchNumber === 1
+          ? BATCH_1_EXTRA_START_INDEX
+          : BATCH_2_EXTRA_START_INDEX;
+      const extraEndIndex = extraStartIndex + BATCH_EXTRA_CONSTITUENCIES;
+      const hasExtraSeat =
+        constituencyIndex >= extraStartIndex && constituencyIndex < extraEndIndex;
+
+      return BATCH_BASE_PER_CONSTITUENCY + (hasExtraSeat ? 1 : 0);
     }
 
     function addToBatchOne(candidate: ReviewedApplication, bucket: string) {
@@ -2015,6 +1885,8 @@ export default function AdminPage() {
 
       candidate.review.selectionBucket = bucket;
       batchOneSelected.set(candidate.applicationId, candidate);
+      selectedForBothBatches.set(candidate.applicationId, candidate);
+      countSelectedConstituency(candidate);
 
       const constituency = candidate.constituency || "Unknown";
       batchOneConstituencyCounts[constituency] =
@@ -2027,21 +1899,62 @@ export default function AdminPage() {
       return true;
     }
 
-    // Batch 1 rule for today: 8 applicants per constituency only.
-    // This creates 488 internal selections: 61 constituencies x 8.
-    // The extra 12 seats to reach 500 are deliberately left for manual admin allocation.
+    function addToBatchTwo(candidate: ReviewedApplication, bucket: string) {
+      if (batchTwoSelected.size >= BATCH_2_INTAKE) return false;
+      if (!canSelect(candidate)) return false;
+
+      candidate.review.selectionBucket = bucket;
+      batchTwoSelected.set(candidate.applicationId, candidate);
+      selectedForBothBatches.set(candidate.applicationId, candidate);
+      countSelectedConstituency(candidate);
+
+      const constituency = candidate.constituency || "Unknown";
+      batchTwoConstituencyCounts[constituency] =
+        (batchTwoConstituencyCounts[constituency] || 0) + 1;
+
+      if (candidate.hasDisability) {
+        disabledSelected += 1;
+      }
+
+      return true;
+    }
+
+    const protectedBatchOneSelected = protectedAccepted.slice(
+      0,
+      BATCH_1_INTAKE,
+    );
+    const protectedAcceptedOverBatchOne =
+      protectedAccepted.slice(BATCH_1_INTAKE);
+
+    for (const acceptedApplication of protectedBatchOneSelected) {
+      addToBatchOne(
+        acceptedApplication,
+        acceptedApplication.selectionBucket || "Manual Accepted - Protected",
+      );
+    }
+
+    for (const acceptedApplication of protectedAcceptedOverBatchOne) {
+      addToBatchTwo(
+        acceptedApplication,
+        acceptedApplication.selectionBucket ||
+          "Manual Accepted Over Batch 1 - Protected",
+      );
+    }
+
+    // Batch 1 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
     for (const [constituencyIndex, constituency] of constituencies.entries()) {
       setSelectionProgress({
         active: true,
-        title: "Running Batch 1 hidden selection",
+        title: "Running hidden selection",
         phase: "Building Batch 1",
         detail: `Batch 1: processing ${constituency} (${constituencyIndex + 1}/${constituencies.length})`,
         current: constituencyIndex + 1,
-        total: constituencies.length,
+        total: constituencies.length * 2,
       });
 
       if (batchOneSelected.size >= BATCH_1_INTAKE) break;
 
+      const batchQuota = getConstituencyBatchQuota(constituency, 1);
       const constituencyPool = eligible.filter(
         (app) => app.constituency === constituency,
       );
@@ -2052,55 +1965,145 @@ export default function AdminPage() {
         const currentConstituencyCount =
           batchOneConstituencyCounts[constituency] || 0;
 
-        if (currentConstituencyCount >= BATCH_BASE_PER_CONSTITUENCY) {
+        if (currentConstituencyCount >= batchQuota) {
           break;
         }
 
         addToBatchOne(
           candidate,
-          `Batch 1 - Constituency Quota ${BATCH_BASE_PER_CONSTITUENCY} / ${getNormalSelectionBucket(candidate)}`,
+          `Batch 1 - Constituency Quota ${batchQuota} / ${getNormalSelectionBucket(candidate)}`,
         );
       }
     }
 
-    const updates = Array.from(batchOneSelected.values()).map((app) => ({
-      app,
-      status: "Submitted" as ApplicationStatus,
-      bucket: `Internal Hold - Do Not Notify / ${app.review.selectionBucket || "Batch 1 Selected"}`,
-    }));
+    // Batch 2 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
+    for (const [constituencyIndex, constituency] of constituencies.entries()) {
+      setSelectionProgress({
+        active: true,
+        title: "Running hidden selection",
+        phase: "Building Batch 2",
+        detail: `Batch 2: processing ${constituency} (${constituencyIndex + 1}/${constituencies.length})`,
+        current: constituencies.length + constituencyIndex + 1,
+        total: constituencies.length * 2,
+      });
+
+      if (batchTwoSelected.size >= BATCH_2_INTAKE) break;
+
+      const batchQuota = getConstituencyBatchQuota(constituency, 2);
+      const constituencyPool = eligible.filter(
+        (app) => app.constituency === constituency,
+      );
+
+      for (const candidate of constituencyPool) {
+        if (batchTwoSelected.size >= BATCH_2_INTAKE) break;
+
+        const currentConstituencyCount =
+          batchTwoConstituencyCounts[constituency] || 0;
+
+        if (currentConstituencyCount >= batchQuota) {
+          break;
+        }
+
+        addToBatchTwo(
+          candidate,
+          `Batch 2 - Constituency Quota ${batchQuota} / ${getNormalSelectionBucket(candidate)}`,
+        );
+      }
+    }
+
+    const selectedBatchIds = new Set(
+      Array.from(selectedForBothBatches.values()).map(
+        (app) => app.applicationId,
+      ),
+    );
+
+    const constituencyWaitingListCounts: Record<string, number> = {};
+
+    const waitingListEligible = eligible.filter((app) => {
+      if (selectedBatchIds.has(app.applicationId)) {
+        return false;
+      }
+
+      const constituency = app.constituency || "Unknown";
+
+      if (!constituencyWaitingListCounts[constituency]) {
+        constituencyWaitingListCounts[constituency] = 0;
+      }
+
+      if (
+        constituencyWaitingListCounts[constituency] >=
+        WAITING_LIST_PER_CONSTITUENCY
+      ) {
+        return false;
+      }
+
+      constituencyWaitingListCounts[constituency] += 1;
+
+      return true;
+    });
+
+    const hiddenApplicantStatus: ApplicationStatus = "Submitted";
+    const batchOneStatus: ApplicationStatus =
+      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
+        ? "Accepted"
+        : hiddenApplicantStatus;
+    const batchTwoStatus: ApplicationStatus =
+      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
+        ? "Remaining Eligible"
+        : hiddenApplicantStatus;
+    const rejectedStatus: ApplicationStatus =
+      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
+        ? "Rejected"
+        : hiddenApplicantStatus;
+
+    const updates = [
+      ...Array.from(batchOneSelected.values()).map((app) => ({
+        app,
+        status: batchOneStatus,
+        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / ${app.review.selectionBucket || "Batch 1 Selected"}`,
+      })),
+      ...Array.from(batchTwoSelected.values()).map((app) => ({
+        app,
+        status: batchTwoStatus,
+        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / ${app.review.selectionBucket || "Batch 2 Selected"}`,
+      })),
+      ...hardRejected.map((app) => ({
+        app,
+        status: rejectedStatus,
+        bucket: app.review.hardRejectReason.includes(
+          "Invalid or unrecognised constituency",
+        )
+          ? "Internal Hold - Do Not Notify / Rejected - Invalid Constituency"
+          : "Internal Hold - Do Not Notify / Rejected - Hard Gate",
+      })),
+    ].filter((update) => !protectedDecisionIds.has(update.app.applicationId));
 
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
-      phase: "Saving Batch 1 internal results",
-      detail: "Writing only the 488 Batch 1 internal selections. Applicants still see their existing dashboard status.",
+      title: "Running hidden selection",
+      phase: "Saving internal results",
+      detail: "Writing internal selection buckets in safe chunks. Applicants still see Submitted.",
       current: 0,
       total: updates.length || 1,
     });
 
-    let internalSelectionFailures: string[] = [];
-
     try {
-      internalSelectionFailures = await updateReviewFieldsInChunks(
-        updates,
-        25,
-        (completed, total, failed) => {
-          setSelectionProgress({
-            active: true,
-            title: "Running Batch 1 hidden selection",
-            phase: "Saving Batch 1 internal results",
-            detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} Batch 1 internal records. Failed: ${failed.toLocaleString()}.`,
-            current: completed,
-            total,
-          });
-        },
-      );
+      await updateReviewFieldsInChunks(updates, 150, (completed, total) => {
+        setSelectionProgress({
+          active: true,
+          title: "Running hidden selection",
+          phase: "Saving internal results",
+          detail: `Saved ${completed.toLocaleString()} of ${total.toLocaleString()} internal selection records.`,
+          current: completed,
+          total,
+        });
+      });
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Batch 1 selection update failed";
-      console.error("Batch 1 selection update failed:", error);
+          : "Master selection update failed";
+      console.error("Master selection update failed:", error);
       alert(message);
       setMasterSelecting(false);
       setSelectionProgress(EMPTY_SELECTION_PROGRESS);
@@ -2109,7 +2112,7 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
+      title: "Running hidden selection",
       phase: "Refreshing dashboard",
       detail: "Updating admin view and dashboard stats...",
       current: updates.length,
@@ -2126,6 +2129,7 @@ export default function AdminPage() {
 
         return {
           ...application,
+          status: found.status,
           autoReviewScore: found.app.review.score,
           autoReviewResult: found.app.review.result,
           autoReviewNotes: found.app.review.notes,
@@ -2137,51 +2141,67 @@ export default function AdminPage() {
       }),
     );
 
-    await loadDashboardStats();
+    loadDashboardStats();
 
+    const batchOneQuotaNineConstituencies = constituencies.filter(
+      (constituency) => getConstituencyBatchQuota(constituency, 1) === 9,
+    ).length;
+    const batchTwoQuotaNineConstituencies = constituencies.filter(
+      (constituency) => getConstituencyBatchQuota(constituency, 2) === 9,
+    ).length;
     const constituenciesWithFullBatchOneQuota = constituencies.filter(
       (constituency) =>
         (batchOneConstituencyCounts[constituency] || 0) >=
-        BATCH_BASE_PER_CONSTITUENCY,
+        getConstituencyBatchQuota(constituency, 1),
+    ).length;
+    const constituenciesWithFullBatchTwoQuota = constituencies.filter(
+      (constituency) =>
+        (batchTwoConstituencyCounts[constituency] || 0) >=
+        getConstituencyBatchQuota(constituency, 2),
     ).length;
 
     await logAdminAction({
       action: "master_selection",
       details: {
         resultsVisibleToApplicants: SELECTION_RESULTS_VISIBLE_TO_APPLICANTS,
-        selectionMode: "Batch 1 only - hidden internal selection",
-        internalSelectionUpdatesAttempted: updates.length,
-        internalSelectionUpdatesSaved:
-          updates.length - internalSelectionFailures.length,
-        internalSelectionUpdatesFailed: internalSelectionFailures.length,
-        firstInternalSelectionFailures: internalSelectionFailures.slice(0, 10),
         batchOneRule:
-          "Constituency quota only: all 61 constituencies receive up to 8 automatic seats; 12 seats remain for manual admin allocation",
+          "Constituency quota only: all 61 constituencies receive 8 automatic seats; 12 seats remain for manual admin allocation",
+        batchTwoRule:
+          "Constituency quota only: all 61 constituencies receive 8 automatic seats; 12 seats remain for manual admin allocation",
+        totalSelectedForBatches: selectedForBothBatches.size,
+        protectedManualAccepted: protectedAccepted.length,
+        protectedManualRejected: protectedRejected.length,
         batchOneSelected: batchOneSelected.size,
-        batchTwoSelected: 0,
-        remainingEligiblePersisted: 0,
-        rejectedPersisted: 0,
-        hardRejectedCountedOnly: hardRejected.length,
+        batchTwoSelected: batchTwoSelected.size,
+        waitingListEligible: waitingListEligible.length,
+        rejected: hardRejected.length,
         disabledSelected,
+        constituenciesRepresented: Object.keys(totalConstituencyCounts).length,
         constituenciesWithFullBatchOneQuota,
+        constituenciesWithFullBatchTwoQuota,
+        totalIntake: TOTAL_AUTO_SELECTED_INTAKE,
         batchOneIntake: BATCH_1_INTAKE,
+        batchTwoIntake: BATCH_2_INTAKE,
         batchBasePerConstituency: BATCH_BASE_PER_CONSTITUENCY,
+        batchExtraConstituencies: BATCH_EXTRA_CONSTITUENCIES,
         batchOneManualRemainingSeats: BATCH_1_MANUAL_REMAINING_SEATS,
+        batchTwoManualRemainingSeats: BATCH_2_MANUAL_REMAINING_SEATS,
         totalProgrammeIntake: TOTAL_PROGRAMME_INTAKE,
+        batchOneQuotaNineConstituencies,
+        batchTwoQuotaNineConstituencies,
+        remainingEligiblePerConstituency: WAITING_LIST_PER_CONSTITUENCY,
       },
     });
 
     alert(
-      `Batch 1 Hidden Selection Complete:\nApplicant-facing results visible: NO\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nRule: ${BATCH_BASE_PER_CONSTITUENCY} per constituency across ${constituencies.length} constituencies\nFull Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nManual seats left for today: ${BATCH_1_MANUAL_REMAINING_SEATS}\nHard rejects counted only, not persisted today: ${hardRejected.length}\nDisabled selected: ${disabledSelected}\nFailed row updates: ${internalSelectionFailures.length}`,
+      `Internal Two-Batch Selection Complete:\nApplicant-facing results visible: ${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "YES" : "NO"}\nProtected Manual Accepted: ${protectedAccepted.length}\nProtected Manual Rejected: ${protectedRejected.length}\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nBatch 1 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_1_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 1 Full Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nBatch 2 Internal Reserved: ${batchTwoSelected.size}/${BATCH_2_INTAKE}\nBatch 2 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_2_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 2 Full Constituency Quotas: ${constituenciesWithFullBatchTwoQuota}/${constituencies.length}\nTotal Auto-Selected For Both Batches: ${selectedForBothBatches.size}/${TOTAL_AUTO_SELECTED_INTAKE}\nProgramme Total: ${TOTAL_PROGRAMME_INTAKE} (${TOTAL_AUTO_SELECTED_INTAKE} auto-selected + ${BATCH_1_MANUAL_REMAINING_SEATS + BATCH_2_MANUAL_REMAINING_SEATS} manual seats)\nWaiting List Counted Only: ${waitingListEligible.length}\nNew Hard Rejects Counted Internally: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}`,
     );
 
     setSelectionProgress({
       active: false,
-      title: "Batch 1 hidden selection complete",
+      title: "Hidden selection complete",
       phase: "Complete",
-      detail: internalSelectionFailures.length
-        ? "Batch 1 completed with some failed row updates. Applicants were not notified and visible statuses were not changed."
-        : "Batch 1 internal selections were saved. Applicants were not notified and visible statuses were not changed.",
+      detail: "Internal selection buckets were saved. Applicants were not notified and visible statuses remain hidden.",
       current: updates.length,
       total: updates.length || 1,
     });
@@ -2289,17 +2309,24 @@ export default function AdminPage() {
   }
 
   function getSuccessfulApplicantMessage(application: Application) {
-    return `Congratulations! 🎉
+    const fullName = `${application.firstName || ""} ${
+      application.lastName || ""
+    }`
+      .replace(/\s+/g, " ")
+      .trim();
+    const displayName = fullName || "Participant";
+    const constituency = application.constituency || "your constituency";
 
-You have been successfully selected to participate in the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026.
+    return `Dear ${displayName},
 
-Participants are expected to arrive at the University of Botswana, Gaborone Campus on 31 May 2026 before 12:00 noon to allow for accommodation allocation and settling in well on time.
+Congratulations.
 
-Participants are expected to attend the official programme launch on 01 June 2026 at Ba Isago University from 8:00 AM.
+Following the completion of the BYWC Oil & Gas Training Programme selection process and constituency-level due diligence review for ${constituency}, you have been selected as one of the successful applicants for the programme.
 
-Please bring your Omang/ID card or a copy for registration and verification purposes.
+Please note that further communication will follow regarding the next steps, reporting arrangements, training schedule, and any additional verification or onboarding requirements.
 
-Welcome to the programme.`;
+Kind regards,
+BYWC Oil & Gas Training Programme Team`;
   }
 
   async function handleSaveGroupMessage(
@@ -2921,7 +2948,6 @@ Welcome to the programme.`;
 
   const totalApplications = dashboardStats.total;
   const submittedCount = dashboardStats.submitted;
-  const internalBatchOneCount = dashboardStats.internalBatchOne;
   const remainingEligibleCount = dashboardStats.remainingEligible;
   const acceptedCount = dashboardStats.accepted;
   const rejectedCount = dashboardStats.rejected;
@@ -3077,18 +3103,17 @@ Welcome to the programme.`;
 
   const statusNavItems = [
     { label: "All Applications", value: "All", count: totalApplications },
-    {
-      label: "Batch 1 Selected",
-      value: "Internal Batch 1",
-      count: internalBatchOneCount,
-    },
-    { label: "Submitted", value: "Submitted", count: submittedCount },
+    { label: "Unselected / Submitted", value: "Submitted", count: submittedCount },
     {
       label: "Remaining Eligible",
       value: "Remaining Eligible",
       count: remainingEligibleCount,
     },
-    { label: "Accepted", value: "Accepted", count: acceptedCount },
+    {
+      label: "Batch 1 Selected",
+      value: "Batch 1 Selected",
+      count: acceptedCount,
+    },
     { label: "Rejected", value: "Rejected", count: rejectedCount },
   ];
 
@@ -3331,13 +3356,12 @@ Welcome to the programme.`;
           </div>
         </header>
 
-        <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           <StatCard title="Total" value={totalApplications} />
-          <StatCard title="Batch 1 Selected" value={internalBatchOneCount} />
           <StatCard title="Women" value={womenCount} />
           <StatCard title="Men" value={menCount} />
-          <StatCard title="Submitted" value={submittedCount} />
-          <StatCard title="Rejected" value={rejectedCount} />
+          <StatCard title="Batch 1 Selected" value={acceptedCount} />
+          <StatCard title="Internal Rejected" value={rejectedCount} />
         </section>
 
         <section className="mb-5 rounded-[30px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
@@ -3605,10 +3629,9 @@ Welcome to the programme.`;
                 className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition focus:border-orange-400 focus:bg-[#0f172a]"
               >
                 <option value="All">All Statuses</option>
-                <option value="Internal Batch 1">Batch 1 Selected (Admin)</option>
-                <option value="Submitted">Submitted</option>
-                <option value="Internal Remaining Eligible">Remaining Eligible (Admin)</option>
-                <option value="Accepted">Accepted</option>
+                <option value="Submitted">Unselected / Submitted</option>
+                <option value="Batch 1 Selected">Batch 1 Selected</option>
+                <option value="Remaining Eligible">Remaining Eligible</option>
                 <option value="Rejected">Rejected</option>
               </select>
             </div>
@@ -3713,30 +3736,17 @@ Welcome to the programme.`;
                         </td>
 
                         <td className="px-3 py-3 align-top">
-                          <p className="mb-2 rounded-xl bg-orange-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-orange-300">
-                            Admin: {getAdminSelectionLabel(application)}
-                          </p>
-                          <p className="mb-2 text-[10px] font-semibold text-slate-500">
-                            Applicant sees: {application.status}
-                          </p>
-                          <select
-                            value={application.status}
-                            onChange={(event) =>
-                              handleStatusChange(
-                                application,
-                                event.target.value as ApplicationStatus,
-                              )
-                            }
-                            disabled={savingId === application.id}
-                            className="w-full rounded-xl border border-white/10 bg-[#111827] px-2 py-2 text-[12px] font-bold text-white outline-none disabled:opacity-50"
-                          >
-                            <option value="Submitted">Submitted</option>
-                            <option value="Remaining Eligible">
-                              Remaining Eligible
-                            </option>
-                            <option value="Accepted">Accepted</option>
-                            <option value="Rejected">Rejected</option>
-                          </select>
+                          <div className="rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                            <p className="text-[11px] font-black uppercase tracking-[0.08em] text-orange-300">
+                              Admin View
+                            </p>
+                            <p className="mt-1 text-[12px] font-black text-white">
+                              {getAdminSelectionLabel(application)}
+                            </p>
+                            <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                              Applicant sees: {application.status}
+                            </p>
+                          </div>
                         </td>
 
                         <td className="px-3 py-3 align-top">
@@ -3869,9 +3879,9 @@ Welcome to the programme.`;
                           <div>
                             <p className="text-lg font-black">{constituency}</p>
                             <p className="mt-1 text-xs font-semibold text-slate-400">
-                              Batch 1 Selected: {acceptedGroup.length} • Remaining
-                              Eligible: {remainingEligibleGroup.length} •
-                              Rejected: {rejectedGroup.length}
+                              Batch 1 Selected: {acceptedGroup.length} •
+                              Remaining Eligible: {remainingEligibleGroup.length}
+                              • Internal Rejected: {rejectedGroup.length}
                             </p>
                           </div>
 
