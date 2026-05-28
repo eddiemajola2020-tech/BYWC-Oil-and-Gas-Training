@@ -25,6 +25,32 @@ function normalizeApplicationStatus(value?: string | null): ApplicationStatus {
   return "Submitted";
 }
 
+function getAdminSelectionLabel(application: Pick<Application, "status" | "selectionBucket">) {
+  const bucket = application.selectionBucket || "";
+
+  if (bucket.includes("Batch 1 -")) return "Batch 1 Selected";
+  if (bucket.includes("Batch 2 -")) return "Batch 2 Reserved";
+  if (bucket.includes("Remaining Eligible")) return "Remaining Eligible";
+  if (bucket.includes("Rejected -")) return "Rejected";
+
+  return normalizeApplicationStatus(application.status);
+}
+
+function getAdminSelectionStatus(application: Pick<Application, "status" | "selectionBucket">): ApplicationStatus {
+  const label = getAdminSelectionLabel(application);
+
+  if (label === "Batch 1 Selected") return "Accepted";
+  if (label === "Batch 2 Reserved") return "Remaining Eligible";
+  if (label === "Remaining Eligible") return "Remaining Eligible";
+  if (label === "Rejected") return "Rejected";
+
+  return normalizeApplicationStatus(application.status);
+}
+
+function isInternalBatchOneSelection(selectionBucket?: string | null) {
+  return Boolean((selectionBucket || "").includes("Batch 1 -"));
+}
+
 type AuditAction =
   | "status_change"
   | "auto_review"
@@ -47,6 +73,7 @@ type DashboardStats = {
   women: number;
   men: number;
   submitted: number;
+  internalBatchOne: number;
   remainingEligible: number;
   accepted: number;
   rejected: number;
@@ -57,6 +84,7 @@ const EMPTY_DASHBOARD_STATS: DashboardStats = {
   women: 0,
   men: 0,
   submitted: 0,
+  internalBatchOne: 0,
   remainingEligible: 0,
   accepted: 0,
   rejected: 0,
@@ -747,6 +775,7 @@ export default function AdminPage() {
         women,
         men,
         submitted,
+        internalBatchOne,
         remainingEligible,
         accepted,
         rejected,
@@ -755,6 +784,9 @@ export default function AdminPage() {
         getApplicationCount((query) => query.ilike("gender", "female")),
         getApplicationCount((query) => query.ilike("gender", "male")),
         getApplicationCount((query) => query.eq("status", "Submitted")),
+        getApplicationCount((query) =>
+          query.ilike("selection_bucket", "%Batch 1 -%"),
+        ),
         getApplicationCount((query) =>
           query.eq("status", "Remaining Eligible"),
         ),
@@ -767,6 +799,7 @@ export default function AdminPage() {
         women,
         men,
         submitted,
+        internalBatchOne,
         remainingEligible,
         accepted,
         rejected,
@@ -962,7 +995,13 @@ export default function AdminPage() {
       .order("created_at", { ascending: false })
       .range(from, to);
 
-    if (statusFilter !== "All") {
+    if (statusFilter === "Internal Batch 1") {
+      query = query.ilike("selection_bucket", "%Batch 1 -%");
+    } else if (statusFilter === "Internal Remaining Eligible") {
+      query = query.ilike("selection_bucket", "%Remaining Eligible%");
+    } else if (statusFilter === "Internal Rejected") {
+      query = query.ilike("selection_bucket", "%Rejected -%");
+    } else if (statusFilter !== "All") {
       query = query.eq("status", statusFilter);
     }
 
@@ -2882,6 +2921,7 @@ Welcome to the programme.`;
 
   const totalApplications = dashboardStats.total;
   const submittedCount = dashboardStats.submitted;
+  const internalBatchOneCount = dashboardStats.internalBatchOne;
   const remainingEligibleCount = dashboardStats.remainingEligible;
   const acceptedCount = dashboardStats.accepted;
   const rejectedCount = dashboardStats.rejected;
@@ -2998,7 +3038,7 @@ Welcome to the programme.`;
     const grouped = dispatchApplications.reduce(
       (acc, application) => {
         const constituency = application.constituency || "Unknown";
-        const status = normalizeApplicationStatus(application.status);
+        const status = getAdminSelectionStatus(application);
 
         if (!acc[constituency]) {
           acc[constituency] = {
@@ -3037,6 +3077,11 @@ Welcome to the programme.`;
 
   const statusNavItems = [
     { label: "All Applications", value: "All", count: totalApplications },
+    {
+      label: "Batch 1 Selected",
+      value: "Internal Batch 1",
+      count: internalBatchOneCount,
+    },
     { label: "Submitted", value: "Submitted", count: submittedCount },
     {
       label: "Remaining Eligible",
@@ -3286,8 +3331,9 @@ Welcome to the programme.`;
           </div>
         </header>
 
-        <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <StatCard title="Total" value={totalApplications} />
+          <StatCard title="Batch 1 Selected" value={internalBatchOneCount} />
           <StatCard title="Women" value={womenCount} />
           <StatCard title="Men" value={menCount} />
           <StatCard title="Submitted" value={submittedCount} />
@@ -3559,10 +3605,10 @@ Welcome to the programme.`;
                 className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition focus:border-orange-400 focus:bg-[#0f172a]"
               >
                 <option value="All">All Statuses</option>
+                <option value="Internal Batch 1">Batch 1 Selected (Admin)</option>
                 <option value="Submitted">Submitted</option>
-                <option value="Remaining Eligible">Remaining Eligible</option>
+                <option value="Internal Remaining Eligible">Remaining Eligible (Admin)</option>
                 <option value="Accepted">Accepted</option>
-                <option value="Rejected">Rejected</option>
                 <option value="Rejected">Rejected</option>
               </select>
             </div>
@@ -3667,6 +3713,12 @@ Welcome to the programme.`;
                         </td>
 
                         <td className="px-3 py-3 align-top">
+                          <p className="mb-2 rounded-xl bg-orange-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-orange-300">
+                            Admin: {getAdminSelectionLabel(application)}
+                          </p>
+                          <p className="mb-2 text-[10px] font-semibold text-slate-500">
+                            Applicant sees: {application.status}
+                          </p>
                           <select
                             value={application.status}
                             onChange={(event) =>
@@ -3683,7 +3735,6 @@ Welcome to the programme.`;
                               Remaining Eligible
                             </option>
                             <option value="Accepted">Accepted</option>
-                            <option value="Rejected">Rejected</option>
                             <option value="Rejected">Rejected</option>
                           </select>
                         </td>
@@ -3818,7 +3869,7 @@ Welcome to the programme.`;
                           <div>
                             <p className="text-lg font-black">{constituency}</p>
                             <p className="mt-1 text-xs font-semibold text-slate-400">
-                              Accepted: {acceptedGroup.length} • Remaining
+                              Batch 1 Selected: {acceptedGroup.length} • Remaining
                               Eligible: {remainingEligibleGroup.length} •
                               Rejected: {rejectedGroup.length}
                             </p>
@@ -3826,7 +3877,7 @@ Welcome to the programme.`;
 
                           <div className="flex flex-wrap gap-2 text-[11px] font-black">
                             <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-300">
-                              {acceptedGroup.length} Accepted
+                              {acceptedGroup.length} Batch 1 Selected
                             </span>
                             <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-yellow-300">
                               {remainingEligibleGroup.length} Remaining Eligible
@@ -3842,7 +3893,7 @@ Welcome to the programme.`;
                             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                               <div>
                                 <h3 className="text-base font-black text-emerald-300">
-                                  Accepted — due diligence before messaging
+                                  Batch 1 Selected — due diligence before messaging
                                 </h3>
                                 <p className="mt-2 text-xs leading-5 text-slate-400">
                                   Check Omang, BGCSE/IGCSE proof, higher
