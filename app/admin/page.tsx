@@ -326,22 +326,8 @@ const VALID_CONSTITUENCIES = constituencies.map((constituency) =>
   normalize(constituency),
 );
 
-const OFFICIAL_CONSTITUENCY_BY_NORMALIZED = constituencies.reduce(
-  (acc, constituency) => {
-    acc[normalize(constituency)] = constituency;
-    return acc;
-  },
-  {} as Record<string, string>,
-);
-
-const INVALID_CONSTITUENCY_DISPATCH_LABEL = "Invalid / Unmatched Constituency";
-
-function getOfficialConstituencyLabel(value?: string | null) {
-  return OFFICIAL_CONSTITUENCY_BY_NORMALIZED[normalize(value)] || null;
-}
-
 function isValidConstituency(value?: string | null) {
-  return Boolean(getOfficialConstituencyLabel(value));
+  return VALID_CONSTITUENCIES.includes(normalize(value));
 }
 
 function countWords(text?: string | null) {
@@ -2071,7 +2057,35 @@ export default function AdminPage() {
         (app) => app.constituency === constituency,
       );
 
-      for (const candidate of constituencyPool) {
+      const strategicCoveragePool = constituencyPool.filter(
+        (app) => app.isStrategicCoverage,
+      );
+      const standardConstituencyPool = constituencyPool.filter(
+        (app) => !app.isStrategicCoverage,
+      );
+
+      // Priority influencer / sponsor-critical candidates are selected first,
+      // but only after passing hard eligibility gates and still inside the
+      // same 8-per-constituency Batch 1 cap. This keeps the priority logic
+      // hidden while preventing sponsor-critical applicants from being pushed
+      // out by normal ranking alone.
+      for (const candidate of strategicCoveragePool) {
+        if (batchOneSelected.size >= BATCH_1_INTAKE) break;
+
+        const currentConstituencyCount =
+          batchOneConstituencyCounts[constituency] || 0;
+
+        if (currentConstituencyCount >= BATCH_BASE_PER_CONSTITUENCY) {
+          break;
+        }
+
+        addToBatchOne(
+          candidate,
+          `Batch 1 - Constituency Quota ${BATCH_BASE_PER_CONSTITUENCY} / Strategic Coverage Priority / ${getNormalSelectionBucket(candidate)}`,
+        );
+      }
+
+      for (const candidate of standardConstituencyPool) {
         if (batchOneSelected.size >= BATCH_1_INTAKE) break;
 
         const currentConstituencyCount =
@@ -3102,25 +3116,18 @@ Welcome to the programme.`;
     : 0;
 
   const constituencyDispatchGroups = useMemo(() => {
-    const createEmptyStatusGroup = () =>
-      ({
-        "Remaining Eligible": [],
-        Rejected: [],
-        Submitted: [],
-        Accepted: [],
-      }) as Record<ApplicationStatus, Application[]>;
-
     const grouped = dispatchApplications.reduce(
       (acc, application) => {
-        const officialConstituency = getOfficialConstituencyLabel(
-          application.constituency,
-        );
-        const constituency =
-          officialConstituency || INVALID_CONSTITUENCY_DISPATCH_LABEL;
+        const constituency = application.constituency || "Unknown";
         const status = getAdminSelectionStatus(application);
 
         if (!acc[constituency]) {
-          acc[constituency] = createEmptyStatusGroup();
+          acc[constituency] = {
+            "Remaining Eligible": [],
+            Rejected: [],
+            Submitted: [],
+            Accepted: [],
+          } as Record<ApplicationStatus, Application[]>;
         }
 
         if (!acc[constituency][status]) {
@@ -3134,23 +3141,7 @@ Welcome to the programme.`;
       {} as Record<string, Record<ApplicationStatus, Application[]>>,
     );
 
-    const officialRows = constituencies
-      .filter((constituency) => Boolean(grouped[constituency]))
-      .map((constituency) => [constituency, grouped[constituency]] as [
-        string,
-        Record<ApplicationStatus, Application[]>,
-      ]);
-
-    const invalidRows = grouped[INVALID_CONSTITUENCY_DISPATCH_LABEL]
-      ? ([
-          [
-            INVALID_CONSTITUENCY_DISPATCH_LABEL,
-            grouped[INVALID_CONSTITUENCY_DISPATCH_LABEL],
-          ],
-        ] as [string, Record<ApplicationStatus, Application[]>][])
-      : [];
-
-    return [...officialRows, ...invalidRows];
+    return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
   }, [dispatchApplications]);
 
   if (loading) {
