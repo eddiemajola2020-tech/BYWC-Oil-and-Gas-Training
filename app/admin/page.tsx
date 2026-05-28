@@ -1847,7 +1847,7 @@ export default function AdminPage() {
 
   async function handleMasterSelection() {
     const confirmed = window.confirm(
-      "Run internal quota-based master selection? This will rank applicants and save internal selection buckets. Applicant-facing results remain hidden until publishing is enabled.",
+      "Run Batch 1 hidden selection now? This will select up to 488 applicants internally only: 8 per constituency. Applicant-facing statuses will remain unchanged until you publish results later.",
     );
 
     if (!confirmed) return;
@@ -1855,7 +1855,7 @@ export default function AdminPage() {
     setMasterSelecting(true);
     setSelectionProgress({
       active: true,
-      title: "Running hidden selection",
+      title: "Running Batch 1 hidden selection",
       phase: "Loading applications",
       detail: "Fetching all applications from Supabase...",
       current: 0,
@@ -1870,9 +1870,9 @@ export default function AdminPage() {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to load all applications for master selection";
+          : "Failed to load all applications for Batch 1 selection";
       console.error(
-        "Failed to load all applications for master selection:",
+        "Failed to load all applications for Batch 1 selection:",
         error,
       );
       alert(message);
@@ -1883,7 +1883,7 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running hidden selection",
+      title: "Running Batch 1 hidden selection",
       phase: "Scoring applications",
       detail: `Scoring ${selectionApplications.length.toLocaleString()} applications and checking hard-reject rules...`,
       current: 0,
@@ -1894,13 +1894,14 @@ export default function AdminPage() {
       if (index % 500 === 0) {
         setSelectionProgress({
           active: true,
-          title: "Running hidden selection",
+          title: "Running Batch 1 hidden selection",
           phase: "Scoring applications",
           detail: `Scoring application ${index.toLocaleString()} of ${selectionApplications.length.toLocaleString()}...`,
           current: index,
           total: selectionApplications.length || 1,
         });
       }
+
       const review = calculateEligibility(application);
       const age = Number(application.age);
       const isStrategicCoverage =
@@ -1925,37 +1926,22 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running hidden selection",
-      phase: "Building constituency batches",
-      detail: "Selecting 8 people per constituency for Batch 1 and Batch 2 internally.",
+      title: "Running Batch 1 hidden selection",
+      phase: "Building Batch 1",
+      detail: "Selecting up to 8 eligible applicants per constituency for today's Batch 1 only.",
       current: 0,
-      total: constituencies.length * 2,
+      total: constituencies.length,
     });
 
-    const protectedAccepted = reviewed.filter(
-      (app) => app.status === "Accepted",
-    );
-    const protectedRejected = reviewed.filter(
-      (app) => app.status === "Rejected",
-    );
-    const protectedDecisionIds = new Set(
-      [...protectedAccepted, ...protectedRejected].map(
-        (app) => app.applicationId,
-      ),
-    );
+    type ReviewedApplication = (typeof reviewed)[number];
 
-    const hardRejected = reviewed.filter(
-      (app) =>
-        app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
-    );
+    const hardRejected = reviewed.filter((app) => app.isHardRejected);
     const eligible = reviewed
-      .filter(
-        (app) =>
-          !app.isHardRejected && !protectedDecisionIds.has(app.applicationId),
-      )
+      .filter((app) => !app.isHardRejected)
       .sort((a, b) => {
-        if (b.rankingScore !== a.rankingScore)
+        if (b.rankingScore !== a.rankingScore) {
           return b.rankingScore - a.rankingScore;
+        }
 
         return (
           (b.review.documentCompletenessScore || 0) -
@@ -1963,24 +1949,13 @@ export default function AdminPage() {
         );
       });
 
-    type ReviewedApplication = (typeof reviewed)[number];
-
     const batchOneSelected = new Map<string, ReviewedApplication>();
-    const batchTwoSelected = new Map<string, ReviewedApplication>();
-    const selectedForBothBatches = new Map<string, ReviewedApplication>();
     const batchOneConstituencyCounts: Record<string, number> = {};
-    const batchTwoConstituencyCounts: Record<string, number> = {};
-    const totalConstituencyCounts: Record<string, number> = {};
     let disabledSelected = 0;
 
-    function countSelectedConstituency(candidate: ReviewedApplication) {
-      const constituency = candidate.constituency || "Unknown";
-      totalConstituencyCounts[constituency] =
-        (totalConstituencyCounts[constituency] || 0) + 1;
-    }
-
     function canSelect(candidate: ReviewedApplication) {
-      if (selectedForBothBatches.has(candidate.applicationId)) return false;
+      if (!candidate.applicationId) return false;
+      if (batchOneSelected.has(candidate.applicationId)) return false;
       if (candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
         return false;
       }
@@ -1988,29 +1963,11 @@ export default function AdminPage() {
     }
 
     function getNormalSelectionBucket(candidate: ReviewedApplication) {
-      if (candidate.isYouth && candidate.isFemale)
+      if (candidate.isYouth && candidate.isFemale) {
         return "Youth Women Priority";
+      }
       if (candidate.isYouth && candidate.isMale) return "Youth Men Priority";
       return "Non-Youth Allocation";
-    }
-
-    function getConstituencyBatchQuota(
-      constituency: string,
-      batchNumber: 1 | 2,
-    ) {
-      const constituencyIndex = constituencies.indexOf(constituency);
-
-      if (constituencyIndex === -1) return 0;
-
-      const extraStartIndex =
-        batchNumber === 1
-          ? BATCH_1_EXTRA_START_INDEX
-          : BATCH_2_EXTRA_START_INDEX;
-      const extraEndIndex = extraStartIndex + BATCH_EXTRA_CONSTITUENCIES;
-      const hasExtraSeat =
-        constituencyIndex >= extraStartIndex && constituencyIndex < extraEndIndex;
-
-      return BATCH_BASE_PER_CONSTITUENCY + (hasExtraSeat ? 1 : 0);
     }
 
     function addToBatchOne(candidate: ReviewedApplication, bucket: string) {
@@ -2019,8 +1976,6 @@ export default function AdminPage() {
 
       candidate.review.selectionBucket = bucket;
       batchOneSelected.set(candidate.applicationId, candidate);
-      selectedForBothBatches.set(candidate.applicationId, candidate);
-      countSelectedConstituency(candidate);
 
       const constituency = candidate.constituency || "Unknown";
       batchOneConstituencyCounts[constituency] =
@@ -2033,62 +1988,21 @@ export default function AdminPage() {
       return true;
     }
 
-    function addToBatchTwo(candidate: ReviewedApplication, bucket: string) {
-      if (batchTwoSelected.size >= BATCH_2_INTAKE) return false;
-      if (!canSelect(candidate)) return false;
-
-      candidate.review.selectionBucket = bucket;
-      batchTwoSelected.set(candidate.applicationId, candidate);
-      selectedForBothBatches.set(candidate.applicationId, candidate);
-      countSelectedConstituency(candidate);
-
-      const constituency = candidate.constituency || "Unknown";
-      batchTwoConstituencyCounts[constituency] =
-        (batchTwoConstituencyCounts[constituency] || 0) + 1;
-
-      if (candidate.hasDisability) {
-        disabledSelected += 1;
-      }
-
-      return true;
-    }
-
-    const protectedBatchOneSelected = protectedAccepted.slice(
-      0,
-      BATCH_1_INTAKE,
-    );
-    const protectedAcceptedOverBatchOne =
-      protectedAccepted.slice(BATCH_1_INTAKE);
-
-    for (const acceptedApplication of protectedBatchOneSelected) {
-      addToBatchOne(
-        acceptedApplication,
-        acceptedApplication.selectionBucket || "Manual Accepted - Protected",
-      );
-    }
-
-    for (const acceptedApplication of protectedAcceptedOverBatchOne) {
-      addToBatchTwo(
-        acceptedApplication,
-        acceptedApplication.selectionBucket ||
-          "Manual Accepted Over Batch 1 - Protected",
-      );
-    }
-
-    // Batch 1 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
+    // Batch 1 rule for today: 8 applicants per constituency only.
+    // This creates 488 internal selections: 61 constituencies x 8.
+    // The extra 12 seats to reach 500 are deliberately left for manual admin allocation.
     for (const [constituencyIndex, constituency] of constituencies.entries()) {
       setSelectionProgress({
         active: true,
-        title: "Running hidden selection",
+        title: "Running Batch 1 hidden selection",
         phase: "Building Batch 1",
         detail: `Batch 1: processing ${constituency} (${constituencyIndex + 1}/${constituencies.length})`,
         current: constituencyIndex + 1,
-        total: constituencies.length * 2,
+        total: constituencies.length,
       });
 
       if (batchOneSelected.size >= BATCH_1_INTAKE) break;
 
-      const batchQuota = getConstituencyBatchQuota(constituency, 1);
       const constituencyPool = eligible.filter(
         (app) => app.constituency === constituency,
       );
@@ -2099,129 +2013,28 @@ export default function AdminPage() {
         const currentConstituencyCount =
           batchOneConstituencyCounts[constituency] || 0;
 
-        if (currentConstituencyCount >= batchQuota) {
+        if (currentConstituencyCount >= BATCH_BASE_PER_CONSTITUENCY) {
           break;
         }
 
         addToBatchOne(
           candidate,
-          `Batch 1 - Constituency Quota ${batchQuota} / ${getNormalSelectionBucket(candidate)}`,
+          `Batch 1 - Constituency Quota ${BATCH_BASE_PER_CONSTITUENCY} / ${getNormalSelectionBucket(candidate)}`,
         );
       }
     }
 
-    // Batch 2 rule: constituency quota only. 488 automatic seats = 61 constituencies x 8. The remaining 12 seats are left for manual admin allocation.
-    for (const [constituencyIndex, constituency] of constituencies.entries()) {
-      setSelectionProgress({
-        active: true,
-        title: "Running hidden selection",
-        phase: "Building Batch 2",
-        detail: `Batch 2: processing ${constituency} (${constituencyIndex + 1}/${constituencies.length})`,
-        current: constituencies.length + constituencyIndex + 1,
-        total: constituencies.length * 2,
-      });
-
-      if (batchTwoSelected.size >= BATCH_2_INTAKE) break;
-
-      const batchQuota = getConstituencyBatchQuota(constituency, 2);
-      const constituencyPool = eligible.filter(
-        (app) => app.constituency === constituency,
-      );
-
-      for (const candidate of constituencyPool) {
-        if (batchTwoSelected.size >= BATCH_2_INTAKE) break;
-
-        const currentConstituencyCount =
-          batchTwoConstituencyCounts[constituency] || 0;
-
-        if (currentConstituencyCount >= batchQuota) {
-          break;
-        }
-
-        addToBatchTwo(
-          candidate,
-          `Batch 2 - Constituency Quota ${batchQuota} / ${getNormalSelectionBucket(candidate)}`,
-        );
-      }
-    }
-
-    const selectedBatchIds = new Set(
-      Array.from(selectedForBothBatches.values()).map(
-        (app) => app.applicationId,
-      ),
-    );
-
-    const constituencyWaitingListCounts: Record<string, number> = {};
-
-    const waitingListEligible = eligible.filter((app) => {
-      if (selectedBatchIds.has(app.applicationId)) {
-        return false;
-      }
-
-      const constituency = app.constituency || "Unknown";
-
-      if (!constituencyWaitingListCounts[constituency]) {
-        constituencyWaitingListCounts[constituency] = 0;
-      }
-
-      if (
-        constituencyWaitingListCounts[constituency] >=
-        WAITING_LIST_PER_CONSTITUENCY
-      ) {
-        return false;
-      }
-
-      constituencyWaitingListCounts[constituency] += 1;
-
-      return true;
-    });
-
-    const hiddenApplicantStatus: ApplicationStatus = "Submitted";
-    const batchOneStatus: ApplicationStatus =
-      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
-        ? "Accepted"
-        : hiddenApplicantStatus;
-    const batchTwoStatus: ApplicationStatus =
-      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
-        ? "Remaining Eligible"
-        : hiddenApplicantStatus;
-    const rejectedStatus: ApplicationStatus =
-      SELECTION_RESULTS_VISIBLE_TO_APPLICANTS
-        ? "Rejected"
-        : hiddenApplicantStatus;
-
-    const updates = [
-      ...Array.from(batchOneSelected.values()).map((app) => ({
-        app,
-        status: batchOneStatus,
-        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / ${app.review.selectionBucket || "Batch 1 Selected"}`,
-      })),
-      ...Array.from(batchTwoSelected.values()).map((app) => ({
-        app,
-        status: batchTwoStatus,
-        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / ${app.review.selectionBucket || "Batch 2 Selected"}`,
-      })),
-      ...waitingListEligible.map((app) => ({
-        app,
-        status: hiddenApplicantStatus,
-        bucket: `${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "Published" : "Internal Hold - Do Not Notify"} / Remaining Eligible - Constituency Reserve`,
-      })),
-      ...hardRejected.map((app) => ({
-        app,
-        status: rejectedStatus,
-        bucket: app.review.hardRejectReason.includes(
-          "Invalid or unrecognised constituency",
-        )
-          ? "Internal Hold - Do Not Notify / Rejected - Invalid Constituency"
-          : "Internal Hold - Do Not Notify / Rejected - Hard Gate",
-      })),
-    ].filter((update) => !protectedDecisionIds.has(update.app.applicationId));
+    const updates = Array.from(batchOneSelected.values()).map((app) => ({
+      app,
+      status: "Submitted" as ApplicationStatus,
+      bucket: `Internal Hold - Do Not Notify / ${app.review.selectionBucket || "Batch 1 Selected"}`,
+    }));
 
     setSelectionProgress({
       active: true,
-      title: "Running hidden selection",
-      phase: "Saving internal results",
-      detail: "Writing internal selection buckets in safe chunks. Applicants still see Submitted.",
+      title: "Running Batch 1 hidden selection",
+      phase: "Saving Batch 1 internal results",
+      detail: "Writing only the 488 Batch 1 internal selections. Applicants still see their existing dashboard status.",
       current: 0,
       total: updates.length || 1,
     });
@@ -2229,22 +2042,26 @@ export default function AdminPage() {
     let internalSelectionFailures: string[] = [];
 
     try {
-      internalSelectionFailures = await updateReviewFieldsInChunks(updates, 25, (completed, total, failed) => {
-        setSelectionProgress({
-          active: true,
-          title: "Running hidden selection",
-          phase: "Saving internal results",
-          detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} internal selection records. Failed: ${failed.toLocaleString()}.`,
-          current: completed,
-          total,
-        });
-      });
+      internalSelectionFailures = await updateReviewFieldsInChunks(
+        updates,
+        25,
+        (completed, total, failed) => {
+          setSelectionProgress({
+            active: true,
+            title: "Running Batch 1 hidden selection",
+            phase: "Saving Batch 1 internal results",
+            detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} Batch 1 internal records. Failed: ${failed.toLocaleString()}.`,
+            current: completed,
+            total,
+          });
+        },
+      );
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Master selection update failed";
-      console.error("Master selection update failed:", error);
+          : "Batch 1 selection update failed";
+      console.error("Batch 1 selection update failed:", error);
       alert(message);
       setMasterSelecting(false);
       setSelectionProgress(EMPTY_SELECTION_PROGRESS);
@@ -2253,7 +2070,7 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running hidden selection",
+      title: "Running Batch 1 hidden selection",
       phase: "Refreshing dashboard",
       detail: "Updating admin view and dashboard stats...",
       current: updates.length,
@@ -2270,7 +2087,6 @@ export default function AdminPage() {
 
         return {
           ...application,
-          status: found.status,
           autoReviewScore: found.app.review.score,
           autoReviewResult: found.app.review.result,
           autoReviewNotes: found.app.review.notes,
@@ -2282,73 +2098,51 @@ export default function AdminPage() {
       }),
     );
 
-    loadDashboardStats();
+    await loadDashboardStats();
 
-    const batchOneQuotaNineConstituencies = constituencies.filter(
-      (constituency) => getConstituencyBatchQuota(constituency, 1) === 9,
-    ).length;
-    const batchTwoQuotaNineConstituencies = constituencies.filter(
-      (constituency) => getConstituencyBatchQuota(constituency, 2) === 9,
-    ).length;
     const constituenciesWithFullBatchOneQuota = constituencies.filter(
       (constituency) =>
         (batchOneConstituencyCounts[constituency] || 0) >=
-        getConstituencyBatchQuota(constituency, 1),
-    ).length;
-    const constituenciesWithFullBatchTwoQuota = constituencies.filter(
-      (constituency) =>
-        (batchTwoConstituencyCounts[constituency] || 0) >=
-        getConstituencyBatchQuota(constituency, 2),
+        BATCH_BASE_PER_CONSTITUENCY,
     ).length;
 
     await logAdminAction({
       action: "master_selection",
       details: {
         resultsVisibleToApplicants: SELECTION_RESULTS_VISIBLE_TO_APPLICANTS,
+        selectionMode: "Batch 1 only - hidden internal selection",
         internalSelectionUpdatesAttempted: updates.length,
-        internalSelectionUpdatesSaved: updates.length - internalSelectionFailures.length,
+        internalSelectionUpdatesSaved:
+          updates.length - internalSelectionFailures.length,
         internalSelectionUpdatesFailed: internalSelectionFailures.length,
         firstInternalSelectionFailures: internalSelectionFailures.slice(0, 10),
         batchOneRule:
-          "Constituency quota only: all 61 constituencies receive 8 automatic seats; 12 seats remain for manual admin allocation",
-        batchTwoRule:
-          "Constituency quota only: all 61 constituencies receive 8 automatic seats; 12 seats remain for manual admin allocation",
-        totalSelectedForBatches: selectedForBothBatches.size,
-        protectedManualAccepted: protectedAccepted.length,
-        protectedManualRejected: protectedRejected.length,
+          "Constituency quota only: all 61 constituencies receive up to 8 automatic seats; 12 seats remain for manual admin allocation",
         batchOneSelected: batchOneSelected.size,
-        batchTwoSelected: batchTwoSelected.size,
-        waitingListEligible: waitingListEligible.length,
-        rejected: hardRejected.length,
+        batchTwoSelected: 0,
+        remainingEligiblePersisted: 0,
+        rejectedPersisted: 0,
+        hardRejectedCountedOnly: hardRejected.length,
         disabledSelected,
-        constituenciesRepresented: Object.keys(totalConstituencyCounts).length,
         constituenciesWithFullBatchOneQuota,
-        constituenciesWithFullBatchTwoQuota,
-        totalIntake: TOTAL_AUTO_SELECTED_INTAKE,
         batchOneIntake: BATCH_1_INTAKE,
-        batchTwoIntake: BATCH_2_INTAKE,
         batchBasePerConstituency: BATCH_BASE_PER_CONSTITUENCY,
-        batchExtraConstituencies: BATCH_EXTRA_CONSTITUENCIES,
         batchOneManualRemainingSeats: BATCH_1_MANUAL_REMAINING_SEATS,
-        batchTwoManualRemainingSeats: BATCH_2_MANUAL_REMAINING_SEATS,
         totalProgrammeIntake: TOTAL_PROGRAMME_INTAKE,
-        batchOneQuotaNineConstituencies,
-        batchTwoQuotaNineConstituencies,
-        remainingEligiblePerConstituency: WAITING_LIST_PER_CONSTITUENCY,
       },
     });
 
     alert(
-      `Internal Two-Batch Selection Complete:\nApplicant-facing results visible: ${SELECTION_RESULTS_VISIBLE_TO_APPLICANTS ? "YES" : "NO"}\nProtected Manual Accepted: ${protectedAccepted.length}\nProtected Manual Rejected: ${protectedRejected.length}\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nBatch 1 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_1_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 1 Full Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nBatch 2 Internal Reserved: ${batchTwoSelected.size}/${BATCH_2_INTAKE}\nBatch 2 Rule: constituency quota only — ${BATCH_BASE_PER_CONSTITUENCY} per constituency across all ${constituencies.length} constituencies; ${BATCH_2_MANUAL_REMAINING_SEATS} seats left for manual admin allocation\nBatch 2 Full Constituency Quotas: ${constituenciesWithFullBatchTwoQuota}/${constituencies.length}\nTotal Auto-Selected For Both Batches: ${selectedForBothBatches.size}/${TOTAL_AUTO_SELECTED_INTAKE}\nProgramme Total: ${TOTAL_PROGRAMME_INTAKE} (${TOTAL_AUTO_SELECTED_INTAKE} auto-selected + ${BATCH_1_MANUAL_REMAINING_SEATS + BATCH_2_MANUAL_REMAINING_SEATS} manual seats)\nWaiting List Counted Only: ${waitingListEligible.length}\nNew Hard Rejects Counted Internally: ${hardRejected.length}\nDisabled Selected: ${disabledSelected}`,
+      `Batch 1 Hidden Selection Complete:\nApplicant-facing results visible: NO\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nRule: ${BATCH_BASE_PER_CONSTITUENCY} per constituency across ${constituencies.length} constituencies\nFull Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nManual seats left for today: ${BATCH_1_MANUAL_REMAINING_SEATS}\nHard rejects counted only, not persisted today: ${hardRejected.length}\nDisabled selected: ${disabledSelected}\nFailed row updates: ${internalSelectionFailures.length}`,
     );
 
     setSelectionProgress({
       active: false,
-      title: "Hidden selection complete",
+      title: "Batch 1 hidden selection complete",
       phase: "Complete",
       detail: internalSelectionFailures.length
-        ? "Internal selection completed with some failed row updates. Applicants were not notified and visible statuses remain hidden."
-        : "Internal selection buckets were saved. Applicants were not notified and visible statuses remain hidden.",
+        ? "Batch 1 completed with some failed row updates. Applicants were not notified and visible statuses were not changed."
+        : "Batch 1 internal selections were saved. Applicants were not notified and visible statuses were not changed.",
       current: updates.length,
       total: updates.length || 1,
     });
