@@ -255,7 +255,7 @@ const STRATEGIC_COVERAGE_EMAILS = [
   "tlharesagae@gmail.com",
   "ilenykk01@gmail.com",
   "bkgotlele@gmail.com",
-  "",
+  "lindiwematlhaku@gmail.com",
 ];
 
 const constituencies = [
