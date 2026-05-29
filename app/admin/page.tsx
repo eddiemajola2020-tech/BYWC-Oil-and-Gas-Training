@@ -248,14 +248,22 @@ const STRATEGIC_COVERAGE_EMAILS = [
   "boitumelompulubusi98@gmail.com",
   "leepileone66@gmail.com",
   "krasebokwana@gmail.com",
-  "",
+  "gapebanda0200@gmail.com",
   "dimpho@dichakenyane.com",
   "sadintseane@gmail.com",
   "seabekgosiphefo@gmail.com",
   "tlharesagae@gmail.com",
   "ilenykk01@gmail.com",
   "bkgotlele@gmail.com",
-  "",
+  "otukileisrael3@gmail.com",
+  "lindiwematlhaku@gmail.com",
+  "phefokitso1@gmail.com",
+ "dianakwati@gmail.com",
+ "edmondkgosi@gmail.com",
+ "beautypelaelo6@gmail.com",
+ "tebomafote1996@gmail.com",
+  
+
 ];
 
 const constituencies = [
@@ -669,6 +677,7 @@ export default function AdminPage() {
     Record<string, string>
   >({});
   const [fullBackupExporting, setFullBackupExporting] = useState(false);
+  const [batchOneExporting, setBatchOneExporting] = useState(false);
   const [reportingStats, setReportingStats] = useState<ReportingStats | null>(
     null,
   );
@@ -1954,9 +1963,7 @@ export default function AdminPage() {
 
       const review = calculateEligibility(application);
       const age = Number(application.age);
-      const isStrategicCoverage =
-        !review.isHardRejected &&
-        isStrategicCoverageParticipant(application.email);
+      const isStrategicCoverage = isStrategicCoverageParticipant(application.email);
       const rankingScore =
         review.score + (isStrategicCoverage ? STRATEGIC_COVERAGE_BOOST : 0);
 
@@ -1978,14 +1985,14 @@ export default function AdminPage() {
       active: true,
       title: "Running Batch 1 hidden selection",
       phase: "Building Batch 1",
-      detail: "Selecting up to 8 eligible applicants per constituency for today's Batch 1 only.",
+      detail: "Forcing priority emails into Batch 1 first, then filling up to 8 eligible applicants per constituency for today's Batch 1 only.",
       current: 0,
       total: constituencies.length,
     });
 
     type ReviewedApplication = (typeof reviewed)[number];
 
-    const hardRejected = reviewed.filter((app) => app.isHardRejected);
+    const hardRejectedAll = reviewed.filter((app) => app.isHardRejected);
     const eligible = reviewed
       .filter((app) => !app.isHardRejected)
       .sort((a, b) => {
@@ -2003,10 +2010,10 @@ export default function AdminPage() {
     const batchOneConstituencyCounts: Record<string, number> = {};
     let disabledSelected = 0;
 
-    function canSelect(candidate: ReviewedApplication) {
+    function canSelect(candidate: ReviewedApplication, forceOverride = false) {
       if (!candidate.applicationId) return false;
       if (batchOneSelected.has(candidate.applicationId)) return false;
-      if (candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
+      if (!forceOverride && candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
         return false;
       }
       return true;
@@ -2020,9 +2027,13 @@ export default function AdminPage() {
       return "Non-Youth Allocation";
     }
 
-    function addToBatchOne(candidate: ReviewedApplication, bucket: string) {
+    function addToBatchOne(
+      candidate: ReviewedApplication,
+      bucket: string,
+      forceOverride = false,
+    ) {
       if (batchOneSelected.size >= BATCH_1_INTAKE) return false;
-      if (!canSelect(candidate)) return false;
+      if (!canSelect(candidate, forceOverride)) return false;
 
       candidate.review.selectionBucket = bucket;
       batchOneSelected.set(candidate.applicationId, candidate);
@@ -2036,6 +2047,48 @@ export default function AdminPage() {
       }
 
       return true;
+    }
+
+    // Strategic coverage emails are forced into Batch 1 first.
+    // This deliberately bypasses normal hard-gate rejection rules for these listed emails only.
+    // The override is clearly marked internally and still kept hidden from applicants until publishing.
+    const strategicCoverageSelected: ReviewedApplication[] = [];
+
+    for (const priorityEmail of STRATEGIC_COVERAGE_EMAILS) {
+      if (batchOneSelected.size >= BATCH_1_INTAKE) break;
+
+      const candidate = reviewed.find(
+        (app) =>
+          normalize(app.email) === normalize(priorityEmail) &&
+          app.isStrategicCoverage,
+      );
+
+      if (!candidate) continue;
+
+      const overrideNotes = [
+        candidate.review.notes,
+        candidate.review.hardRejectReason
+          ? `Priority override bypassed hard gate: ${candidate.review.hardRejectReason}`
+          : "Priority override selected before normal ranking",
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      candidate.review.notes = overrideNotes;
+      candidate.review.result = candidate.review.isHardRejected
+        ? "Priority override - selected despite hard gate"
+        : "Priority override - selected before normal ranking";
+      candidate.review.recommendedStatus = "Submitted";
+
+      const added = addToBatchOne(
+        candidate,
+        `Batch 1 - Priority Override / ${getNormalSelectionBucket(candidate)}`,
+        true,
+      );
+
+      if (added) {
+        strategicCoverageSelected.push(candidate);
+      }
     }
 
     // Batch 1 rule for today: 8 applicants per constituency only.
@@ -2076,6 +2129,9 @@ export default function AdminPage() {
 
     const batchOneSelectedIds = new Set(
       Array.from(batchOneSelected.values()).map((app) => app.applicationId),
+    );
+    const hardRejected = hardRejectedAll.filter(
+      (app) => !batchOneSelectedIds.has(app.applicationId),
     );
     const constituencyWaitingListCounts: Record<string, number> = {};
 
@@ -2211,6 +2267,8 @@ export default function AdminPage() {
         batchOneRule:
           "Constituency quota only: all 61 constituencies receive up to 8 automatic seats; 12 seats remain for manual admin allocation",
         batchOneSelected: batchOneSelected.size,
+        priorityOverrideSelected: strategicCoverageSelected.length,
+        strategicCoverageEmailsConfigured: STRATEGIC_COVERAGE_EMAILS.length,
         batchTwoSelected: 0,
         remainingEligiblePersisted: waitingListEligible.length,
         rejectedPersisted: hardRejected.length,
@@ -2225,7 +2283,7 @@ export default function AdminPage() {
     });
 
     alert(
-      `Batch 1 Hidden Selection Complete:\nApplicant-facing results visible: NO\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nRule: ${BATCH_BASE_PER_CONSTITUENCY} per constituency across ${constituencies.length} constituencies\nFull Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nManual seats left for today: ${BATCH_1_MANUAL_REMAINING_SEATS}\nFailed-gate applicants saved internally: ${hardRejected.length}\nDisabled selected: ${disabledSelected}\nFailed row updates: ${internalSelectionFailures.length}`,
+      `Batch 1 Hidden Selection Complete:\nApplicant-facing results visible: NO\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nPriority override selected: ${strategicCoverageSelected.length}/${STRATEGIC_COVERAGE_EMAILS.length}\nRule: ${BATCH_BASE_PER_CONSTITUENCY} per constituency across ${constituencies.length} constituencies\nFull Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nManual seats left for today: ${BATCH_1_MANUAL_REMAINING_SEATS}\nFailed-gate applicants saved internally: ${hardRejected.length}\nDisabled selected: ${disabledSelected}\nFailed row updates: ${internalSelectionFailures.length}`,
     );
 
     setSelectionProgress({
@@ -2967,6 +3025,70 @@ Welcome to the programme.`;
     }
   }
 
+  async function handleExportBatchOneSelectedCsv() {
+    setBatchOneExporting(true);
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "export_batch_1_selected_applicants",
+      );
+
+      if (error) {
+        console.error("Batch 1 selected export failed:", error);
+        alert(error.message || "Batch 1 selected export failed.");
+        setBatchOneExporting(false);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        alert("No Batch 1 selected applicants found to export.");
+        setBatchOneExporting(false);
+        return;
+      }
+
+      const headers = [
+        "Constituency",
+        "Full Name",
+        "Omang",
+        "Phone",
+      ];
+
+      const rows = data.map((row: any) => [
+        row.constituency,
+        row.full_name,
+        row.omang,
+        row.phone,
+      ]);
+
+      const csvContent = [
+        headers.map(escapeCsvValue).join(","),
+        ...rows.map((row: any[]) => row.map(escapeCsvValue).join(",")),
+      ].join("\n");
+
+      const blob = new Blob([csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+      link.href = url;
+      link.download = `BYWC-batch-1-selected-by-constituency-${timestamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert(`Batch 1 selected export complete. ${data.length} records exported.`);
+    } catch (error) {
+      console.error("Batch 1 selected export failed:", error);
+      alert("Batch 1 selected export failed. Please try again.");
+    } finally {
+      setBatchOneExporting(false);
+    }
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/admin-login");
@@ -3266,6 +3388,17 @@ Welcome to the programme.`;
                     {fullBackupExporting
                       ? "Exporting Backup..."
                       : "Full Backup"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportBatchOneSelectedCsv}
+                    disabled={batchOneExporting}
+                    className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-emerald-300 transition hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {batchOneExporting
+                      ? "Exporting Batch 1..."
+                      : "Export Batch 1 Selected"}
                   </button>
 
                   <button
