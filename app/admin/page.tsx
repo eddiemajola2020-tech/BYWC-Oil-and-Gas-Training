@@ -758,6 +758,9 @@ export default function AdminPage() {
     useState(false);
   const [nearbyReserveSearchInput, setNearbyReserveSearchInput] =
     useState("");
+  const [nearbyReservePublishAmount, setNearbyReservePublishAmount] =
+    useState("0");
+  const [nearbyReservePublishing, setNearbyReservePublishing] = useState(false);
   const [reportingStats, setReportingStats] = useState<ReportingStats | null>(
     null,
   );
@@ -883,7 +886,7 @@ export default function AdminPage() {
         getApplicationCount((query) =>
           query.ilike("selection_bucket", "%Remaining Eligible%"),
         ),
-        getApplicationCount((query) => query.ilike("selection_bucket", "%Batch 1 -%")),
+        getApplicationCount((query) => query.eq("status", "Accepted")),
         getApplicationCount((query) =>
           query.ilike("selection_bucket", "%Rejected -%"),
         ),
@@ -1252,6 +1255,21 @@ export default function AdminPage() {
       alert("Failed to load nearby reserve applicants. Please try again.");
     } finally {
       setNearbyReserveApplicationsLoading(false);
+    }
+  }
+
+
+  async function refreshAdminNumbers(showCurrentPageLoader = false) {
+    await Promise.all([
+      loadDashboardStats(),
+      loadAcceptedApplications(),
+      loadNearbyReserveApplications(),
+      loadReportingStats(),
+      loadApplications(showCurrentPageLoader, currentPage),
+    ]);
+
+    if (showConstituencyDispatch) {
+      await loadConstituencyDispatch();
     }
   }
 
@@ -1970,7 +1988,7 @@ export default function AdminPage() {
       }),
     );
 
-    await loadDashboardStats();
+    await refreshAdminNumbers(false);
 
     alert(
       `Selection results published to applicant dashboards.\nAccepted: ${acceptedCount}\nRemaining Eligible: ${remainingEligibleCount}\nRejected: ${rejectedCount}\nEmails/SMS sent: NO`,
@@ -2031,7 +2049,7 @@ export default function AdminPage() {
       });
     }
 
-    loadDashboardStats();
+    await refreshAdminNumbers(false);
     setSavingId(null);
   }
 
@@ -2088,7 +2106,7 @@ export default function AdminPage() {
       setSelectedApplication(updatedApplication);
     }
 
-    loadDashboardStats();
+    await refreshAdminNumbers(false);
     setSavingId(null);
   }
 
@@ -2434,7 +2452,7 @@ export default function AdminPage() {
       }),
     );
 
-    await loadDashboardStats();
+    await refreshAdminNumbers(false);
 
     const constituenciesWithFullBatchOneQuota = constituencies.filter(
       (constituency) =>
@@ -2824,8 +2842,7 @@ export default function AdminPage() {
       }),
     );
 
-    await loadDashboardStats();
-    await loadNearbyReserveApplications();
+    await refreshAdminNumbers(false);
 
     await logAdminAction({
       action: "nearby_reserve_selection",
@@ -2974,6 +2991,151 @@ Participants are expected to attend the official programme launch on 01 June 202
 Please bring your Omang/ID card or a copy for registration and verification purposes.
 
 Welcome to the programme.`;
+  }
+
+  function getReservePublishOrderedApplications() {
+    return [...nearbyReserveApplications].sort((a, b) => {
+      const employmentRankDiff =
+        getEmploymentPriorityRank(a.employmentStatus) -
+        getEmploymentPriorityRank(b.employmentStatus);
+
+      if (employmentRankDiff !== 0) return employmentRankDiff;
+
+      const scoreDiff =
+        (b.autoReviewScore || 0) - (a.autoReviewScore || 0);
+
+      if (scoreDiff !== 0) return scoreDiff;
+
+      return (a.submittedAt || "").localeCompare(b.submittedAt || "");
+    });
+  }
+
+  async function handlePublishNearbyReserveAmount() {
+    const amount = Number.parseInt(nearbyReservePublishAmount, 10);
+
+    if (Number.isNaN(amount) || amount <= 0) {
+      alert("Enter a valid publish amount greater than 0.");
+      return;
+    }
+
+    if (nearbyReserveApplications.length === 0) {
+      alert("No 350km reserve applicants are available to publish.");
+      return;
+    }
+
+    if (programmeRemainingSeats <= 0) {
+      alert(
+        `The programme target of ${TOTAL_PROGRAMME_INTAKE.toLocaleString()} accepted applicants has already been reached. No more reserve applicants can be published.`,
+      );
+      return;
+    }
+
+    if (amount > nearbyReserveMaxPublishable) {
+      alert(
+        `You can publish a maximum of ${nearbyReserveMaxPublishable.toLocaleString()} reserve applicant(s) right now. Current accepted: ${programmeAcceptedCount.toLocaleString()} / ${TOTAL_PROGRAMME_INTAKE.toLocaleString()}.`,
+      );
+      return;
+    }
+
+    const orderedReserveApplications = getReservePublishOrderedApplications();
+    const selectedForPublish = orderedReserveApplications.slice(0, amount);
+
+    const confirmed = window.confirm(
+      `Publish ${selectedForPublish.length.toLocaleString()} applicant(s) from the 350km reserve pool as Accepted?\n\nCurrent accepted: ${programmeAcceptedCount.toLocaleString()} / ${TOTAL_PROGRAMME_INTAKE.toLocaleString()}\nRemaining seats before publish: ${programmeRemainingSeats.toLocaleString()}\nRemaining seats after publish: ${(programmeRemainingSeats - selectedForPublish.length).toLocaleString()}\n\nThis will update only the selected reserve applicants. Batch 1 remains untouched. No emails or SMS will be sent.`,
+    );
+
+    if (!confirmed) return;
+
+    const secondConfirm = window.confirm(
+      "Final confirmation: this will make these reserve applicants visible as Accepted on their dashboards. Continue?",
+    );
+
+    if (!secondConfirm) return;
+
+    setNearbyReservePublishing(true);
+    setSelectionProgress({
+      active: true,
+      title: "Publishing 350km reserve applicants",
+      phase: "Updating accepted statuses",
+      detail:
+        "Publishing selected reserve applicants as Accepted. Batch 1 remains untouched. No emails or SMS are sent.",
+      current: 0,
+      total: selectedForPublish.length || 1,
+    });
+
+    const failures: string[] = [];
+    let completed = 0;
+
+    for (const application of selectedForPublish) {
+      try {
+        await retrySelectionUpdate(() =>
+          updateApplicationBySafeKey(
+            application,
+            {
+              status: "Accepted",
+              selection_bucket:
+                "Batch 2 - 350km Nearby Reserve Published / Accepted Manually",
+              admin_message: getSuccessfulApplicantMessage(application),
+            },
+            "350km reserve publish update",
+          ),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unknown 350km reserve publish failure";
+
+        failures.push(message);
+        console.error("350km reserve publish row failed:", message, application);
+      } finally {
+        completed += 1;
+        setSelectionProgress({
+          active: true,
+          title: "Publishing 350km reserve applicants",
+          phase: "Updating accepted statuses",
+          detail: `Processed ${completed.toLocaleString()} of ${selectedForPublish.length.toLocaleString()} reserve applicants. Failed: ${failures.length.toLocaleString()}.`,
+          current: completed,
+          total: selectedForPublish.length || 1,
+        });
+      }
+    }
+
+    await logAdminAction({
+      action: "selection_publish",
+      details: {
+        publishType: "350km nearby reserve amount",
+        requestedAmount: amount,
+        attempted: selectedForPublish.length,
+        published: selectedForPublish.length - failures.length,
+        failed: failures.length,
+        firstFailures: failures.slice(0, 10),
+        previousAcceptedCount: programmeAcceptedCount,
+        newAcceptedCount:
+          programmeAcceptedCount + selectedForPublish.length - failures.length,
+        programmeTarget: TOTAL_PROGRAMME_INTAKE,
+        batchOneTouched: false,
+        sentEmailOrSms: false,
+      },
+    });
+
+    await refreshAdminNumbers(false);
+
+    alert(
+      `350km reserve publish complete.\nPublished: ${(selectedForPublish.length - failures.length).toLocaleString()}\nFailed: ${failures.length.toLocaleString()}\nEmails/SMS sent: NO`,
+    );
+
+    setSelectionProgress({
+      active: false,
+      title: "350km reserve publish complete",
+      phase: "Complete",
+      detail:
+        "Selected reserve applicants were marked as Accepted. Batch 1 was not touched and no emails/SMS were sent.",
+      current: selectedForPublish.length,
+      total: selectedForPublish.length || 1,
+    });
+    setNearbyReservePublishAmount("0");
+    setNearbyReservePublishing(false);
   }
 
   async function handleSaveGroupMessage(
@@ -3861,6 +4023,21 @@ Welcome to the programme.`;
     (application) => normalize(application.employmentStatus).includes("self"),
   ).length;
 
+  const programmeAcceptedCount = acceptedApplications.length;
+  const programmeRemainingSeats = Math.max(
+    TOTAL_PROGRAMME_INTAKE - programmeAcceptedCount,
+    0,
+  );
+  const nearbyReserveAvailableToPublishCount = nearbyReserveApplications.length;
+  const nearbyReserveMaxPublishable = Math.min(
+    programmeRemainingSeats,
+    nearbyReserveAvailableToPublishCount,
+  );
+  const nearbyReservePublishedAcceptedCount = acceptedApplications.filter(
+    (application) =>
+      normalize(application.selectionBucket).includes("350km nearby reserve published"),
+  ).length;
+
   const youthWomenCount = reportingStats
     ? reportingStats.constituencyRows.reduce(
         (sum, [, stats]) => sum + stats.women,
@@ -4495,10 +4672,10 @@ Welcome to the programme.`;
                 Selected 50 reserve applicants for confirmation
               </h2>
               <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-400">
-                This section shows applicants tagged as {NEARBY_RESERVE_BUCKET}. It is admin-only and does not notify applicants or change their dashboard to Accepted. Batch 1 and already accepted applicants are excluded from this pool.
+                This section shows applicants tagged as {NEARBY_RESERVE_BUCKET}. It is admin-only until you publish a chosen amount. Published reserve applicants count toward the 1,000 programme target, but they never replace or modify Batch 1.
               </p>
               <p className="mt-2 text-xs font-semibold text-slate-500">
-                Reserve total: {nearbyReserveApplications.length.toLocaleString()} • Constituencies represented: {nearbyReserveConstituencyRows.length.toLocaleString()} / {NEARBY_350KM_CONSTITUENCIES.length.toLocaleString()} • Unemployed: {nearbyReserveUnemployedCount.toLocaleString()} • Self-employed: {nearbyReserveSelfEmployedCount.toLocaleString()}
+                Reserve total: {nearbyReserveApplications.length.toLocaleString()} • Accepted: {programmeAcceptedCount.toLocaleString()} / {TOTAL_PROGRAMME_INTAKE.toLocaleString()} • Remaining seats: {programmeRemainingSeats.toLocaleString()} • Max publish now: {nearbyReserveMaxPublishable.toLocaleString()}
               </p>
             </div>
 
@@ -4520,14 +4697,48 @@ Welcome to the programme.`;
               >
                 Export Reserve CSV
               </button>
+
+              <div className="flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-black/20 p-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={nearbyReserveMaxPublishable}
+                  value={nearbyReservePublishAmount}
+                  onChange={(event) => setNearbyReservePublishAmount(event.target.value)}
+                  placeholder="Amount"
+                  className="w-24 rounded-xl border border-white/10 bg-[#111827] px-3 py-2 text-xs font-black text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                />
+                <button
+                  type="button"
+                  onClick={handlePublishNearbyReserveAmount}
+                  disabled={
+                    nearbyReservePublishing ||
+                    nearbyReserveMaxPublishable <= 0 ||
+                    Number.parseInt(nearbyReservePublishAmount, 10) <= 0
+                  }
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {nearbyReservePublishing ? "Publishing..." : "Publish Amount"}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-6">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Reserve Selected</p>
               <p className="mt-2 text-2xl font-black text-cyan-300">{nearbyReserveApplications.length.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Target: {NEARBY_RESERVE_TARGET}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Accepted / Target</p>
+              <p className="mt-2 text-2xl font-black text-emerald-300">{programmeAcceptedCount.toLocaleString()} / {TOTAL_PROGRAMME_INTAKE.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Live accepted count</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Remaining Seats</p>
+              <p className="mt-2 text-2xl font-black text-yellow-300">{programmeRemainingSeats.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Reserve can publish up to {nearbyReserveMaxPublishable}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
