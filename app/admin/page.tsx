@@ -2986,11 +2986,18 @@ You have been successfully selected to participate in the Botswana Youth, Women 
 
 Participants are expected to arrive at the University of Botswana, Gaborone Campus on 31 May 2026 before 12:00 noon to allow for accommodation allocation and settling in well on time.
 
-Participants are expected to attend the official programme launch on 01 June 2026 at Ba Isago University from 8:00 AM.
+Participants are expected to attend the official programme launch on 01 June 2026 at BA ISAGO University, Gaborone Campus at 8:00 AM.
 
-Please bring your Omang/ID card or a copy for registration and verification purposes.
+Important Information:
 
-Welcome to the programme.`;
+• Bring your Omang/ID for registration.
+• Attendance throughout the programme is mandatory.
+• Meals will be provided during the training period.
+• Further programme information will be shared during registration.
+
+We congratulate you on your successful selection and look forward to welcoming you to this exciting opportunity within Botswana's growing oil and gas sector.
+
+Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026.`;
   }
 
   function getReservePublishOrderedApplications() {
