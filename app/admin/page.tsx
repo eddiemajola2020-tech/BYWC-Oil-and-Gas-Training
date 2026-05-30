@@ -56,6 +56,7 @@ type AuditAction =
   | "auto_review"
   | "master_selection"
   | "selection_publish"
+  | "nearby_reserve_selection"
   | "message_saved"
   | "data_request_update";
 
@@ -330,6 +331,54 @@ const constituencies = [
   "Tswapong South",
 ];
 
+const NEARBY_350KM_CONSTITUENCIES = [
+  "Gaborone Central",
+  "Gaborone North",
+  "Gaborone South",
+  "Gaborone Bonnington North",
+  "Gaborone Bonnington South",
+  "Tlokweng",
+  "Mogoditshane East",
+  "Mogoditshane West",
+  "Mmopane - Metsimotlhabe",
+  "Gabane/ Mankgodi",
+  "Thamaga - Kumakwane",
+  "Molepolole North",
+  "Molepolole South",
+  "Letlhakeng",
+  "Lentsweletau - Lephepe",
+  "Kgatleng Central",
+  "Kgatleng East",
+  "Kgatleng West",
+  "Gamalete",
+  "Lobatse",
+  "Kanye East",
+  "Kanye West",
+  "Moshupa - Manyana",
+  "Goodhope - Mmathethe",
+  "Jwaneng – Mabutsane",
+  "Takatokwane",
+  "Mahalapye East",
+  "Mahalapye West",
+  "Palapye",
+  "Shoshong",
+  "Serowe North",
+  "Serowe South",
+  "Serowe West",
+  "Mmadinare",
+  "Selibe Phikwe East",
+  "Selibe Phikwe West",
+  "Tswapong North",
+  "Tswapong South",
+];
+
+const NEARBY_RESERVE_TARGET = 50;
+const NEARBY_RESERVE_BASE_PER_CONSTITUENCY = 1;
+const NEARBY_RESERVE_EXTRA_SEATS =
+  NEARBY_RESERVE_TARGET - NEARBY_350KM_CONSTITUENCIES.length;
+const NEARBY_RESERVE_BUCKET =
+  "Confirmation Pool - 350km Nearby Reserve - Top 50";
+
 const VALID_CONSTITUENCIES = constituencies.map((constituency) =>
   normalize(constituency),
 );
@@ -367,6 +416,22 @@ function isStrategicCoverageParticipant(email?: string | null) {
   return STRATEGIC_COVERAGE_EMAILS.some(
     (priorityEmail) => normalize(priorityEmail) === normalizedEmail,
   );
+}
+
+function isNearby350kmConstituency(value?: string | null) {
+  const normalizedValue = normalize(value);
+
+  return NEARBY_350KM_CONSTITUENCIES.some(
+    (constituency) => normalize(constituency) === normalizedValue,
+  );
+}
+
+function getEmploymentPriorityRank(value?: string | null) {
+  const employmentStatus = normalize(value);
+
+  if (employmentStatus.includes("unemployed")) return 1;
+  if (employmentStatus.includes("self")) return 2;
+  return 3;
 }
 
 function maskOmang(value?: string | null) {
@@ -652,6 +717,7 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [masterSelecting, setMasterSelecting] = useState(false);
   const [publishingSelection, setPublishingSelection] = useState(false);
+  const [nearbyReserveSelecting, setNearbyReserveSelecting] = useState(false);
   const [selectionProgress, setSelectionProgress] = useState<SelectionProgress>(
     EMPTY_SELECTION_PROGRESS,
   );
@@ -2358,6 +2424,380 @@ export default function AdminPage() {
     setMasterSelecting(false);
   }
 
+  async function handleNearbyReserveSelection() {
+    const confirmed = window.confirm(
+      "Create the 350km nearby reserve selection now? This will tag 50 applicants only from Remaining Eligible / Waitlist / Submitted applicants in the 38 nearby constituencies. Batch 1 and already accepted applicants will not be touched.",
+    );
+
+    if (!confirmed) return;
+
+    const secondConfirm = window.confirm(
+      "Safety confirmation: Batch 1 has already been published and notified. This action must not touch Batch 1 or Accepted applicants. Continue only if you want to create/update the separate 350km reserve pool.",
+    );
+
+    if (!secondConfirm) return;
+
+    setNearbyReserveSelecting(true);
+    setSelectionProgress({
+      active: true,
+      title: "Creating 350km nearby reserve",
+      phase: "Loading applications",
+      detail: "Fetching all applications from Supabase without touching Batch 1...",
+      current: 0,
+      total: 1,
+    });
+
+    let selectionApplications: Application[] = [];
+
+    try {
+      selectionApplications = await fetchAllApplicationsForSelection();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load applications for nearby reserve selection";
+      console.error("Failed to load applications for nearby reserve selection:", error);
+      alert(message);
+      setNearbyReserveSelecting(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    setSelectionProgress({
+      active: true,
+      title: "Creating 350km nearby reserve",
+      phase: "Scoring eligible applicants",
+      detail: `Checking ${selectionApplications.length.toLocaleString()} applications. Batch 1 and Accepted applicants are locked out.`,
+      current: 0,
+      total: selectionApplications.length || 1,
+    });
+
+    type NearbyReviewedApplication = Application & {
+      review: ReviewDecision;
+      employmentPriorityRank: number;
+      isHardRejected: boolean;
+    };
+
+    const reviewed = selectionApplications.map((application, index) => {
+      if (index % 500 === 0) {
+        setSelectionProgress({
+          active: true,
+          title: "Creating 350km nearby reserve",
+          phase: "Scoring eligible applicants",
+          detail: `Scoring application ${index.toLocaleString()} of ${selectionApplications.length.toLocaleString()}...`,
+          current: index,
+          total: selectionApplications.length || 1,
+        });
+      }
+
+      const review = calculateEligibility(application);
+
+      return {
+        ...application,
+        review,
+        employmentPriorityRank: getEmploymentPriorityRank(
+          application.employmentStatus,
+        ),
+        isHardRejected: review.isHardRejected,
+      };
+    });
+
+    const eligiblePool = reviewed.filter((application) => {
+      const bucket = application.selectionBucket || "";
+      const status = application.status;
+      const isBatchOne = bucket.includes("Batch 1 -");
+      const isAccepted = status === "Accepted";
+      const isRejected = bucket.includes("Rejected") || status === "Rejected";
+      const isInNearbyRadius = isNearby350kmConstituency(
+        application.constituency,
+      );
+      const isAllowedSource =
+        bucket.includes("Remaining Eligible") ||
+        bucket.includes("Waitlist") ||
+        status === "Submitted";
+
+      return (
+        isInNearbyRadius &&
+        isAllowedSource &&
+        !isBatchOne &&
+        !isAccepted &&
+        !isRejected &&
+        !application.isHardRejected
+      );
+    });
+
+    function sortNearbyReserveCandidates(
+      first: NearbyReviewedApplication,
+      second: NearbyReviewedApplication,
+    ) {
+      if (first.employmentPriorityRank !== second.employmentPriorityRank) {
+        return first.employmentPriorityRank - second.employmentPriorityRank;
+      }
+
+      if ((second.review.score || 0) !== (first.review.score || 0)) {
+        return (second.review.score || 0) - (first.review.score || 0);
+      }
+
+      if (
+        (second.review.documentCompletenessScore || 0) !==
+        (first.review.documentCompletenessScore || 0)
+      ) {
+        return (
+          (second.review.documentCompletenessScore || 0) -
+          (first.review.documentCompletenessScore || 0)
+        );
+      }
+
+      return (first.submittedAt || "").localeCompare(second.submittedAt || "");
+    }
+
+    const selectedMap = new Map<string, NearbyReviewedApplication>();
+    const selectedOmangs = new Set<string>();
+    const selectedEmails = new Set<string>();
+    const selectedPhones = new Set<string>();
+    const selectedConstituencyCounts: Record<string, number> = {};
+
+    function candidateKey(candidate: NearbyReviewedApplication) {
+      return (
+        candidate.applicationId ||
+        candidate.databaseId ||
+        candidate.email ||
+        candidate.id
+      );
+    }
+
+    function canAddCandidate(candidate: NearbyReviewedApplication) {
+      const key = candidateKey(candidate);
+      const omang = normalize(candidate.omang);
+      const email = normalize(candidate.email);
+      const phone = normalize(candidate.phone);
+
+      if (!key) return false;
+      if (selectedMap.has(key)) return false;
+      if (omang && selectedOmangs.has(omang)) return false;
+      if (email && selectedEmails.has(email)) return false;
+      if (phone && selectedPhones.has(phone)) return false;
+
+      return true;
+    }
+
+    function addCandidate(candidate: NearbyReviewedApplication) {
+      if (selectedMap.size >= NEARBY_RESERVE_TARGET) return false;
+      if (!canAddCandidate(candidate)) return false;
+
+      const key = candidateKey(candidate);
+      selectedMap.set(key, candidate);
+
+      const omang = normalize(candidate.omang);
+      const email = normalize(candidate.email);
+      const phone = normalize(candidate.phone);
+
+      if (omang) selectedOmangs.add(omang);
+      if (email) selectedEmails.add(email);
+      if (phone) selectedPhones.add(phone);
+
+      const constituency = candidate.constituency || "Unknown";
+      selectedConstituencyCounts[constituency] =
+        (selectedConstituencyCounts[constituency] || 0) + 1;
+
+      return true;
+    }
+
+    setSelectionProgress({
+      active: true,
+      title: "Creating 350km nearby reserve",
+      phase: "Guaranteeing representation",
+      detail: "Selecting one strongest applicant from each of the 38 nearby constituencies first.",
+      current: 0,
+      total: NEARBY_350KM_CONSTITUENCIES.length,
+    });
+
+    for (const [index, constituency] of NEARBY_350KM_CONSTITUENCIES.entries()) {
+      setSelectionProgress({
+        active: true,
+        title: "Creating 350km nearby reserve",
+        phase: "Guaranteeing representation",
+        detail: `Selecting reserve representative for ${constituency} (${index + 1}/${NEARBY_350KM_CONSTITUENCIES.length}).`,
+        current: index + 1,
+        total: NEARBY_350KM_CONSTITUENCIES.length,
+      });
+
+      const constituencyCandidates = eligiblePool
+        .filter(
+          (candidate) =>
+            normalize(candidate.constituency) === normalize(constituency),
+        )
+        .sort(sortNearbyReserveCandidates);
+
+      const representative = constituencyCandidates.find(canAddCandidate);
+
+      if (representative) {
+        addCandidate(representative);
+      }
+    }
+
+    const extraCandidates = eligiblePool
+      .filter(canAddCandidate)
+      .sort(sortNearbyReserveCandidates);
+
+    for (const candidate of extraCandidates) {
+      if (selectedMap.size >= NEARBY_RESERVE_TARGET) break;
+      addCandidate(candidate);
+    }
+
+    const selectedReserve = Array.from(selectedMap.values());
+    const batchOneOrAcceptedContamination = selectedReserve.filter(
+      (application) =>
+        (application.selectionBucket || "").includes("Batch 1 -") ||
+        application.status === "Accepted",
+    );
+
+    if (batchOneOrAcceptedContamination.length > 0) {
+      alert(
+        `Safety stop: ${batchOneOrAcceptedContamination.length} Batch 1 or Accepted applicants were found in the reserve preview. No records were changed.`,
+      );
+      setNearbyReserveSelecting(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    if (selectedReserve.length === 0) {
+      alert(
+        "No eligible nearby reserve applicants were found. No records were changed.",
+      );
+      setNearbyReserveSelecting(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    if (selectedReserve.length < NEARBY_RESERVE_TARGET) {
+      const proceed = window.confirm(
+        `Only ${selectedReserve.length}/${NEARBY_RESERVE_TARGET} eligible applicants were found. Continue and tag the available applicants?`,
+      );
+
+      if (!proceed) {
+        setNearbyReserveSelecting(false);
+        setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+        return;
+      }
+    }
+
+    const constituenciesRepresented = Object.keys(
+      selectedConstituencyCounts,
+    ).length;
+
+    const finalConfirm = window.confirm(
+      `Final confirmation before saving:\n\nNearby reserve selected: ${selectedReserve.length}/${NEARBY_RESERVE_TARGET}\nConstituencies represented: ${constituenciesRepresented}/${NEARBY_350KM_CONSTITUENCIES.length}\nBatch 1 / Accepted contamination: 0\n\nThis will tag these applicants as: ${NEARBY_RESERVE_BUCKET}\n\nContinue?`,
+    );
+
+    if (!finalConfirm) {
+      setNearbyReserveSelecting(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    setSelectionProgress({
+      active: true,
+      title: "Creating 350km nearby reserve",
+      phase: "Saving reserve pool",
+      detail: "Tagging the selected 50 applicants. Batch 1 and Accepted applicants remain untouched.",
+      current: 0,
+      total: selectedReserve.length || 1,
+    });
+
+    const updates = selectedReserve.map((app) => ({
+      app,
+      status: "Submitted" as ApplicationStatus,
+      bucket: NEARBY_RESERVE_BUCKET,
+    }));
+
+    let nearbyReserveFailures: string[] = [];
+
+    try {
+      nearbyReserveFailures = await updateReviewFieldsInChunks(
+        updates,
+        25,
+        (completed, total, failed) => {
+          setSelectionProgress({
+            active: true,
+            title: "Creating 350km nearby reserve",
+            phase: "Saving reserve pool",
+            detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} reserve applicants. Failed: ${failed.toLocaleString()}.`,
+            current: completed,
+            total,
+          });
+        },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nearby reserve selection update failed";
+      console.error("Nearby reserve selection update failed:", error);
+      alert(message);
+      setNearbyReserveSelecting(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    setApplications((prev) =>
+      prev.map((application) => {
+        const found = selectedReserve.find(
+          (selected) => selected.applicationId === application.applicationId,
+        );
+
+        if (!found) return application;
+
+        return {
+          ...application,
+          autoReviewScore: found.review.score,
+          autoReviewResult: found.review.result,
+          autoReviewNotes: found.review.notes,
+          priorityGroup: found.review.priorityGroup,
+          selectionBucket: NEARBY_RESERVE_BUCKET,
+          hardRejectReason: found.review.hardRejectReason,
+          documentCompletenessScore: found.review.documentCompletenessScore,
+        };
+      }),
+    );
+
+    await loadDashboardStats();
+
+    await logAdminAction({
+      action: "nearby_reserve_selection",
+      details: {
+        reserveBucket: NEARBY_RESERVE_BUCKET,
+        selected: selectedReserve.length,
+        target: NEARBY_RESERVE_TARGET,
+        nearbyConstituencies: NEARBY_350KM_CONSTITUENCIES.length,
+        constituenciesRepresented,
+        baseRepresentationRule:
+          "One strongest eligible applicant from each nearby constituency first, then best remaining applicants for extra seats.",
+        extraSeats: NEARBY_RESERVE_EXTRA_SEATS,
+        batchOneOrAcceptedContamination: 0,
+        sources:
+          "Remaining Eligible, Waitlist, and Submitted only. Batch 1, Accepted, and Rejected are excluded.",
+        failedUpdates: nearbyReserveFailures.length,
+        firstFailures: nearbyReserveFailures.slice(0, 10),
+      },
+    });
+
+    alert(
+      `350km Nearby Reserve Complete:\nSelected: ${selectedReserve.length}/${NEARBY_RESERVE_TARGET}\nConstituencies represented: ${constituenciesRepresented}/${NEARBY_350KM_CONSTITUENCIES.length}\nBatch 1 / Accepted touched: 0\nFailed row updates: ${nearbyReserveFailures.length}`,
+    );
+
+    setSelectionProgress({
+      active: false,
+      title: "350km nearby reserve complete",
+      phase: "Complete",
+      detail:
+        "Nearby reserve applicants were tagged. Batch 1 and Accepted applicants were not touched.",
+      current: selectedReserve.length,
+      total: selectedReserve.length || 1,
+    });
+    setNearbyReserveSelecting(false);
+  }
+
   async function handleSaveMessage(application: Application) {
     const message =
       messageDrafts[application.id] ?? selectedApplication?.adminMessage ?? "";
@@ -3635,7 +4075,7 @@ Welcome to the programme.`;
                   <button
                     type="button"
                     onClick={handleMasterSelection}
-                    disabled={masterSelecting || publishingSelection}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting}
                     className="rounded-2xl bg-orange-500 px-5 py-3 text-xs font-black text-white transition hover:bg-orange-600 disabled:opacity-50"
                   >
                     {masterSelecting ? "Running..." : "Run Hidden Selection"}
@@ -3644,19 +4084,31 @@ Welcome to the programme.`;
                   <button
                     type="button"
                     onClick={handlePublishSelectionResults}
-                    disabled={masterSelecting || publishingSelection}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting}
                     className="rounded-2xl bg-emerald-500 px-5 py-3 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
                   >
                     {publishingSelection
                       ? "Publishing..."
                       : "Publish Results to Dashboard"}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNearbyReserveSelection}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting}
+                    className="rounded-2xl bg-blue-600 px-5 py-3 text-xs font-black text-white transition hover:bg-blue-700 disabled:opacity-50 sm:col-span-2"
+                  >
+                    {nearbyReserveSelecting
+                      ? "Creating Reserve..."
+                      : "Create 350km Reserve Top 50"}
+                  </button>
                 </div>
 
                 <p className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-xs font-semibold leading-5 text-slate-300">
                   Current safety mode: hidden selection does not notify
-                  applicants. The publish button changes applicant dashboard
-                  statuses only; it does not send email, SMS or WhatsApp.
+                  applicants. The 350km reserve creates a separate confirmation
+                  pool from eligible/waitlist/submitted applicants only. Batch 1
+                  and already accepted applicants are locked out.
                 </p>
 
                 {(selectionProgress.active || masterSelecting || publishingSelection) && (
