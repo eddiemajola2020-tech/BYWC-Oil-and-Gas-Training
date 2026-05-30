@@ -751,6 +751,13 @@ export default function AdminPage() {
     useState(false);
   const [acceptedApplicationsSearchInput, setAcceptedApplicationsSearchInput] =
     useState("");
+  const [nearbyReserveApplications, setNearbyReserveApplications] = useState<Application[]>(
+    [],
+  );
+  const [nearbyReserveApplicationsLoading, setNearbyReserveApplicationsLoading] =
+    useState(false);
+  const [nearbyReserveSearchInput, setNearbyReserveSearchInput] =
+    useState("");
   const [reportingStats, setReportingStats] = useState<ReportingStats | null>(
     null,
   );
@@ -1202,6 +1209,52 @@ export default function AdminPage() {
     }
   }
 
+  async function loadNearbyReserveApplications() {
+    setNearbyReserveApplicationsLoading(true);
+
+    try {
+      const batchSize = 1000;
+      let from = 0;
+      let allNearbyReserveApplications: Application[] = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from(APPLICATIONS_TABLE)
+          .select("*")
+          .eq("selection_bucket", NEARBY_RESERVE_BUCKET)
+          .order("constituency", { ascending: true })
+          .order("auto_review_score", { ascending: false })
+          .order("first_name", { ascending: true })
+          .order("last_name", { ascending: true })
+          .range(from, from + batchSize - 1);
+
+        if (error) {
+          console.error("Failed to load nearby reserve applicants:", error);
+          alert(error.message || "Failed to load nearby reserve applicants.");
+          setNearbyReserveApplicationsLoading(false);
+          return;
+        }
+
+        const batch = (data || []).map(formatApplication);
+        allNearbyReserveApplications = [
+          ...allNearbyReserveApplications,
+          ...batch,
+        ];
+
+        if (!data || data.length < batchSize) break;
+
+        from += batchSize;
+      }
+
+      setNearbyReserveApplications(allNearbyReserveApplications);
+    } catch (error) {
+      console.error("Failed to load nearby reserve applicants:", error);
+      alert("Failed to load nearby reserve applicants. Please try again.");
+    } finally {
+      setNearbyReserveApplicationsLoading(false);
+    }
+  }
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter]);
@@ -1236,6 +1289,16 @@ export default function AdminPage() {
 
     const interval = setInterval(() => {
       loadAcceptedApplications();
+    }, REFRESH_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    loadNearbyReserveApplications();
+
+    const interval = setInterval(() => {
+      loadNearbyReserveApplications();
     }, REFRESH_INTERVAL);
 
     return () => clearInterval(interval);
@@ -2762,6 +2825,7 @@ export default function AdminPage() {
     );
 
     await loadDashboardStats();
+    await loadNearbyReserveApplications();
 
     await logAdminAction({
       action: "nearby_reserve_selection",
@@ -3637,6 +3701,59 @@ Welcome to the programme.`;
     URL.revokeObjectURL(url);
   }
 
+  function handleExportNearbyReserveApplicantsCsv() {
+    if (nearbyReserveApplications.length === 0) {
+      alert("No 350km reserve applicants found to export.");
+      return;
+    }
+
+    const headers = [
+      "Constituency",
+      "First Name",
+      "Last Name",
+      "Omang",
+      "Phone",
+      "Email",
+      "Employment Status",
+      "Score",
+      "Status",
+      "Selection Bucket",
+    ];
+
+    const rows = nearbyReserveApplications.map((application) => [
+      application.constituency,
+      application.firstName,
+      application.lastName,
+      application.omang,
+      application.phone,
+      application.email,
+      application.employmentStatus,
+      application.autoReviewScore ?? "",
+      application.status,
+      application.selectionBucket,
+    ]);
+
+    const csvContent = [
+      headers.map(escapeCsvValue).join(","),
+      ...rows.map((row) => row.map(escapeCsvValue).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    link.href = url;
+    link.download = `BYWC-350km-nearby-reserve-top-50-${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/admin-login");
@@ -3697,6 +3814,52 @@ Welcome to the programme.`;
       a[0].localeCompare(b[0]),
     );
   }, [acceptedApplications]);
+
+  const nearbyReserveSearchTerm = normalize(nearbyReserveSearchInput);
+
+  const visibleNearbyReserveApplications = useMemo(() => {
+    if (!nearbyReserveSearchTerm) return nearbyReserveApplications;
+
+    return nearbyReserveApplications.filter((application) => {
+      const searchableText = [
+        application.firstName,
+        application.lastName,
+        application.email,
+        application.phone,
+        application.omang,
+        application.constituency,
+        application.employmentStatus,
+        application.selectionBucket,
+      ]
+        .map((value) => normalize(value))
+        .join(" " );
+
+      return searchableText.includes(nearbyReserveSearchTerm);
+    });
+  }, [nearbyReserveApplications, nearbyReserveSearchTerm]);
+
+  const nearbyReserveConstituencyRows = useMemo(() => {
+    const breakdown = nearbyReserveApplications.reduce(
+      (acc, application) => {
+        const constituency = application.constituency || "Unknown";
+        acc[constituency] = (acc[constituency] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return Object.entries(breakdown).sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    );
+  }, [nearbyReserveApplications]);
+
+  const nearbyReserveUnemployedCount = nearbyReserveApplications.filter(
+    (application) => normalize(application.employmentStatus).includes("unemployed"),
+  ).length;
+
+  const nearbyReserveSelfEmployedCount = nearbyReserveApplications.filter(
+    (application) => normalize(application.employmentStatus).includes("self"),
+  ).length;
 
   const youthWomenCount = reportingStats
     ? reportingStats.constituencyRows.reduce(
@@ -4304,6 +4467,174 @@ Welcome to the programme.`;
                   </p>
                 ) : (
                   acceptedConstituencyRows.map(([constituency, count]) => (
+                    <div
+                      key={constituency}
+                      className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2"
+                    >
+                      <span className="text-xs font-bold text-slate-300">
+                        {constituency}
+                      </span>
+                      <span className="rounded-full bg-white/10 px-2 py-1 text-xs font-black text-white">
+                        {count}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-5 rounded-[30px] border border-cyan-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">
+                350km Nearby Reserve Pool
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">
+                Selected 50 reserve applicants for confirmation
+              </h2>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-400">
+                This section shows applicants tagged as {NEARBY_RESERVE_BUCKET}. It is admin-only and does not notify applicants or change their dashboard to Accepted. Batch 1 and already accepted applicants are excluded from this pool.
+              </p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">
+                Reserve total: {nearbyReserveApplications.length.toLocaleString()} • Constituencies represented: {nearbyReserveConstituencyRows.length.toLocaleString()} / {NEARBY_350KM_CONSTITUENCIES.length.toLocaleString()} • Unemployed: {nearbyReserveUnemployedCount.toLocaleString()} • Self-employed: {nearbyReserveSelfEmployedCount.toLocaleString()}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadNearbyReserveApplications}
+                disabled={nearbyReserveApplicationsLoading}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-50"
+              >
+                {nearbyReserveApplicationsLoading ? "Refreshing..." : "Refresh Reserve"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportNearbyReserveApplicantsCsv}
+                disabled={nearbyReserveApplications.length === 0}
+                className="rounded-2xl bg-cyan-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Export Reserve CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Reserve Selected</p>
+              <p className="mt-2 text-2xl font-black text-cyan-300">{nearbyReserveApplications.length.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Target: {NEARBY_RESERVE_TARGET}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+              <p className="mt-2 text-2xl font-black text-blue-300">{nearbyReserveConstituencyRows.length.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Nearby radius list: {NEARBY_350KM_CONSTITUENCIES.length}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Unemployed</p>
+              <p className="mt-2 text-2xl font-black text-emerald-300">{nearbyReserveUnemployedCount.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Prioritised first</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Self-employed</p>
+              <p className="mt-2 text-2xl font-black text-yellow-300">{nearbyReserveSelfEmployedCount.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Second priority</p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <input
+                  type="search"
+                  value={nearbyReserveSearchInput}
+                  onChange={(event) => setNearbyReserveSearchInput(event.target.value)}
+                  placeholder="Search reserve by name, Omang, phone, email, employment or constituency..."
+                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:bg-[#0f172a]"
+                />
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-white/10">
+                {nearbyReserveApplicationsLoading ? (
+                  <div className="p-6 text-center text-sm font-semibold text-slate-400">
+                    Loading nearby reserve applicants...
+                  </div>
+                ) : visibleNearbyReserveApplications.length === 0 ? (
+                  <div className="p-6 text-center text-sm font-semibold text-slate-400">
+                    No 350km reserve applicants found yet. Run Create 350km Reserve Top 50, then refresh this section.
+                  </div>
+                ) : (
+                  <div className="max-h-[420px] overflow-y-auto overflow-x-hidden">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup>
+                        <col className="w-[23%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[17%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[14%]" />
+                      </colgroup>
+                      <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Constituency</th>
+                          <th className="px-3 py-3 text-left font-black">Employment</th>
+                          <th className="px-3 py-3 text-left font-black">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {visibleNearbyReserveApplications.map((application) => (
+                          <tr
+                            key={application.id}
+                            className="align-top text-slate-300 transition hover:bg-white/[0.03]"
+                          >
+                            <td className="px-3 py-3">
+                              <p className="font-black text-white">
+                                {application.firstName} {application.lastName}
+                              </p>
+                              <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">
+                                {application.email || "No email"}
+                              </p>
+                            </td>
+                            <td className="px-3 py-3 font-semibold text-slate-300">
+                              {application.omang || "-"}
+                            </td>
+                            <td className="px-3 py-3 font-semibold text-slate-300">
+                              {application.phone || "-"}
+                            </td>
+                            <td className="px-3 py-3 font-semibold text-slate-300">
+                              {application.constituency || "Unknown"}
+                            </td>
+                            <td className="px-3 py-3 font-semibold text-slate-300">
+                              {application.employmentStatus || "-"}
+                            </td>
+                            <td className="px-3 py-3 font-black text-cyan-300">
+                              {application.autoReviewScore ?? "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Reserve By Constituency</p>
+              <div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                {nearbyReserveConstituencyRows.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">
+                    No reserve constituency data yet.
+                  </p>
+                ) : (
+                  nearbyReserveConstituencyRows.map(([constituency, count]) => (
                     <div
                       key={constituency}
                       className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2"
