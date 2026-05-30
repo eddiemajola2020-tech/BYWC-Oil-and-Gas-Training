@@ -9,6 +9,9 @@ type Application = {
   applicationId?: string;
   submittedAt?: string;
   status?: string;
+  arrivalStatus?: string;
+  arrivedAt?: string | null;
+  arrivalConfirmedBy?: string | null;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -42,6 +45,8 @@ export default function DashboardPage() {
     useState<Application | null>(null);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [arrivalSaving, setArrivalSaving] = useState(false);
+  const [arrivalFeedback, setArrivalFeedback] = useState("");
 
   useEffect(() => {
     async function loadLatestApplication() {
@@ -92,6 +97,9 @@ export default function DashboardPage() {
         applicationId: data.application_id,
         submittedAt: data.submitted_at,
         status: data.status,
+        arrivalStatus: data.arrival_status || "Not Arrived",
+        arrivedAt: data.arrived_at,
+        arrivalConfirmedBy: data.arrival_confirmed_by,
         firstName: data.first_name,
         lastName: data.last_name,
         email: data.email,
@@ -126,6 +134,55 @@ export default function DashboardPage() {
   async function handleLogout() {
     await supabase.auth.signOut();
     window.location.href = "/login";
+  }
+
+  async function handleConfirmArrival() {
+    if (!latestApplication) return;
+
+    if (latestApplication.status !== "Accepted") {
+      setArrivalFeedback(
+        "Arrival registration is only available for accepted applicants. Please see the registration desk for assistance.",
+      );
+      return;
+    }
+
+    if (latestApplication.arrivalStatus === "Arrived") {
+      setArrivalFeedback("Your arrival has already been registered.");
+      return;
+    }
+
+    setArrivalSaving(true);
+    setArrivalFeedback("");
+
+    const arrivedAt = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("applications")
+      .update({
+        arrival_status: "Arrived",
+        arrived_at: arrivedAt,
+        arrival_confirmed_by: "Applicant Self Check-in",
+      })
+      .eq("id", latestApplication.id);
+
+    if (error) {
+      console.error("Failed to confirm arrival:", error);
+      setArrivalFeedback(
+        "We could not confirm your arrival. Please try again or see the registration desk.",
+      );
+      setArrivalSaving(false);
+      return;
+    }
+
+    setLatestApplication({
+      ...latestApplication,
+      arrivalStatus: "Arrived",
+      arrivedAt,
+      arrivalConfirmedBy: "Applicant Self Check-in",
+    });
+
+    setArrivalFeedback("Arrival confirmed successfully. Welcome to the programme.");
+    setArrivalSaving(false);
   }
 
   const unreadMessages = messages.filter((msg) => !msg.read).length;
@@ -356,6 +413,69 @@ export default function DashboardPage() {
                 </Link>
               </div>
             </div>
+
+            {status === "Accepted" && (
+              <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
+                  Arrival Registration
+                </p>
+
+                <h3 className="mt-3 text-2xl font-bold text-blue-950">
+                  {latestApplication?.arrivalStatus === "Arrived"
+                    ? "Arrival Confirmed"
+                    : "Confirm Your Arrival"}
+                </h3>
+
+                <p className="mt-3 text-sm leading-7 text-slate-600">
+                  {latestApplication?.arrivalStatus === "Arrived"
+                    ? "Your arrival has been registered successfully. Please proceed with the programme registration process at the venue."
+                    : "If you have arrived at the venue, tap the button below to confirm your arrival for registration."}
+                </p>
+
+                <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm text-slate-500">
+                      Arrival Status
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-black ${
+                      latestApplication?.arrivalStatus === "Arrived"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-orange-100 text-orange-700"
+                    }`}>
+                      {latestApplication?.arrivalStatus || "Not Arrived"}
+                    </span>
+                  </div>
+
+                  {latestApplication?.arrivedAt && (
+                    <div className="mt-3 flex items-center justify-between gap-4">
+                      <span className="text-sm text-slate-500">
+                        Arrived At
+                      </span>
+                      <span className="text-sm font-bold text-blue-950">
+                        {new Date(latestApplication.arrivedAt).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {latestApplication?.arrivalStatus !== "Arrived" && (
+                  <button
+                    type="button"
+                    onClick={handleConfirmArrival}
+                    disabled={arrivalSaving}
+                    className="mt-5 w-full rounded-full bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    {arrivalSaving ? "Confirming Arrival..." : "I Have Arrived"}
+                  </button>
+                )}
+
+                {arrivalFeedback && (
+                  <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                    {arrivalFeedback}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div
               id="profile"
