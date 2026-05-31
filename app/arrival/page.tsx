@@ -13,6 +13,7 @@ type Application = {
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
+  phone?: string | null;
   constituency?: string | null;
   status?: string | null;
   arrivalStatus?: string | null;
@@ -20,6 +21,13 @@ type Application = {
   arrivalDisclaimerAccepted?: boolean | null;
   arrivalDisclaimerAcceptedAt?: string | null;
   arrivalDisclaimerVersion?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactNumber?: string | null;
+  emergencyContactRelationship?: string | null;
+  knownMedicalConditions?: string | null;
+  currentMedication?: string | null;
+  hasDietaryRestrictions?: boolean | null;
+  dietaryRestrictionsDetails?: string | null;
 };
 
 export default function ArrivalPage() {
@@ -28,8 +36,16 @@ export default function ArrivalPage() {
   const [feedback, setFeedback] = useState("");
   const [hasValidQrToken, setHasValidQrToken] = useState(false);
   const [application, setApplication] = useState<Application | null>(null);
-  const [showFullDisclaimer, setShowFullDisclaimer] = useState(false);
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactNumber, setEmergencyContactNumber] = useState("");
+  const [emergencyContactRelationship, setEmergencyContactRelationship] =
+    useState("");
+  const [knownMedicalConditions, setKnownMedicalConditions] = useState("");
+  const [currentMedication, setCurrentMedication] = useState("");
+  const [hasDietaryRestrictions, setHasDietaryRestrictions] = useState(false);
+  const [dietaryRestrictionsDetails, setDietaryRestrictionsDetails] =
+    useState("");
 
   useEffect(() => {
     async function loadArrivalPage() {
@@ -80,12 +96,13 @@ export default function ArrivalPage() {
         return;
       }
 
-      setApplication({
+      const loadedApplication: Application = {
         id: data.id,
         applicationId: data.application_id,
         firstName: data.first_name,
         lastName: data.last_name,
         email: data.email,
+        phone: data.phone,
         constituency: data.constituency,
         status: data.status,
         arrivalStatus: data.arrival_status || "Not Arrived",
@@ -93,10 +110,26 @@ export default function ArrivalPage() {
         arrivalDisclaimerAccepted: data.arrival_disclaimer_accepted || false,
         arrivalDisclaimerAcceptedAt: data.arrival_disclaimer_accepted_at,
         arrivalDisclaimerVersion: data.arrival_disclaimer_version,
-      });
+        emergencyContactName: data.emergency_contact_name,
+        emergencyContactNumber: data.emergency_contact_number,
+        emergencyContactRelationship: data.emergency_contact_relationship,
+        knownMedicalConditions: data.known_medical_conditions,
+        currentMedication: data.current_medication,
+        hasDietaryRestrictions: data.has_dietary_restrictions || false,
+        dietaryRestrictionsDetails: data.dietary_restrictions_details,
+      };
 
+      setApplication(loadedApplication);
       setHasAcceptedDisclaimer(Boolean(data.arrival_disclaimer_accepted));
-
+      setEmergencyContactName(data.emergency_contact_name || "");
+      setEmergencyContactNumber(data.emergency_contact_number || "");
+      setEmergencyContactRelationship(
+        data.emergency_contact_relationship || "",
+      );
+      setKnownMedicalConditions(data.known_medical_conditions || "");
+      setCurrentMedication(data.current_medication || "");
+      setHasDietaryRestrictions(Boolean(data.has_dietary_restrictions));
+      setDietaryRestrictionsDetails(data.dietary_restrictions_details || "");
       setLoading(false);
     }
 
@@ -110,6 +143,30 @@ export default function ArrivalPage() {
       .replace(/\s+/g, " ")
       .trim() || "Applicant";
   }, [application]);
+
+  function validateArrivalForm() {
+    if (!emergencyContactName.trim()) {
+      return "Please enter your emergency contact name.";
+    }
+
+    if (!emergencyContactNumber.trim()) {
+      return "Please enter your emergency contact number.";
+    }
+
+    if (!emergencyContactRelationship.trim()) {
+      return "Please enter your relationship to the emergency contact.";
+    }
+
+    if (hasDietaryRestrictions && !dietaryRestrictionsDetails.trim()) {
+      return "Please describe your dietary restrictions.";
+    }
+
+    if (!hasAcceptedDisclaimer) {
+      return "Please read and accept the participant waiver before confirming your arrival.";
+    }
+
+    return "";
+  }
 
   async function handleConfirmArrival() {
     if (!application) return;
@@ -131,8 +188,10 @@ export default function ArrivalPage() {
       return;
     }
 
-    if (!hasAcceptedDisclaimer) {
-      setFeedback("Please read and accept the arrival disclaimer before confirming your arrival.");
+    const validationMessage = validateArrivalForm();
+
+    if (validationMessage) {
+      setFeedback(validationMessage);
       return;
     }
 
@@ -150,6 +209,16 @@ export default function ArrivalPage() {
         arrival_disclaimer_accepted: true,
         arrival_disclaimer_accepted_at: arrivedAt,
         arrival_disclaimer_version: ARRIVAL_DISCLAIMER_VERSION,
+        registration_status: "Pending",
+        emergency_contact_name: emergencyContactName.trim(),
+        emergency_contact_number: emergencyContactNumber.trim(),
+        emergency_contact_relationship: emergencyContactRelationship.trim(),
+        known_medical_conditions: knownMedicalConditions.trim(),
+        current_medication: currentMedication.trim(),
+        has_dietary_restrictions: hasDietaryRestrictions,
+        dietary_restrictions_details: hasDietaryRestrictions
+          ? dietaryRestrictionsDetails.trim()
+          : "",
       })
       .eq("id", application.id);
 
@@ -169,9 +238,18 @@ export default function ArrivalPage() {
       arrivalDisclaimerAccepted: true,
       arrivalDisclaimerAcceptedAt: arrivedAt,
       arrivalDisclaimerVersion: ARRIVAL_DISCLAIMER_VERSION,
+      emergencyContactName,
+      emergencyContactNumber,
+      emergencyContactRelationship,
+      knownMedicalConditions,
+      currentMedication,
+      hasDietaryRestrictions,
+      dietaryRestrictionsDetails: hasDietaryRestrictions
+        ? dietaryRestrictionsDetails
+        : "",
     });
 
-    setFeedback("Arrival confirmed successfully. Redirecting you to your dashboard...");
+    setFeedback("Arrival registration complete. Redirecting you to your dashboard...");
     setSaving(false);
 
     setTimeout(() => {
@@ -221,7 +299,7 @@ export default function ArrivalPage() {
 
   return (
     <main className="min-h-screen bg-[#eef1f7] px-4 py-6 text-slate-900 lg:px-10 lg:py-10">
-      <section className="mx-auto max-w-3xl overflow-hidden rounded-[32px] border border-white/70 bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.14)] lg:rounded-[40px] lg:p-8">
+      <section className="mx-auto max-w-4xl overflow-hidden rounded-[32px] border border-white/70 bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.14)] lg:rounded-[40px] lg:p-8">
         <div className="rounded-[28px] bg-blue-950 p-6 text-white lg:p-8">
           <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-300">
             BYWC Arrival Registration
@@ -232,7 +310,7 @@ export default function ArrivalPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-7 text-blue-100">
-            Confirm your arrival only after you have physically arrived at the
+            Complete this form only after you have physically arrived at the
             venue and scanned the official arrival QR code.
           </p>
         </div>
@@ -244,47 +322,47 @@ export default function ArrivalPage() {
         )}
 
         {application && (
-          <div className="mt-6 grid gap-4 rounded-[28px] border border-slate-200 bg-white p-5 lg:p-6">
-            <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+          <div className="mt-6 grid gap-4 rounded-[28px] border border-slate-200 bg-white p-5 lg:grid-cols-2 lg:p-6">
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <span className="text-sm text-slate-500">Status</span>
-              <span className="text-sm font-black text-orange-600">
+              <p className="mt-1 text-sm font-black text-orange-600">
                 {application.status || "-"}
-              </span>
+              </p>
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <span className="text-sm text-slate-500">Application ID</span>
-              <span className="text-sm font-black text-blue-950">
+              <p className="mt-1 text-sm font-black text-blue-950">
                 {application.applicationId || "-"}
-              </span>
+              </p>
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <span className="text-sm text-slate-500">Constituency</span>
-              <span className="text-sm font-black text-blue-950">
+              <p className="mt-1 text-sm font-black text-blue-950">
                 {application.constituency || "-"}
-              </span>
+              </p>
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <span className="text-sm text-slate-500">Arrival Status</span>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-black ${
+              <p
+                className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-black ${
                   application.arrivalStatus === "Arrived"
                     ? "bg-emerald-100 text-emerald-700"
                     : "bg-orange-100 text-orange-700"
                 }`}
               >
                 {application.arrivalStatus || "Not Arrived"}
-              </span>
+              </p>
             </div>
 
             {application.arrivedAt && (
-              <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 lg:col-span-2">
                 <span className="text-sm text-slate-500">Arrived At</span>
-                <span className="text-sm font-black text-blue-950">
+                <p className="mt-1 text-sm font-black text-blue-950">
                   {new Date(application.arrivedAt).toLocaleString()}
-                </span>
+                </p>
               </div>
             )}
           </div>
@@ -292,56 +370,162 @@ export default function ArrivalPage() {
 
         {application?.status === "Accepted" &&
           application?.arrivalStatus !== "Arrived" && (
-            <section className="mt-6 rounded-[28px] border border-orange-200 bg-orange-50 p-5 lg:p-6">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">
-                Arrival Disclaimer
-              </p>
+            <>
+              <section className="mt-6 rounded-[28px] border border-blue-200 bg-blue-50 p-5 lg:p-6">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">
+                  Registration Details
+                </p>
 
-              <h2 className="mt-2 text-2xl font-black text-blue-950">
-                Please read before confirming
-              </h2>
+                <h2 className="mt-2 text-2xl font-black text-blue-950">
+                  Confirm missing arrival information
+                </h2>
 
-              <p className="mt-3 text-sm leading-7 text-slate-700">
-                By confirming arrival, you acknowledge that you are physically present at the official registration venue for the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026. Your arrival time will be recorded for registration, accommodation allocation, attendance tracking, and programme administration purposes.
-              </p>
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  We will not ask again for information already captured in your
+                  application. Please complete only the arrival-specific details
+                  needed for safety, meals, accommodation coordination and
+                  emergency support.
+                </p>
 
-              <button
-                type="button"
-                onClick={() => setShowFullDisclaimer((current) => !current)}
-                className="mt-4 rounded-full border border-blue-950 px-5 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-50"
-              >
-                {showFullDisclaimer ? "Hide Full Disclaimer" : "Read Full Disclaimer"}
-              </button>
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-bold text-slate-700">
+                      Emergency contact name
+                    </span>
+                    <input
+                      value={emergencyContactName}
+                      onChange={(event) => setEmergencyContactName(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-600"
+                      placeholder="Full name"
+                    />
+                  </label>
 
-              {showFullDisclaimer && (
-                <div className="mt-5 space-y-3 rounded-[24px] bg-white p-5 text-sm leading-7 text-slate-700">
-                  <p>
-                    Arrival confirmation is only for applicants who have been accepted into the programme and who have physically arrived at the official venue. Do not confirm arrival on behalf of another person.
-                  </p>
-                  <p>
-                    The programme administration team may use your arrival record to support registration verification, attendance monitoring, accommodation allocation, meal planning, safety coordination, and official programme reporting.
-                  </p>
-                  <p>
-                    Confirming arrival does not replace any additional verification that may be required at the registration desk. You may still be asked to present your Omang/ID and any required programme documents.
-                  </p>
-                  <p>
-                    If the information shown on this page is incorrect, do not continue. Please report to the registration desk for assistance.
-                  </p>
+                  <label className="block">
+                    <span className="text-sm font-bold text-slate-700">
+                      Emergency contact number
+                    </span>
+                    <input
+                      value={emergencyContactNumber}
+                      onChange={(event) => setEmergencyContactNumber(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-600"
+                      placeholder="Phone number"
+                    />
+                  </label>
+
+                  <label className="block lg:col-span-2">
+                    <span className="text-sm font-bold text-slate-700">
+                      Relationship to participant
+                    </span>
+                    <input
+                      value={emergencyContactRelationship}
+                      onChange={(event) => setEmergencyContactRelationship(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-600"
+                      placeholder="Parent, guardian, spouse, sibling, friend, etc."
+                    />
+                  </label>
+
+                  <label className="block lg:col-span-2">
+                    <span className="text-sm font-bold text-slate-700">
+                      Known medical conditions, allergies or disabilities
+                    </span>
+                    <textarea
+                      value={knownMedicalConditions}
+                      onChange={(event) => setKnownMedicalConditions(event.target.value)}
+                      className="mt-2 min-h-[96px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-600"
+                      placeholder="Write none if not applicable."
+                    />
+                  </label>
+
+                  <label className="block lg:col-span-2">
+                    <span className="text-sm font-bold text-slate-700">
+                      Current medication
+                    </span>
+                    <textarea
+                      value={currentMedication}
+                      onChange={(event) => setCurrentMedication(event.target.value)}
+                      className="mt-2 min-h-[80px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-600"
+                      placeholder="Write none if not applicable."
+                    />
+                  </label>
                 </div>
-              )}
 
-              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[24px] bg-white p-4 text-sm font-semibold leading-6 text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={hasAcceptedDisclaimer}
-                  onChange={(event) => setHasAcceptedDisclaimer(event.target.checked)}
-                  className="mt-1 h-5 w-5 rounded border-slate-300 text-emerald-600"
-                />
-                <span>
-                  I have read and understood the arrival disclaimer, and I confirm that I am physically present at the official registration venue.
-                </span>
-              </label>
-            </section>
+                <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-black text-blue-950">
+                    Do you have dietary restrictions?
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">
+                      <input
+                        type="radio"
+                        checked={!hasDietaryRestrictions}
+                        onChange={() => {
+                          setHasDietaryRestrictions(false);
+                          setDietaryRestrictionsDetails("");
+                        }}
+                      />
+                      No
+                    </label>
+
+                    <label className="flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">
+                      <input
+                        type="radio"
+                        checked={hasDietaryRestrictions}
+                        onChange={() => setHasDietaryRestrictions(true)}
+                      />
+                      Yes
+                    </label>
+                  </div>
+
+                  {hasDietaryRestrictions && (
+                    <textarea
+                      value={dietaryRestrictionsDetails}
+                      onChange={(event) => setDietaryRestrictionsDetails(event.target.value)}
+                      className="mt-4 min-h-[80px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-blue-600"
+                      placeholder="Example: vegetarian, halal, allergies, no beef, diabetic meal, etc."
+                    />
+                  )}
+                </div>
+              </section>
+
+              <section className="mt-6 rounded-[28px] border border-orange-200 bg-orange-50 p-5 lg:p-6">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">
+                  Participant Waiver
+                </p>
+
+                <h2 className="mt-2 text-2xl font-black text-blue-950">
+                  Read and accept before confirming
+                </h2>
+
+                <p className="mt-3 text-sm leading-7 text-slate-700">
+                  You must read and accept the BYWC Participant Waiver, Release
+                  of Liability, Assumption of Risk and Code of Conduct Agreement
+                  before confirming arrival.
+                </p>
+
+                <Link
+                  href="/arrival-disclaimer"
+                  target="_blank"
+                  className="mt-4 inline-flex rounded-full border border-blue-950 px-5 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-50"
+                >
+                  Read Full Disclaimer & Waiver
+                </Link>
+
+                <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[24px] bg-white p-4 text-sm font-semibold leading-6 text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={hasAcceptedDisclaimer}
+                    onChange={(event) => setHasAcceptedDisclaimer(event.target.checked)}
+                    className="mt-1 h-5 w-5 rounded border-slate-300 text-emerald-600"
+                  />
+                  <span>
+                    I have read and understood the participant waiver and arrival
+                    disclaimer, and I confirm that I am physically present at the
+                    official registration venue.
+                  </span>
+                </label>
+              </section>
+            </>
           )}
 
         {application?.status === "Accepted" &&
@@ -356,14 +540,15 @@ export default function ArrivalPage() {
                 ? "Confirming Arrival..."
                 : hasAcceptedDisclaimer
                 ? "Confirm My Arrival"
-                : "Accept Disclaimer To Continue"}
+                : "Accept Waiver To Continue"}
             </button>
           )}
 
         {application?.arrivalStatus === "Arrived" && (
           <div className="mt-6 rounded-[24px] border border-emerald-200 bg-emerald-50 p-5 text-sm font-semibold leading-7 text-emerald-800">
-            Your arrival has been confirmed. Please proceed to the registration
-            desk for the next step.
+            Arrival registration is complete. Your attendance has been recorded
+            successfully. Please proceed to accommodation allocation and the
+            registration desk for final verification.
           </div>
         )}
 
