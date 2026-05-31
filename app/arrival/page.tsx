@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/src/lib/supabaseClient";
 
 const ARRIVAL_EVENT_TOKEN = "BYWC-ARRIVAL-2026";
+const ARRIVAL_DISCLAIMER_VERSION = "BYWC-ARRIVAL-DISCLAIMER-2026-V1";
 
 type Application = {
   id: string;
@@ -16,6 +17,9 @@ type Application = {
   status?: string | null;
   arrivalStatus?: string | null;
   arrivedAt?: string | null;
+  arrivalDisclaimerAccepted?: boolean | null;
+  arrivalDisclaimerAcceptedAt?: string | null;
+  arrivalDisclaimerVersion?: string | null;
 };
 
 export default function ArrivalPage() {
@@ -24,6 +28,8 @@ export default function ArrivalPage() {
   const [feedback, setFeedback] = useState("");
   const [hasValidQrToken, setHasValidQrToken] = useState(false);
   const [application, setApplication] = useState<Application | null>(null);
+  const [showFullDisclaimer, setShowFullDisclaimer] = useState(false);
+  const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
 
   useEffect(() => {
     async function loadArrivalPage() {
@@ -84,7 +90,12 @@ export default function ArrivalPage() {
         status: data.status,
         arrivalStatus: data.arrival_status || "Not Arrived",
         arrivedAt: data.arrived_at,
+        arrivalDisclaimerAccepted: data.arrival_disclaimer_accepted || false,
+        arrivalDisclaimerAcceptedAt: data.arrival_disclaimer_accepted_at,
+        arrivalDisclaimerVersion: data.arrival_disclaimer_version,
       });
+
+      setHasAcceptedDisclaimer(Boolean(data.arrival_disclaimer_accepted));
 
       setLoading(false);
     }
@@ -120,6 +131,11 @@ export default function ArrivalPage() {
       return;
     }
 
+    if (!hasAcceptedDisclaimer) {
+      setFeedback("Please read and accept the arrival disclaimer before confirming your arrival.");
+      return;
+    }
+
     setSaving(true);
     setFeedback("");
 
@@ -131,6 +147,9 @@ export default function ArrivalPage() {
         arrival_status: "Arrived",
         arrived_at: arrivedAt,
         arrival_confirmed_by: "Venue QR Self Check-in",
+        arrival_disclaimer_accepted: true,
+        arrival_disclaimer_accepted_at: arrivedAt,
+        arrival_disclaimer_version: ARRIVAL_DISCLAIMER_VERSION,
       })
       .eq("id", application.id);
 
@@ -147,10 +166,17 @@ export default function ArrivalPage() {
       ...application,
       arrivalStatus: "Arrived",
       arrivedAt,
+      arrivalDisclaimerAccepted: true,
+      arrivalDisclaimerAcceptedAt: arrivedAt,
+      arrivalDisclaimerVersion: ARRIVAL_DISCLAIMER_VERSION,
     });
 
-    setFeedback("Arrival confirmed successfully. Welcome to the programme.");
+    setFeedback("Arrival confirmed successfully. Redirecting you to your dashboard...");
     setSaving(false);
+
+    setTimeout(() => {
+      window.location.href = "/dashboard?arrival=confirmed";
+    }, 1600);
   }
 
   if (loading) {
@@ -266,13 +292,71 @@ export default function ArrivalPage() {
 
         {application?.status === "Accepted" &&
           application?.arrivalStatus !== "Arrived" && (
+            <section className="mt-6 rounded-[28px] border border-orange-200 bg-orange-50 p-5 lg:p-6">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">
+                Arrival Disclaimer
+              </p>
+
+              <h2 className="mt-2 text-2xl font-black text-blue-950">
+                Please read before confirming
+              </h2>
+
+              <p className="mt-3 text-sm leading-7 text-slate-700">
+                By confirming arrival, you acknowledge that you are physically present at the official registration venue for the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026. Your arrival time will be recorded for registration, accommodation allocation, attendance tracking, and programme administration purposes.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setShowFullDisclaimer((current) => !current)}
+                className="mt-4 rounded-full border border-blue-950 px-5 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-50"
+              >
+                {showFullDisclaimer ? "Hide Full Disclaimer" : "Read Full Disclaimer"}
+              </button>
+
+              {showFullDisclaimer && (
+                <div className="mt-5 space-y-3 rounded-[24px] bg-white p-5 text-sm leading-7 text-slate-700">
+                  <p>
+                    Arrival confirmation is only for applicants who have been accepted into the programme and who have physically arrived at the official venue. Do not confirm arrival on behalf of another person.
+                  </p>
+                  <p>
+                    The programme administration team may use your arrival record to support registration verification, attendance monitoring, accommodation allocation, meal planning, safety coordination, and official programme reporting.
+                  </p>
+                  <p>
+                    Confirming arrival does not replace any additional verification that may be required at the registration desk. You may still be asked to present your Omang/ID and any required programme documents.
+                  </p>
+                  <p>
+                    If the information shown on this page is incorrect, do not continue. Please report to the registration desk for assistance.
+                  </p>
+                </div>
+              )}
+
+              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[24px] bg-white p-4 text-sm font-semibold leading-6 text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={hasAcceptedDisclaimer}
+                  onChange={(event) => setHasAcceptedDisclaimer(event.target.checked)}
+                  className="mt-1 h-5 w-5 rounded border-slate-300 text-emerald-600"
+                />
+                <span>
+                  I have read and understood the arrival disclaimer, and I confirm that I am physically present at the official registration venue.
+                </span>
+              </label>
+            </section>
+          )}
+
+        {application?.status === "Accepted" &&
+          application?.arrivalStatus !== "Arrived" && (
             <button
               type="button"
               onClick={handleConfirmArrival}
-              disabled={saving}
+              disabled={saving || !hasAcceptedDisclaimer}
               className="mt-6 w-full rounded-full bg-emerald-600 px-6 py-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              {saving ? "Confirming Arrival..." : "Confirm My Arrival"}
+              {saving
+                ? "Confirming Arrival..."
+                : hasAcceptedDisclaimer
+                ? "Confirm My Arrival"
+                : "Accept Disclaimer To Continue"}
             </button>
           )}
 

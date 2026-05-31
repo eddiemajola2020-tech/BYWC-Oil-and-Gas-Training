@@ -45,8 +45,6 @@ export default function DashboardPage() {
     useState<Application | null>(null);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [arrivalSaving, setArrivalSaving] = useState(false);
-  const [arrivalFeedback, setArrivalFeedback] = useState("");
 
   useEffect(() => {
     async function loadLatestApplication() {
@@ -136,61 +134,13 @@ export default function DashboardPage() {
     window.location.href = "/login";
   }
 
-  async function handleConfirmArrival() {
-    if (!latestApplication) return;
-
-    if (latestApplication.status !== "Accepted") {
-      setArrivalFeedback(
-        "Arrival registration is only available for accepted applicants. Please see the registration desk for assistance.",
-      );
-      return;
-    }
-
-    if (latestApplication.arrivalStatus === "Arrived") {
-      setArrivalFeedback("Your arrival has already been registered.");
-      return;
-    }
-
-    setArrivalSaving(true);
-    setArrivalFeedback("");
-
-    const arrivedAt = new Date().toISOString();
-
-    const { error } = await supabase
-      .from("applications")
-      .update({
-        arrival_status: "Arrived",
-        arrived_at: arrivedAt,
-        arrival_confirmed_by: "Applicant Self Check-in",
-      })
-      .eq("id", latestApplication.id);
-
-    if (error) {
-      console.error("Failed to confirm arrival:", error);
-      setArrivalFeedback(
-        "We could not confirm your arrival. Please try again or see the registration desk.",
-      );
-      setArrivalSaving(false);
-      return;
-    }
-
-    setLatestApplication({
-      ...latestApplication,
-      arrivalStatus: "Arrived",
-      arrivedAt,
-      arrivalConfirmedBy: "Applicant Self Check-in",
-    });
-
-    setArrivalFeedback("Arrival confirmed successfully. Welcome to the programme.");
-    setArrivalSaving(false);
-  }
-
   const unreadMessages = messages.filter((msg) => !msg.read).length;
 
   const status = latestApplication?.status || "No Application Yet";
 
   const progressWidth = useMemo(() => {
     if (status === "Submitted") return "25%";
+    if (status === "Constituency Reserve Pool") return "25%";
     if (status === "Under Review") return "62%";
     if (status === "Shortlisted") return "78%";
     if (status === "Waiting List") return "78%";
@@ -210,6 +160,10 @@ export default function DashboardPage() {
 
     if (status === "Rejected") {
       return "Your application was reviewed and was not successful for this intake.";
+    }
+
+    if (status === "Constituency Reserve Pool") {
+      return "Your application remains in the Constituency Reserve Pool and may be considered for additional placement opportunities as allocations are finalized.";
     }
 
     if (status === "Shortlisted") {
@@ -423,13 +377,13 @@ export default function DashboardPage() {
                 <h3 className="mt-3 text-2xl font-bold text-blue-950">
                   {latestApplication?.arrivalStatus === "Arrived"
                     ? "Arrival Confirmed"
-                    : "Confirm Your Arrival"}
+                    : "Scan Venue QR Code"}
                 </h3>
 
                 <p className="mt-3 text-sm leading-7 text-slate-600">
                   {latestApplication?.arrivalStatus === "Arrived"
                     ? "Your arrival has been registered successfully. Please proceed with the programme registration process at the venue."
-                    : "If you have arrived at the venue, tap the button below to confirm your arrival for registration."}
+                    : "To register your arrival, scan the official BYWC arrival QR code displayed at the venue. The dashboard cannot confirm arrival without the QR page."}
                 </p>
 
                 <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3">
@@ -459,24 +413,12 @@ export default function DashboardPage() {
                 </div>
 
                 {latestApplication?.arrivalStatus !== "Arrived" && (
-                  <button
-                    type="button"
-                    onClick={handleConfirmArrival}
-                    disabled={arrivalSaving}
-                    className="mt-5 w-full rounded-full bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-                  >
-                    {arrivalSaving ? "Confirming Arrival..." : "I Have Arrived"}
-                  </button>
-                )}
-
-                {arrivalFeedback && (
-                  <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                    {arrivalFeedback}
-                  </p>
+                  <div className="mt-5 rounded-[24px] border border-orange-200 bg-orange-50 p-5 text-sm font-semibold leading-7 text-orange-800">
+                    Please scan the official arrival QR code at the registration area. After reading the arrival disclaimer, tap Confirm My Arrival on the QR page to record your arrival time.
+                  </div>
                 )}
               </div>
             )}
-
             <div
               id="profile"
               className="rounded-[28px] bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8"
@@ -590,6 +532,8 @@ export default function DashboardPage() {
                   ? "Await Placement Availability"
                   : status === "Shortlisted"
                   ? "Await Onboarding Details"
+                  : status === "Constituency Reserve Pool"
+                  ? "Constituency Reserve Pool"
                   : status === "No Application Yet"
                   ? "Start Your Application"
                   : "Admin Review In Progress"}
