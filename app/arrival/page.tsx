@@ -504,7 +504,7 @@ export default function ArrivalPage() {
                 </p>
 
                 <Link
-                  href="/arrival-disclaimer"
+                  href="/arrival/disclaimer"
                   target="_blank"
                   className="mt-4 inline-flex rounded-full border border-blue-950 px-5 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-50"
                 >
