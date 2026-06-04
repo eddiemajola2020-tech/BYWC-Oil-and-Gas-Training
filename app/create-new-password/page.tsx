@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -58,7 +58,7 @@ export default function CreateNewPasswordPage() {
     prepareResetSession();
   }, []);
 
-  async function handleUpdatePassword(e: React.FormEvent) {
+  async function handleUpdatePassword(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setMessage("");

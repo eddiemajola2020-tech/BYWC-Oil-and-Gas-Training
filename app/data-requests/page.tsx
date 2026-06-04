@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -178,7 +178,7 @@ export default function DataRequestsPage() {
     setHistoryLoading(false);
   }
 
-  async function submitRequest(e: React.FormEvent) {
+  async function submitRequest(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setSuccess("");
@@ -455,3 +455,4 @@ export default function DataRequestsPage() {
     </main>
   );
 }
+

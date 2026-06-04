@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -10,7 +10,7 @@ export default function ForgotPasswordPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  async function handleReset(e: React.FormEvent) {
+  async function handleReset(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setMessage("");
@@ -49,7 +49,7 @@ export default function ForgotPasswordPage() {
         </h1>
 
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Enter your email and we’ll send you a reset link.
+          Enter your email and weâ€™ll send you a reset link.
         </p>
 
         <form onSubmit={handleReset} className="mt-8 space-y-5">

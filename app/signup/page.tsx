@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -40,7 +40,7 @@ export default function SignupPage() {
     }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setErrorMessage("");
@@ -96,15 +96,6 @@ export default function SignupPage() {
       setLoading(false);
       return;
     }
-
-    await supabase.auth.updateUser({
-  data: {
-    first_name: formData.firstName.trim(),
-    last_name: formData.lastName.trim(),
-    phone: formData.phone.trim(),
-    role: "applicant",
-  },
-});
 
     const redirectTo =
       new URLSearchParams(window.location.search).get("redirect") || "/home";

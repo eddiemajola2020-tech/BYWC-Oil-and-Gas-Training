@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -96,7 +96,7 @@ const districtConstituencies: Record<string, string[]> = {
     "Okavango West",
   ],
   "Chobe District": ["Chobe"],
-  "Tutume District": ["Nata – Gweta", "Nkange", "Shashe West", "Tonota"],
+  "Tutume District": ["Nata â€“ Gweta", "Nkange", "Shashe West", "Tonota"],
   "North East District": [
     "Francistown East",
     "Francistown South",
@@ -130,7 +130,7 @@ const districtConstituencies: Record<string, string[]> = {
   ],
   "Southern District": [
     "Goodhope - Mmathethe",
-    "Jwaneng – Mabutsane",
+    "Jwaneng â€“ Mabutsane",
     "Kanye East",
     "Kanye West",
     "Lobatse",
@@ -610,7 +610,7 @@ export default function ApplyPage() {
     setTimeout(scrollToApplicationSection, 80);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (isSubmitting) return;
@@ -648,7 +648,7 @@ export default function ApplyPage() {
       return;
     }
 
-    // 🔒 Cooldown (30 seconds)
+    // ðŸ”’ Cooldown (30 seconds)
     try {
       const key = `lastSubmit:${formData.email || "anon"}`;
       const last = localStorage.getItem(key);
@@ -917,7 +917,7 @@ export default function ApplyPage() {
             </h1>
 
             <p className="mx-auto mt-6 max-w-4xl text-lg leading-8 text-slate-600">
-              Complete your application carefully. You’ll be guided through each
+              Complete your application carefully. Youâ€™ll be guided through each
               section step by step, including your personal information,
               education, background, motivation, and supporting documents.
             </p>
@@ -2134,7 +2134,7 @@ export default function ApplyPage() {
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 px-6">
           <div className="w-full max-w-md rounded-[28px] bg-white p-8 text-center shadow-[0_20px_60px_rgba(15,23,42,0.25)]">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-100 text-3xl">
-              ✓
+              âœ“
             </div>
 
             <h2 className="mt-6 text-2xl font-bold text-blue-950">
@@ -2340,3 +2340,4 @@ function ReviewCard({ title, items }: ReviewCardProps) {
     </div>
   );
 }
+
