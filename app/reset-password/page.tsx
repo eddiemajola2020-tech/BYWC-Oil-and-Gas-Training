@@ -14,44 +14,65 @@ export default function ResetPasswordPage() {
   const [hasResetSession, setHasResetSession] = useState(false);
 
   useEffect(() => {
-    async function prepareResetSession() {
-      setErrorMessage("");
+    let resolved = false;
 
+    supabase.auth.signOut({ scope: "local" });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "PASSWORD_RECOVERY" && session && !resolved) {
+          resolved = true;
+          setHasResetSession(true);
+          setIsCheckingLink(false);
+        }
+      },
+    );
+
+    async function exchangeCode() {
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
 
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-        if (error) {
-          setErrorMessage(
-            "This reset link is invalid or has expired. Please request a new reset link."
-          );
-          setHasResetSession(false);
-          setIsCheckingLink(false);
-          return;
-        }
-
-        window.history.replaceState({}, document.title, "/reset-password");
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
+      if (!code) {
+        resolved = true;
         setErrorMessage(
-          "No reset session found. Please request a new reset link from the forgot password page."
+          "No reset link found. Please request a new password reset email.",
         );
         setHasResetSession(false);
-      } else {
-        setHasResetSession(true);
+        setIsCheckingLink(false);
+        return;
       }
 
-      setIsCheckingLink(false);
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+      window.history.replaceState({}, document.title, "/reset-password");
+
+      if (error) {
+        resolved = true;
+        setErrorMessage(
+          "This reset link is invalid or has already been used. Please request a new one.",
+        );
+        setHasResetSession(false);
+        setIsCheckingLink(false);
+      }
     }
 
-    prepareResetSession();
+    exchangeCode();
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        setErrorMessage(
+          "Reset session timed out. Please request a new reset link.",
+        );
+        setHasResetSession(false);
+        setIsCheckingLink(false);
+      }
+    }, 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   async function handleUpdatePassword(e: React.FormEvent<HTMLFormElement>) {
@@ -79,13 +100,15 @@ export default function ResetPasswordPage() {
 
     const { error } = await supabase.auth.updateUser({ password });
 
-    setIsLoading(false);
-
     if (error) {
+      setIsLoading(false);
       setErrorMessage(error.message);
       return;
     }
 
+    await supabase.auth.signOut();
+
+    setIsLoading(false);
     setPassword("");
     setConfirmPassword("");
     setMessage("Password updated successfully. You can now log in.");
@@ -167,7 +190,7 @@ export default function ResetPasswordPage() {
               </Link>
             )}
 
-            {!hasResetSession && (
+            {!hasResetSession && !message && (
               <Link
                 href="/forgot-password"
                 className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline"

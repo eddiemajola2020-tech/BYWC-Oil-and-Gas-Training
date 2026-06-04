@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -14,48 +14,73 @@ export default function CreateNewPasswordPage() {
   const [hasResetSession, setHasResetSession] = useState(false);
 
   useEffect(() => {
-    async function prepareResetSession() {
-      setErrorMessage("");
+    let resolved = false;
 
+    // Clear any existing session first so a logged-in user's session
+    // doesn't interfere with the recovery code exchange.
+    supabase.auth.signOut({ scope: "local" });
+
+    // PASSWORD_RECOVERY is the only event that fires for reset links.
+    // SIGNED_IN also fires on normal logins — we deliberately ignore it here
+    // so the user isn't redirected away by other auth listeners in the app.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "PASSWORD_RECOVERY" && session && !resolved) {
+          resolved = true;
+          setHasResetSession(true);
+          setIsCheckingLink(false);
+        }
+      },
+    );
+
+    async function exchangeCode() {
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
 
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-        if (error) {
-          setErrorMessage(
-            "This reset link is invalid or has expired. Please request a new reset link."
-          );
-          setHasResetSession(false);
-          setIsCheckingLink(false);
-          return;
-        }
-
-        window.history.replaceState(
-          {},
-          document.title,
-          "/create-new-password"
-        );
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
+      if (!code) {
+        resolved = true;
         setErrorMessage(
-          "No reset session found. Please request a new reset link from the forgot password page."
+          "No reset link found. Please request a new password reset email.",
         );
         setHasResetSession(false);
-      } else {
-        setHasResetSession(true);
+        setIsCheckingLink(false);
+        return;
       }
 
-      setIsCheckingLink(false);
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+      // Remove the code from the URL so a page refresh doesn't try to reuse it.
+      window.history.replaceState({}, document.title, "/create-new-password");
+
+      if (error) {
+        resolved = true;
+        setErrorMessage(
+          "This reset link is invalid or has already been used. Please request a new one.",
+        );
+        setHasResetSession(false);
+        setIsCheckingLink(false);
+      }
+      // If no error, onAuthStateChange fires PASSWORD_RECOVERY above.
     }
 
-    prepareResetSession();
+    exchangeCode();
+
+    // Fallback: if the auth event never fires within 8 seconds, show an error.
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        setErrorMessage(
+          "Reset session timed out. Please request a new reset link.",
+        );
+        setHasResetSession(false);
+        setIsCheckingLink(false);
+      }
+    }, 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   async function handleUpdatePassword(e: React.FormEvent<HTMLFormElement>) {
@@ -81,17 +106,18 @@ export default function CreateNewPasswordPage() {
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
-
-    setIsLoading(false);
+    const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
+      setIsLoading(false);
       setErrorMessage(error.message);
       return;
     }
 
+    // Sign out the recovery session so the user is prompted to log in fresh.
+    await supabase.auth.signOut();
+
+    setIsLoading(false);
     setPassword("");
     setConfirmPassword("");
     setMessage("Password updated successfully. You can now log in.");
@@ -177,7 +203,7 @@ export default function CreateNewPasswordPage() {
               </Link>
             )}
 
-            {!hasResetSession && (
+            {!hasResetSession && !message && (
               <Link
                 href="/forgot-password"
                 className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline"
