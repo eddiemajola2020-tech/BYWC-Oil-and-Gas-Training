@@ -36,31 +36,37 @@ export default function CreateNewPasswordPage() {
     async function exchangeCode() {
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
+      const hash = window.location.hash;
+      const hasRecoveryHash =
+        hash.includes("access_token") && hash.includes("type=recovery");
 
-      if (!code) {
+      if (code) {
+        // PKCE flow: code in query params
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        window.history.replaceState({}, document.title, "/create-new-password");
+
+        if (error) {
+          resolved = true;
+          setErrorMessage(
+            "This reset link is invalid or has already been used. Please request a new one.",
+          );
+          setHasResetSession(false);
+          setIsCheckingLink(false);
+        }
+        // If no error, onAuthStateChange fires PASSWORD_RECOVERY.
+      } else if (hasRecoveryHash) {
+        // Implicit flow: Supabase processes the hash automatically and fires
+        // PASSWORD_RECOVERY via onAuthStateChange — just wait for it.
+        window.history.replaceState({}, document.title, "/create-new-password");
+      } else {
+        // No code and no recovery hash — not a valid reset link.
         resolved = true;
         setErrorMessage(
           "No reset link found. Please request a new password reset email.",
         );
         setHasResetSession(false);
         setIsCheckingLink(false);
-        return;
       }
-
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-      // Remove the code from the URL so a page refresh doesn't try to reuse it.
-      window.history.replaceState({}, document.title, "/create-new-password");
-
-      if (error) {
-        resolved = true;
-        setErrorMessage(
-          "This reset link is invalid or has already been used. Please request a new one.",
-        );
-        setHasResetSession(false);
-        setIsCheckingLink(false);
-      }
-      // If no error, onAuthStateChange fires PASSWORD_RECOVERY above.
     }
 
     exchangeCode();

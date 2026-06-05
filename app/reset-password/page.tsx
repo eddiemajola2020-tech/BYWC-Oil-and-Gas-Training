@@ -31,25 +31,28 @@ export default function ResetPasswordPage() {
     async function exchangeCode() {
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
+      const hash = window.location.hash;
+      const hasRecoveryHash =
+        hash.includes("access_token") && hash.includes("type=recovery");
 
-      if (!code) {
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        window.history.replaceState({}, document.title, "/reset-password");
+
+        if (error) {
+          resolved = true;
+          setErrorMessage(
+            "This reset link is invalid or has already been used. Please request a new one.",
+          );
+          setHasResetSession(false);
+          setIsCheckingLink(false);
+        }
+      } else if (hasRecoveryHash) {
+        window.history.replaceState({}, document.title, "/reset-password");
+      } else {
         resolved = true;
         setErrorMessage(
           "No reset link found. Please request a new password reset email.",
-        );
-        setHasResetSession(false);
-        setIsCheckingLink(false);
-        return;
-      }
-
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-
-      window.history.replaceState({}, document.title, "/reset-password");
-
-      if (error) {
-        resolved = true;
-        setErrorMessage(
-          "This reset link is invalid or has already been used. Please request a new one.",
         );
         setHasResetSession(false);
         setIsCheckingLink(false);
