@@ -16,11 +16,23 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let resolved = false;
 
-    supabase.auth.signOut({ scope: "local" });
+    // Capture URL details before replaceState cleans them.
+    const code = new URLSearchParams(window.location.search).get("code");
+    const hashAtMount = window.location.hash;
+    const hasRecoveryHash =
+      hashAtMount.includes("access_token") && hashAtMount.includes("type=recovery");
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (event === "PASSWORD_RECOVERY" && session && !resolved) {
+        if (resolved) return;
+
+        if (event === "PASSWORD_RECOVERY" && session) {
+          resolved = true;
+          setHasResetSession(true);
+          setIsCheckingLink(false);
+        } else if (event === "INITIAL_SESSION" && session && hasRecoveryHash) {
+          // PASSWORD_RECOVERY fired before our listener was ready (timing race).
+          // The hash at mount confirms this was a recovery link.
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
@@ -29,17 +41,11 @@ export default function ResetPasswordPage() {
     );
 
     async function exchangeCode() {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-      const hash = window.location.hash;
-      const hasRecoveryHash =
-        hash.includes("access_token") && hash.includes("type=recovery");
-
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         window.history.replaceState({}, document.title, "/reset-password");
 
-        if (error) {
+        if (error && !resolved) {
           resolved = true;
           setErrorMessage(
             "This reset link is invalid or has already been used. Please request a new one.",

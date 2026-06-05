@@ -16,16 +16,25 @@ export default function CreateNewPasswordPage() {
   useEffect(() => {
     let resolved = false;
 
-    // Clear any existing session first so a logged-in user's session
-    // doesn't interfere with the recovery code exchange.
-    supabase.auth.signOut({ scope: "local" });
+    // Capture URL details before replaceState cleans them.
+    const code = new URLSearchParams(window.location.search).get("code");
+    const hashAtMount = window.location.hash;
+    const hasRecoveryHash =
+      hashAtMount.includes("access_token") && hashAtMount.includes("type=recovery");
 
-    // PASSWORD_RECOVERY is the only event that fires for reset links.
-    // SIGNED_IN also fires on normal logins — we deliberately ignore it here
-    // so the user isn't redirected away by other auth listeners in the app.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (event === "PASSWORD_RECOVERY" && session && !resolved) {
+        if (resolved) return;
+
+        if (event === "PASSWORD_RECOVERY" && session) {
+          // Supabase explicitly signals a recovery session — always trust this.
+          resolved = true;
+          setHasResetSession(true);
+          setIsCheckingLink(false);
+        } else if (event === "INITIAL_SESSION" && session && hasRecoveryHash) {
+          // PASSWORD_RECOVERY fired before our listener was ready (timing race).
+          // The hash at mount confirms this was a recovery link, so the current
+          // session IS the recovery session.
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
@@ -34,18 +43,12 @@ export default function CreateNewPasswordPage() {
     );
 
     async function exchangeCode() {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-      const hash = window.location.hash;
-      const hasRecoveryHash =
-        hash.includes("access_token") && hash.includes("type=recovery");
-
       if (code) {
-        // PKCE flow: code in query params
+        // PKCE flow: exchange code for session
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         window.history.replaceState({}, document.title, "/create-new-password");
 
-        if (error) {
+        if (error && !resolved) {
           resolved = true;
           setErrorMessage(
             "This reset link is invalid or has already been used. Please request a new one.",
@@ -53,13 +56,11 @@ export default function CreateNewPasswordPage() {
           setHasResetSession(false);
           setIsCheckingLink(false);
         }
-        // If no error, onAuthStateChange fires PASSWORD_RECOVERY.
       } else if (hasRecoveryHash) {
-        // Implicit flow: Supabase processes the hash automatically and fires
-        // PASSWORD_RECOVERY via onAuthStateChange — just wait for it.
+        // Implicit flow: Supabase detects the hash automatically and fires
+        // PASSWORD_RECOVERY (or INITIAL_SESSION if it fired pre-subscription).
         window.history.replaceState({}, document.title, "/create-new-password");
       } else {
-        // No code and no recovery hash — not a valid reset link.
         resolved = true;
         setErrorMessage(
           "No reset link found. Please request a new password reset email.",
@@ -71,7 +72,6 @@ export default function CreateNewPasswordPage() {
 
     exchangeCode();
 
-    // Fallback: if the auth event never fires within 8 seconds, show an error.
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
