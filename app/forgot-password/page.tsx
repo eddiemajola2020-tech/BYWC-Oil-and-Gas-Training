@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
     const { error } = await supabase.auth.resetPasswordForEmail(
       email.trim(),
       {
-        redirectTo: `${window.location.origin}/create-new-password`,
+        redirectTo: "https://bywcprogram.org/create-new-password",
       }
     );
 
