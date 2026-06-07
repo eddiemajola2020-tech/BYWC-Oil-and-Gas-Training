@@ -804,6 +804,9 @@ export default function AdminPage() {
     "applications" | "programme" | "selection" | "compliance"
   >("applications");
 
+  const [selectedArrivalIds, setSelectedArrivalIds] = useState<Set<string>>(new Set());
+  const [bulkDeferring, setBulkDeferring] = useState(false);
+
   function formatApplication(item: any): Application {
     return {
       id:
@@ -2182,6 +2185,45 @@ export default function AdminPage() {
 
     await refreshAdminNumbers(false);
     setSavingId(null);
+  }
+
+  async function handleBulkDefer(applications: Application[]) {
+    const targets = applications.filter((a) => selectedArrivalIds.has(a.id));
+    if (targets.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Defer ${targets.length} selected applicant${targets.length === 1 ? "" : "s"} to Next Intake? They will not be rejected.`,
+    );
+    if (!confirmed) return;
+
+    setBulkDeferring(true);
+
+    for (const application of targets) {
+      const { error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .update({ status: "Deferred", selection_bucket: "Deferred - Next Intake" })
+        .eq("application_id", application.applicationId);
+
+      if (!error) {
+        await logAdminAction({
+          action: "status_change",
+          applicationId: application.applicationId,
+          details: {
+            previousStatus: application.status,
+            newStatus: "Deferred",
+            selectionBucket: "Deferred - Next Intake",
+            applicantEmail: application.email,
+            applicantName: `${application.firstName} ${application.lastName}`,
+            bulkAction: true,
+          },
+        });
+      }
+    }
+
+    setSelectedArrivalIds(new Set());
+    await refreshAdminNumbers(false);
+    await loadAcceptedApplications();
+    setBulkDeferring(false);
   }
 
   async function handleAutoReview(application: Application) {
@@ -5279,6 +5321,32 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                 className="mb-3 w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:bg-[#0f172a]"
               />
 
+              {/* Bulk action bar — appears when checkboxes are ticked */}
+              {selectedArrivalIds.size > 0 && (
+                <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                  <p className="text-sm font-black text-amber-300">
+                    {selectedArrivalIds.size} selected
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleBulkDefer(visibleArrivalApplications)}
+                      disabled={bulkDeferring}
+                      className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:opacity-50"
+                    >
+                      {bulkDeferring ? "Deferring..." : "Defer Selected — Next Intake"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedArrivalIds(new Set())}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-slate-300 transition hover:bg-white/10"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="overflow-hidden rounded-2xl border border-white/10">
                 {acceptedApplicationsLoading ? (
                   <div className="p-6 text-center text-sm font-semibold text-slate-400">
@@ -5293,23 +5361,57 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     <table className="w-full min-w-[1100px] text-[12px]">
                       <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
                         <tr>
+                          <th className="w-8 px-3 py-3">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded"
+                              checked={
+                                visibleArrivalApplications.length > 0 &&
+                                visibleArrivalApplications.every((a) => selectedArrivalIds.has(a.id))
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedArrivalIds(new Set(visibleArrivalApplications.map((a) => a.id)));
+                                } else {
+                                  setSelectedArrivalIds(new Set());
+                                }
+                              }}
+                            />
+                          </th>
                           <th className="px-3 py-3 text-left font-black">Applicant</th>
                           <th className="px-3 py-3 text-left font-black">Phone</th>
                           <th className="px-3 py-3 text-left font-black">Constituency</th>
                           <th className="px-3 py-3 text-left font-black">Arrival</th>
+                          <th className="px-3 py-3 text-left font-black">Actions</th>
                           <th className="px-3 py-3 text-left font-black">Dietary</th>
                           <th className="px-3 py-3 text-left font-black">Medical</th>
                           <th className="px-3 py-3 text-left font-black">Emergency Contact</th>
                           <th className="px-3 py-3 text-left font-black">Waiver</th>
-                          <th className="px-3 py-3 text-left font-black">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {visibleArrivalApplications.map((application) => (
                           <tr
                             key={application.id}
-                            className="align-top text-slate-300 transition hover:bg-white/[0.03]"
+                            className={`align-top text-slate-300 transition hover:bg-white/[0.03] ${
+                              selectedArrivalIds.has(application.id) ? "bg-amber-500/5" : ""
+                            }`}
                           >
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded"
+                                checked={selectedArrivalIds.has(application.id)}
+                                onChange={(e) => {
+                                  setSelectedArrivalIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(application.id);
+                                    else next.delete(application.id);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            </td>
                             <td className="px-3 py-3">
                               <button
                                 type="button"
@@ -5330,6 +5432,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                             <td className="px-3 py-3 font-semibold text-slate-300">
                               {application.constituency || "Unknown"}
                             </td>
+                            {/* Arrival status */}
                             <td className="px-3 py-3">
                               <span
                                 className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${
@@ -5344,46 +5447,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                                 {application.arrivedAt ? new Date(application.arrivedAt).toLocaleString() : "No time yet"}
                               </p>
                             </td>
-                            <td className="px-3 py-3">
-                              <p className={`font-black ${application.hasDietaryRestrictions ? "text-orange-300" : "text-emerald-300"}`}>
-                                {application.hasDietaryRestrictions ? "Yes" : "No"}
-                              </p>
-                              <p className="mt-1 max-w-[180px] text-[11px] leading-5 text-slate-500">
-                                {application.dietaryRestrictionsDetails || "-"}
-                              </p>
-                            </td>
-                            <td className="px-3 py-3">
-                              <p className="max-w-[190px] text-[11px] leading-5 text-slate-400">
-                                {application.knownMedicalConditions || "No medical conditions captured"}
-                              </p>
-                              {application.currentMedication && (
-                                <p className="mt-1 max-w-[190px] text-[11px] leading-5 text-slate-500">
-                                  Medication: {application.currentMedication}
-                                </p>
-                              )}
-                            </td>
-                            <td className="px-3 py-3">
-                              <p className="font-semibold text-slate-300">
-                                {application.emergencyContactName || "-"}
-                              </p>
-                              <p className="mt-1 text-[11px] text-slate-500">
-                                {application.emergencyContactNumber || ""}
-                              </p>
-                              <p className="mt-1 text-[11px] text-slate-500">
-                                {application.emergencyContactRelationship || ""}
-                              </p>
-                            </td>
-                            <td className="px-3 py-3">
-                              <span
-                                className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${
-                                  application.arrivalDisclaimerAccepted
-                                    ? "bg-emerald-500/15 text-emerald-300"
-                                    : "bg-red-500/15 text-red-300"
-                                }`}
-                              >
-                                {application.arrivalDisclaimerAccepted ? "Accepted" : "Pending"}
-                              </span>
-                            </td>
+                            {/* Actions — directly after Arrival for quick access */}
                             <td className="px-3 py-3">
                               <div className="flex flex-col gap-1">
                                 <button
@@ -5404,6 +5468,50 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                                   </button>
                                 )}
                               </div>
+                            </td>
+                            {/* Dietary */}
+                            <td className="px-3 py-3">
+                              <p className={`font-black ${application.hasDietaryRestrictions ? "text-orange-300" : "text-emerald-300"}`}>
+                                {application.hasDietaryRestrictions ? "Yes" : "No"}
+                              </p>
+                              <p className="mt-1 max-w-[180px] text-[11px] leading-5 text-slate-500">
+                                {application.dietaryRestrictionsDetails || "-"}
+                              </p>
+                            </td>
+                            {/* Medical */}
+                            <td className="px-3 py-3">
+                              <p className="max-w-[190px] text-[11px] leading-5 text-slate-400">
+                                {application.knownMedicalConditions || "No medical conditions captured"}
+                              </p>
+                              {application.currentMedication && (
+                                <p className="mt-1 max-w-[190px] text-[11px] leading-5 text-slate-500">
+                                  Medication: {application.currentMedication}
+                                </p>
+                              )}
+                            </td>
+                            {/* Emergency Contact */}
+                            <td className="px-3 py-3">
+                              <p className="font-semibold text-slate-300">
+                                {application.emergencyContactName || "-"}
+                              </p>
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                {application.emergencyContactNumber || ""}
+                              </p>
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                {application.emergencyContactRelationship || ""}
+                              </p>
+                            </td>
+                            {/* Waiver */}
+                            <td className="px-3 py-3">
+                              <span
+                                className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${
+                                  application.arrivalDisclaimerAccepted
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : "bg-red-500/15 text-red-300"
+                                }`}
+                              >
+                                {application.arrivalDisclaimerAccepted ? "Accepted" : "Pending"}
+                              </span>
                             </td>
                           </tr>
                         ))}
