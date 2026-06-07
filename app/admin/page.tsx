@@ -4908,12 +4908,18 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                             className="align-top text-slate-300 transition hover:bg-white/[0.03]"
                           >
                             <td className="px-3 py-3">
-                              <p className="font-black text-white">
-                                {application.firstName} {application.lastName}
-                              </p>
-                              <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">
-                                {application.email || "No email"}
-                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedApplication(application)}
+                                className="text-left"
+                              >
+                                <p className="font-black text-white underline-offset-2 hover:underline">
+                                  {application.firstName} {application.lastName}
+                                </p>
+                                <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">
+                                  {application.email || "No email"}
+                                </p>
+                              </button>
                             </td>
                             <td className="px-3 py-3 font-semibold text-slate-300">
                               {application.omang || "-"}
@@ -5109,12 +5115,18 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                             className="align-top text-slate-300 transition hover:bg-white/[0.03]"
                           >
                             <td className="px-3 py-3">
-                              <p className="font-black text-white">
-                                {application.firstName} {application.lastName}
-                              </p>
-                              <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">
-                                {application.email || "No email"}
-                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedApplication(application)}
+                                className="text-left"
+                              >
+                                <p className="font-black text-white underline-offset-2 hover:underline">
+                                  {application.firstName} {application.lastName}
+                                </p>
+                                <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">
+                                  {application.email || "No email"}
+                                </p>
+                              </button>
                             </td>
                             <td className="px-3 py-3 font-semibold text-slate-300">
                               {application.omang || "-"}
@@ -5289,6 +5301,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                           <th className="px-3 py-3 text-left font-black">Medical</th>
                           <th className="px-3 py-3 text-left font-black">Emergency Contact</th>
                           <th className="px-3 py-3 text-left font-black">Waiver</th>
+                          <th className="px-3 py-3 text-left font-black">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
@@ -5298,12 +5311,18 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                             className="align-top text-slate-300 transition hover:bg-white/[0.03]"
                           >
                             <td className="px-3 py-3">
-                              <p className="font-black text-white">
-                                {application.firstName} {application.lastName}
-                              </p>
-                              <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                                {application.email || "No email"}
-                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedApplication(application)}
+                                className="text-left"
+                              >
+                                <p className="font-black text-white underline-offset-2 hover:underline">
+                                  {application.firstName} {application.lastName}
+                                </p>
+                                <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                  {application.email || "No email"}
+                                </p>
+                              </button>
                             </td>
                             <td className="px-3 py-3 font-semibold text-slate-300">
                               {application.phone || "-"}
@@ -5365,6 +5384,27 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                                 {application.arrivalDisclaimerAccepted ? "Accepted" : "Pending"}
                               </span>
                             </td>
+                            <td className="px-3 py-3">
+                              <div className="flex flex-col gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedApplication(application)}
+                                  className="rounded-lg bg-white/10 px-2 py-1 text-[11px] font-black text-white transition hover:bg-white/20"
+                                >
+                                  View Profile
+                                </button>
+                                {application.arrivalStatus !== "Arrived" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeferApplication(application)}
+                                    disabled={savingId === application.id}
+                                    className="rounded-lg bg-amber-500/20 px-2 py-1 text-[11px] font-black text-amber-300 transition hover:bg-amber-500/30 disabled:opacity-50"
+                                  >
+                                    Defer
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -5389,9 +5429,15 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-black text-white">
-                            {application.firstName} {application.lastName}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedApplication(application)}
+                            className="text-left"
+                          >
+                            <p className="text-xs font-black text-white underline-offset-2 hover:underline">
+                              {application.firstName} {application.lastName}
+                            </p>
+                          </button>
                           <p className="mt-1 text-[11px] font-semibold text-slate-500">
                             {application.constituency || "Unknown"}
                           </p>
