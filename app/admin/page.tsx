@@ -16,12 +16,14 @@ type ApplicationStatus =
   | "Submitted"
   | "Remaining Eligible"
   | "Accepted"
-  | "Rejected";
+  | "Rejected"
+  | "Deferred";
 
 function normalizeApplicationStatus(value?: string | null): ApplicationStatus {
   if (value === "Accepted") return "Accepted";
   if (value === "Remaining Eligible") return "Remaining Eligible";
   if (value === "Rejected") return "Rejected";
+  if (value === "Deferred") return "Deferred";
   return "Submitted";
 }
 
@@ -78,6 +80,7 @@ type DashboardStats = {
   remainingEligible: number;
   accepted: number;
   rejected: number;
+  deferred: number;
 };
 
 const EMPTY_DASHBOARD_STATS: DashboardStats = {
@@ -89,6 +92,7 @@ const EMPTY_DASHBOARD_STATS: DashboardStats = {
   remainingEligible: 0,
   accepted: 0,
   rejected: 0,
+  deferred: 0,
 };
 
 type ReviewDecision = {
@@ -796,6 +800,10 @@ export default function AdminPage() {
   const [dispatchDueDiligenceConfirm, setDispatchDueDiligenceConfirm] =
     useState<Record<string, boolean>>({});
 
+  const [activeSection, setActiveSection] = useState<
+    "applications" | "programme" | "selection" | "compliance"
+  >("applications");
+
   function formatApplication(item: any): Application {
     return {
       id:
@@ -898,6 +906,7 @@ export default function AdminPage() {
         remainingEligible,
         accepted,
         rejected,
+        deferred,
       ] = await Promise.all([
         getApplicationCount(),
         getApplicationCount((query) => query.ilike("gender", "female")),
@@ -917,6 +926,7 @@ export default function AdminPage() {
         getApplicationCount((query) =>
           query.ilike("selection_bucket", "%Rejected -%"),
         ),
+        getApplicationCount((query) => query.eq("status", "Deferred")),
       ]);
 
       setDashboardStats({
@@ -928,6 +938,7 @@ export default function AdminPage() {
         remainingEligible,
         accepted,
         rejected,
+        deferred,
       });
     } catch (error) {
       console.error("Failed to load dashboard stats:", error);
@@ -2114,6 +2125,58 @@ export default function AdminPage() {
       setSelectedApplication({
         ...selectedApplication,
         status: newStatus,
+      });
+    }
+
+    await refreshAdminNumbers(false);
+    setSavingId(null);
+  }
+
+  async function handleDeferApplication(application: Application) {
+    const confirmed = window.confirm(
+      `Move ${application.firstName} ${application.lastName} to the Deferred – Next Intake pool?\n\nThey will NOT be rejected. Their application will be considered in the next intake without priority over new applicants.`,
+    );
+    if (!confirmed) return;
+
+    setSavingId(application.id);
+
+    const { error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update({ status: "Deferred", selection_bucket: "Deferred - Next Intake" })
+      .eq("application_id", application.applicationId);
+
+    if (error) {
+      console.error("Failed to defer application:", error);
+      alert(error.message);
+      setSavingId(null);
+      return;
+    }
+
+    await logAdminAction({
+      action: "status_change",
+      applicationId: application.applicationId,
+      details: {
+        previousStatus: application.status,
+        newStatus: "Deferred",
+        selectionBucket: "Deferred - Next Intake",
+        applicantEmail: application.email,
+        applicantName: `${application.firstName} ${application.lastName}`,
+      },
+    });
+
+    setApplications((prev) =>
+      prev.map((item) =>
+        item.applicationId === application.applicationId
+          ? { ...item, status: "Deferred", selectionBucket: "Deferred - Next Intake" }
+          : item,
+      ),
+    );
+
+    if (selectedApplication?.applicationId === application.applicationId) {
+      setSelectedApplication({
+        ...selectedApplication,
+        status: "Deferred",
+        selectionBucket: "Deferred - Next Intake",
       });
     }
 
@@ -4071,6 +4134,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
   const remainingEligibleCount = dashboardStats.remainingEligible;
   const acceptedCount = dashboardStats.accepted;
   const rejectedCount = dashboardStats.rejected;
+  const deferredCount = dashboardStats.deferred;
   const womenCount = dashboardStats.women;
   const menCount = dashboardStats.men;
 
@@ -4358,6 +4422,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         Rejected: [],
         Submitted: [],
         Accepted: [],
+        Deferred: [],
       }) as Record<ApplicationStatus, Application[]>;
 
     const grouped = constituencies.reduce(
@@ -4434,6 +4499,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     },
     { label: "Submitted / Unselected", value: "Submitted", count: submittedCount },
     { label: "Rejected / Failed Gates", value: "Internal Rejected", count: rejectedCount },
+    { label: "Deferred — Next Intake", value: "Deferred", count: deferredCount },
   ];
 
   return (
@@ -4582,6 +4648,31 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
           </div>
         </nav>
 
+        {/* ── Section tabs — splits the page into logical views ── */}
+        <div className="mb-5 flex flex-wrap gap-2">
+          {(
+            [
+              { id: "applications", label: "Applications" },
+              { id: "programme", label: "Programme & Arrivals" },
+              { id: "selection", label: "Selection & Reporting" },
+              { id: "compliance", label: "Compliance & Dispatch" },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveSection(tab.id)}
+              className={`rounded-2xl px-5 py-2.5 text-xs font-black transition ${
+                activeSection === tab.id
+                  ? "bg-white text-[#050816] shadow"
+                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <header className="mb-5 rounded-[30px] border border-white/10 bg-[#0b1028] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] lg:p-6">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-center">
             <div>
@@ -4698,15 +4789,20 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
           </div>
         </header>
 
-        <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {/* Stats bar — always visible regardless of active tab */}
+        <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <StatCard title="Total" value={totalApplications} />
           <StatCard title="Batch 1 Selected" value={internalBatchOneCount} />
           <StatCard title="Waitlist" value={remainingEligibleCount} />
           <StatCard title="Submitted / Unselected" value={submittedCount} />
           <StatCard title="Failed Gates" value={rejectedCount} />
+          <StatCard title="Deferred" value={deferredCount} />
           <StatCard title="Women" value={womenCount} />
         </section>
 
+        {/* ── Programme & Arrivals tab ── */}
+        {activeSection === "programme" && (
+        <>
         <section className="mb-5 rounded-[30px] border border-emerald-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -5138,27 +5234,38 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
 
           <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
-              <div className="mb-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
-                <input
-                  type="search"
-                  value={arrivalSearchInput}
-                  onChange={(event) => setArrivalSearchInput(event.target.value)}
-                  placeholder="Search arrivals by name, phone, email, constituency, dietary, medical or emergency contact..."
-                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:bg-[#0f172a]"
-                />
-
-                <select
-                  value={arrivalFilter}
-                  onChange={(event) => setArrivalFilter(event.target.value as typeof arrivalFilter)}
-                  className="rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm font-bold text-white outline-none transition focus:border-emerald-400"
-                >
-                  <option value="all">All accepted</option>
-                  <option value="arrived">Arrived</option>
-                  <option value="not_arrived">Not arrived</option>
-                  <option value="dietary">Dietary restrictions</option>
-                  <option value="medical">Medical declarations</option>
-                </select>
+              {/* Filter buttons — prominent so arrived vs not-arrived is one click */}
+              <div className="mb-3 flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: "all", label: `All (${acceptedApplications.length})`, color: "bg-white/10 text-white" },
+                    { value: "arrived", label: `Arrived (${arrivedApplicationsCount})`, color: "bg-emerald-600 text-white" },
+                    { value: "not_arrived", label: `Not Arrived (${pendingArrivalApplicationsCount})`, color: "bg-yellow-600 text-white" },
+                    { value: "dietary", label: `Dietary (${dietaryRestrictionsCount})`, color: "bg-orange-600 text-white" },
+                    { value: "medical", label: `Medical (${medicalDeclarationsCount})`, color: "bg-red-600 text-white" },
+                  ] as const
+                ).map((btn) => (
+                  <button
+                    key={btn.value}
+                    type="button"
+                    onClick={() => setArrivalFilter(btn.value)}
+                    className={`rounded-2xl px-4 py-2 text-xs font-black transition ${
+                      arrivalFilter === btn.value
+                        ? `${btn.color} ring-2 ring-white/30`
+                        : "border border-white/10 bg-[#111827] text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {btn.label}
+                  </button>
+                ))}
               </div>
+              <input
+                type="search"
+                value={arrivalSearchInput}
+                onChange={(event) => setArrivalSearchInput(event.target.value)}
+                placeholder="Search by name, phone, email, constituency, dietary or medical..."
+                className="mb-3 w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:bg-[#0f172a]"
+              />
 
               <div className="overflow-hidden rounded-2xl border border-white/10">
                 {acceptedApplicationsLoading ? (
@@ -5303,7 +5410,11 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             </div>
           </div>
         </section>
+        </> )} {/* end programme tab */}
 
+        {/* ── Selection & Reporting tab ── */}
+        {activeSection === "selection" && (
+        <>
         <section className="mb-5 rounded-[30px] border border-orange-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -5539,7 +5650,9 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             </div>
           </div>
         </section>
+        </> )} {/* end selection tab */}
 
+        {/* Pending data-protection banner — always visible so it's never missed */}
         {pendingRequestsCount > 0 && (
           <section className="mb-5 rounded-[24px] border border-orange-500/30 bg-orange-500/10 p-4 shadow-[0_18px_45px_rgba(249,115,22,0.12)]">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -5566,6 +5679,8 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             </div>
           </section>
         )}
+        {/* ── Applications tab ── */}
+        {activeSection === "applications" && (
         <section className="rounded-[32px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.30)]">
           <div className="mb-4 grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(420px,640px)] 2xl:items-center">
             <div>
@@ -5817,7 +5932,11 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             </div>
           </div>
         </section>
+        )} {/* end applications tab */}
 
+        {/* ── Compliance & Dispatch tab ── */}
+        {activeSection === "compliance" && (
+        <>
         {showConstituencyDispatch && (
           <section className="mt-5 rounded-[30px] border border-yellow-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -6491,6 +6610,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             )}
           </section>
         )}
+        </> )} {/* end compliance tab */}
 
         {selectedApplication && (
           <section className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center px-4">
@@ -6734,6 +6854,14 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                   className="bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-slate-600 transition disabled:opacity-50"
                 >
                   Move to Remaining Eligible
+                </button>
+
+                <button
+                  onClick={() => handleDeferApplication(selectedApplication)}
+                  disabled={savingId === selectedApplication.id}
+                  className="bg-amber-500 text-white px-5 py-3 rounded-xl font-semibold hover:bg-amber-600 transition disabled:opacity-50"
+                >
+                  Defer — Next Intake
                 </button>
               </div>
             </div>
