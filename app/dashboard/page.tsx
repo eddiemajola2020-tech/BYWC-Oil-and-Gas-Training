@@ -15,6 +15,7 @@ type Application = {
   firstName?: string;
   lastName?: string;
   email?: string;
+  constituency?: string;
   omangFile?: string;
   cvFile?: string;
   certificateFile?: string;
@@ -101,6 +102,7 @@ export default function DashboardPage() {
         firstName: data.first_name,
         lastName: data.last_name,
         email: data.email,
+        constituency: data.constituency,
         omangFile: data.omang_file,
         cvFile: data.cv_file,
         certificateFile: data.certificate_file,
@@ -132,6 +134,114 @@ export default function DashboardPage() {
   async function handleLogout() {
     await supabase.auth.signOut();
     window.location.href = "/login";
+  }
+
+  async function handleDownloadLetter() {
+    if (!latestApplication) return;
+
+    try {
+      const { default: jsPDF } = await import("jspdf");
+
+      // Load letterhead from public folder and convert to base64
+      const response = await fetch("/letterhead.png");
+      const buffer = await response.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(buffer).reduce(
+          (data, byte) => data + String.fromCharCode(byte),
+          "",
+        ),
+      );
+      const imgData = `data:image/png;base64,${base64}`;
+
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      // Full-page letterhead background
+      doc.addImage(imgData, "PNG", 0, 0, 210, 297);
+
+      const fullName =
+        `${latestApplication.firstName ?? ""} ${latestApplication.lastName ?? ""}`.trim() ||
+        "Applicant";
+      const refNo = latestApplication.applicationId ?? latestApplication.id ?? "N/A";
+      const constituency = latestApplication.constituency ?? "";
+      const today = new Date().toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+
+      doc.setTextColor(25, 25, 25);
+
+      // Date — right-aligned
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(today, 195, 32, { align: "right" });
+
+      // Reference
+      doc.text(`Ref: BYWC/OGT/2025/${refNo}`, 15, 44);
+
+      // Dear line
+      doc.setFontSize(11);
+      doc.text(`Dear ${fullName},`, 15, 56);
+
+      // Subject — bold
+      doc.setFont("helvetica", "bold");
+      // Fetch editable template from admin_settings
+      const { data: settingsData } = await supabase
+        .from("admin_settings")
+        .select("key, value")
+        .in("key", ["acceptance_letter_subject", "acceptance_letter_body"]);
+
+      const defaultSubject =
+        "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME";
+      const defaultBody = [
+        "We are pleased to inform you that your application to the Botswana Youth in the World of Commerce (BYWC) Oil & Gas Training Programme has been reviewed and you have been successfully selected for participation in the programme.",
+        "Your acceptance is confirmed under the following details:\n \u2022  Full Name: {{fullName}}\n \u2022  Constituency: {{constituency}}\n \u2022  Reference Number: {{refNo}}\n \u2022  Programme: BYWC Oil & Gas Training",
+        "This letter serves as your official confirmation of acceptance and must be presented upon registration at the training venue together with your valid national identity document (Omang).",
+        "Further details regarding the reporting date, venue address, programme schedule, and items to bring will be communicated through your registered account profile and inbox on the BYWC applicant portal at bywcprogram.org.",
+        "We look forward to welcoming you and wish you every success in your training.",
+      ].join("\n\n");
+
+      const rawSubject =
+        settingsData?.find((r) => r.key === "acceptance_letter_subject")?.value ??
+        defaultSubject;
+      const rawBody =
+        settingsData?.find((r) => r.key === "acceptance_letter_body")?.value ??
+        defaultBody;
+
+      const fill = (text: string) =>
+        text
+          .replace(/\{\{fullName\}\}/g, fullName)
+          .replace(/\{\{firstName\}\}/g, latestApplication.firstName ?? "")
+          .replace(/\{\{refNo\}\}/g, refNo)
+          .replace(/\{\{constituency\}\}/g, constituency)
+          .replace(/\{\{date\}\}/g, today);
+
+      const subject = fill(rawSubject);
+      const paragraphs = fill(rawBody)
+        .split(/\n\n+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      const subjectLines = doc.splitTextToSize(subject, 180);
+      doc.text(subjectLines, 15, 66);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+
+      const lineH = 6;
+      let y = 66 + subjectLines.length * lineH + 6;
+
+      for (const para of paragraphs) {
+        const lines = doc.splitTextToSize(para, 180);
+        doc.text(lines, 15, y);
+        y += lines.length * lineH + 5;
+      }
+
+      doc.save(`BYWC-Acceptance-Letter-${fullName.replace(/\s+/g, "-")}.pdf`);
+    } catch (err) {
+      console.error("Letter generation failed:", err);
+      alert("Could not generate the letter. Please try again.");
+    }
   }
 
   const unreadMessages = messages.filter((msg) => !msg.read).length;
@@ -417,6 +527,28 @@ export default function DashboardPage() {
                     Please scan the official arrival QR code at the registration area. After reading the arrival disclaimer, tap Confirm My Arrival on the QR page to record your arrival time.
                   </div>
                 )}
+
+                <div className="mt-5 border-t border-slate-100 pt-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Official Documents
+                  </p>
+                  <button
+                    onClick={handleDownloadLetter}
+                    className="mt-3 flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition hover:bg-emerald-100"
+                  >
+                    <div>
+                      <p className="text-sm font-bold text-emerald-800">
+                        Acceptance Letter
+                      </p>
+                      <p className="mt-0.5 text-xs text-emerald-600">
+                        Official BYWC programme confirmation — PDF
+                      </p>
+                    </div>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                      ↓
+                    </span>
+                  </button>
+                </div>
               </div>
             )}
             <div

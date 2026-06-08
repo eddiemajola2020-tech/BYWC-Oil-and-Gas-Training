@@ -292,7 +292,7 @@ const constituencies = [
   "Francistown East",
   "Francistown South",
   "Francistown West",
-  "Gabane/ Mankgodi",
+  "Gabane / Mankgodi",
   "Gaborone Bonnington North",
   "Gaborone Bonnington South",
   "Gaborone Central",
@@ -301,7 +301,7 @@ const constituencies = [
   "Gamalete",
   "Ghanzi",
   "Goodhope - Mmathethe",
-  "Jwaneng – Mabutsane",
+  "Jwaneng - Mabutsane",
   "Kanye East",
   "Kanye West",
   "Kgalagadi North",
@@ -324,7 +324,7 @@ const constituencies = [
   "Molepolole North",
   "Molepolole South",
   "Moshupa - Manyana",
-  "Nata – Gweta",
+  "Nata - Gweta",
   "Ngami",
   "Nkange",
   "Okavango East",
@@ -357,7 +357,7 @@ const NEARBY_350KM_CONSTITUENCIES = [
   "Mogoditshane East",
   "Mogoditshane West",
   "Mmopane - Metsimotlhabe",
-  "Gabane/ Mankgodi",
+  "Gabane / Mankgodi",
   "Thamaga - Kumakwane",
   "Molepolole North",
   "Molepolole South",
@@ -372,7 +372,7 @@ const NEARBY_350KM_CONSTITUENCIES = [
   "Kanye West",
   "Moshupa - Manyana",
   "Goodhope - Mmathethe",
-  "Jwaneng – Mabutsane",
+  "Jwaneng - Mabutsane",
   "Takatokwane",
   "Mahalapye East",
   "Mahalapye West",
@@ -764,7 +764,7 @@ export default function AdminPage() {
     useState("");
   const [arrivalSearchInput, setArrivalSearchInput] = useState("");
   const [arrivalFilter, setArrivalFilter] = useState<
-    "all" | "arrived" | "not_arrived" | "dietary" | "medical"
+    "all" | "arrived" | "not_arrived" | "dietary" | "disability" | "medical"
   >("all");
   const [nearbyReservePublishAmount, setNearbyReservePublishAmount] =
     useState("0");
@@ -806,6 +806,12 @@ export default function AdminPage() {
 
   const [selectedArrivalIds, setSelectedArrivalIds] = useState<Set<string>>(new Set());
   const [bulkDeferring, setBulkDeferring] = useState(false);
+
+  const [letterSubject, setLetterSubject] = useState("");
+  const [letterBody, setLetterBody] = useState("");
+  const [letterLoading, setLetterLoading] = useState(false);
+  const [letterSaving, setLetterSaving] = useState(false);
+  const [letterSaved, setLetterSaved] = useState(false);
 
   function formatApplication(item: any): Application {
     return {
@@ -1403,6 +1409,12 @@ export default function AdminPage() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (activeSection === "compliance" && !letterSubject && !letterBody) {
+      loadLetterTemplate();
+    }
+  }, [activeSection]);
 
   const filteredApplications = applications;
 
@@ -4165,9 +4177,143 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     URL.revokeObjectURL(url);
   }
 
+  function handleExportArrivedCsv() {
+    const arrived = acceptedApplications.filter(
+      (a) => a.arrivalStatus === "Arrived",
+    );
+    if (arrived.length === 0) {
+      alert("No arrived participants found.");
+      return;
+    }
+    const headers = [
+      "Arrived At",
+      "First Name",
+      "Last Name",
+      "Phone",
+      "Email",
+      "Constituency",
+      "Dietary Restrictions",
+      "Dietary Details",
+      "Medical Conditions / Allergies",
+      "Emergency Contact Name",
+      "Emergency Contact Number",
+    ];
+    const rows = arrived.map((a) => [
+      a.arrivedAt ? new Date(a.arrivedAt).toLocaleString() : "",
+      a.firstName,
+      a.lastName,
+      a.phone,
+      a.email,
+      a.constituency,
+      a.hasDietaryRestrictions ? "Yes" : "No",
+      a.dietaryRestrictionsDetails || "",
+      a.knownMedicalConditions || "",
+      a.emergencyContactName || "",
+      a.emergencyContactNumber || "",
+    ]);
+    const csvContent = [
+      headers.map(escapeCsvValue).join(","),
+      ...rows.map((row) => row.map(escapeCsvValue).join(",")),
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    link.href = url;
+    link.download = `BYWC-arrived-${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportNotArrivedCsv() {
+    const notArrived = acceptedApplications.filter(
+      (a) => a.arrivalStatus !== "Arrived",
+    );
+    if (notArrived.length === 0) {
+      alert("No pending participants found.");
+      return;
+    }
+    const headers = [
+      "First Name",
+      "Last Name",
+      "Phone",
+      "Email",
+      "Constituency",
+      "Dietary Restrictions",
+      "Dietary Details",
+      "Medical Conditions / Allergies",
+      "Emergency Contact Name",
+      "Emergency Contact Number",
+    ];
+    const rows = notArrived.map((a) => [
+      a.firstName,
+      a.lastName,
+      a.phone,
+      a.email,
+      a.constituency,
+      a.hasDietaryRestrictions ? "Yes" : "No",
+      a.dietaryRestrictionsDetails || "",
+      a.knownMedicalConditions || "",
+      a.emergencyContactName || "",
+      a.emergencyContactNumber || "",
+    ]);
+    const csvContent = [
+      headers.map(escapeCsvValue).join(","),
+      ...rows.map((row) => row.map(escapeCsvValue).join(",")),
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    link.href = url;
+    link.download = `BYWC-not-arrived-${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/admin-login");
+  }
+
+  async function loadLetterTemplate() {
+    setLetterLoading(true);
+    const { data } = await supabase
+      .from("admin_settings")
+      .select("key, value")
+      .in("key", ["acceptance_letter_subject", "acceptance_letter_body"]);
+    if (data) {
+      setLetterSubject(
+        data.find((r) => r.key === "acceptance_letter_subject")?.value ?? "",
+      );
+      setLetterBody(
+        data.find((r) => r.key === "acceptance_letter_body")?.value ?? "",
+      );
+    }
+    setLetterLoading(false);
+  }
+
+  async function saveLetterTemplate() {
+    setLetterSaving(true);
+    await supabase.from("admin_settings").upsert([
+      {
+        key: "acceptance_letter_subject",
+        value: letterSubject,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        key: "acceptance_letter_body",
+        value: letterBody,
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+    setLetterSaving(false);
+    setLetterSaved(true);
+    setTimeout(() => setLetterSaved(false), 3000);
   }
 
   const totalApplications = dashboardStats.total;
@@ -4306,6 +4452,10 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     Boolean((application.knownMedicalConditions || "").trim() || (application.currentMedication || "").trim()),
   ).length;
 
+  const disabilityCount = acceptedApplications.filter(
+    (application) => isYes(application.disabilityStatus),
+  ).length;
+
   const visibleArrivalApplications = useMemo(() => {
     let filtered = acceptedApplications;
 
@@ -4315,6 +4465,8 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
       filtered = filtered.filter((application) => application.arrivalStatus !== "Arrived");
     } else if (arrivalFilter === "dietary") {
       filtered = filtered.filter((application) => Boolean(application.hasDietaryRestrictions));
+    } else if (arrivalFilter === "disability") {
+      filtered = filtered.filter((application) => isYes(application.disabilityStatus));
     } else if (arrivalFilter === "medical") {
       filtered = filtered.filter((application) =>
         Boolean((application.knownMedicalConditions || "").trim() || (application.currentMedication || "").trim()),
@@ -4528,81 +4680,69 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
   }
 
   const statusNavItems = [
-    { label: "All Applications", value: "All", count: totalApplications },
+    { label: "All", value: "All", count: totalApplications },
     {
-      label: "Batch 1 Selected",
+      label: "Batch 1",
       value: "Internal Batch 1",
       count: internalBatchOneCount,
     },
     {
-      label: "Waitlist / Remaining Eligible",
+      label: "Waitlist",
       value: "Internal Remaining Eligible",
       count: remainingEligibleCount,
     },
-    { label: "Submitted / Unselected", value: "Submitted", count: submittedCount },
-    { label: "Rejected / Failed Gates", value: "Internal Rejected", count: rejectedCount },
-    { label: "Deferred — Next Intake", value: "Deferred", count: deferredCount },
+    { label: "Unselected", value: "Submitted", count: submittedCount },
+    { label: "Rejected", value: "Internal Rejected", count: rejectedCount },
+    { label: "Deferred", value: "Deferred", count: deferredCount },
   ];
 
   return (
     <main className="min-h-screen bg-[#050816] text-white">
       <div className="mx-auto min-h-screen max-w-[1800px] p-4 lg:p-6">
-        <nav className="mb-5 rounded-[28px] border border-white/10 bg-[#0b1028] p-3 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
-          <div className="grid gap-4 2xl:grid-cols-[170px_minmax(0,1fr)_300px] 2xl:items-start">
-            <div className="flex h-full items-start">
-              <div className="flex w-full max-w-[160px] items-center gap-2 rounded-2xl border border-orange-500/25 bg-white/5 px-3 py-2 text-white">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-xs font-black">
-                  BY
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-orange-300">
-                    BYWC
-                  </p>
-                  <p className="truncate text-[11px] font-bold">
-                    Admin Control
-                  </p>
-                </div>
+        <nav className="mb-4 rounded-[24px] border border-white/[0.08] bg-[#0b1028] px-4 py-3">
+          <div className="flex items-center gap-3">
+            {/* Logo */}
+            <div className="flex shrink-0 items-center gap-2.5 rounded-2xl border border-orange-500/20 bg-white/[0.04] px-3 py-2">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-500 text-[10px] font-black text-white">
+                BY
+              </div>
+              <div className="hidden min-w-0 lg:block">
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-orange-400">BYWC</p>
+                <p className="text-[11px] font-bold text-white">Admin Control</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:max-w-4xl">
-              {statusNavItems.map((item) => {
-                const isActive = statusFilter === item.value;
-
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter(item.value);
-                      setCurrentPage(1);
-                    }}
-                    className={`flex min-h-[36px] items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs font-bold transition ${
-                      isActive
-                        ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
-                        : "bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
-                    } ${item.value === "Rejected" ? "sm:col-start-1" : ""}`}
-                  >
-                    <span className="truncate">{item.label}</span>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${
-                        isActive
-                          ? "bg-white/20 text-white"
-                          : "bg-white/10 text-slate-300"
-                      }`}
-                    >
-                      {item.count}
-                    </span>
-                  </button>
-                );
-              })}
+            {/* Section tabs — centred */}
+            <div className="flex flex-1 items-center justify-center gap-1">
+              {(
+                [
+                  { id: "applications", label: "Applicants" },
+                  { id: "programme", label: "Programme" },
+                  { id: "selection", label: "Selection" },
+                  { id: "compliance", label: "Compliance" },
+                ] as const
+              ).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveSection(item.id)}
+                  className={`rounded-xl px-5 py-2 text-sm font-semibold transition ${
+                    activeSection === item.id
+                      ? "bg-white text-[#050816] shadow"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
 
-            <div className="flex flex-wrap items-start justify-start gap-2 xl:col-span-2 2xl:col-span-1 2xl:justify-end">
+            {/* Action buttons — right */}
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
                 onClick={handleToggleAuditLogs}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
+                className="rounded-xl border border-white/[0.08] px-3 py-2 text-xs font-semibold text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
               >
                 Activity Log
               </button>
@@ -4610,14 +4750,14 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
               <button
                 type="button"
                 onClick={handleToggleDataRequests}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
+                className="rounded-xl border border-white/[0.08] px-3 py-2 text-xs font-semibold text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
               >
                 Compliance
               </button>
 
               <details className="group relative">
-                <summary className="list-none rounded-2xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-700 [&::-webkit-details-marker]:hidden">
-                  More Actions ▾
+                <summary className="list-none cursor-pointer rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-orange-600 [&::-webkit-details-marker]:hidden">
+                  Actions ▾
                 </summary>
 
                 <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#111827] p-2 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
@@ -4626,7 +4766,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     onClick={handleExportCurrentPageCsv}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-emerald-300 transition hover:bg-white/10"
                   >
-                    Export Page
+                    Export Current Page
                   </button>
 
                   <button
@@ -4635,9 +4775,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     disabled={fullBackupExporting}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-purple-300 transition hover:bg-white/10 disabled:opacity-50"
                   >
-                    {fullBackupExporting
-                      ? "Exporting Backup..."
-                      : "Full Backup"}
+                    {fullBackupExporting ? "Exporting..." : "Full Backup"}
                   </button>
 
                   <button
@@ -4646,9 +4784,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     disabled={batchOneExporting}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-emerald-300 transition hover:bg-white/10 disabled:opacity-50"
                   >
-                    {batchOneExporting
-                      ? "Exporting Batch 1..."
-                      : "Export Batch 1 Selected"}
+                    {batchOneExporting ? "Exporting..." : "Export Batch 1"}
                   </button>
 
                   <button
@@ -4656,7 +4792,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     onClick={handleExportStatsCsv}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-orange-300 transition hover:bg-white/10"
                   >
-                    Export Stats Only
+                    Export Stats
                   </button>
 
                   <button
@@ -4664,7 +4800,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     onClick={() => loadApplications(false, currentPage)}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-blue-300 transition hover:bg-white/10"
                   >
-                    Refresh Dashboard
+                    Refresh
                   </button>
 
                   <button
@@ -4672,7 +4808,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     onClick={handleToggleConstituencyDispatch}
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-yellow-300 transition hover:bg-white/10"
                   >
-                    Constituency Dispatch
+                    Dispatch
                   </button>
 
                   <div className="my-1 border-t border-white/10" />
@@ -4690,64 +4826,70 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
           </div>
         </nav>
 
-        {/* ── Section tabs — splits the page into logical views ── */}
-        <div className="mb-5 flex flex-wrap gap-2">
-          {(
-            [
-              { id: "applications", label: "Applications" },
-              { id: "programme", label: "Programme & Arrivals" },
-              { id: "selection", label: "Selection & Reporting" },
-              { id: "compliance", label: "Compliance & Dispatch" },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveSection(tab.id)}
-              className={`rounded-2xl px-5 py-2.5 text-xs font-black transition ${
-                activeSection === tab.id
-                  ? "bg-white text-[#050816] shadow"
-                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {/* ── Applicant filter sub-nav — only visible when Applicants section is active ── */}
+        {activeSection === "applications" && (
+          <div className="mb-5 flex flex-wrap items-center gap-1 rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-1.5">
+            {statusNavItems.map((item) => {
+              const isActive = statusFilter === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter(item.value);
+                    setCurrentPage(1);
+                  }}
+                  className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
+                    isActive
+                      ? "bg-orange-500 text-white shadow shadow-orange-500/30"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {item.label}
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                      isActive ? "bg-white/20" : "bg-white/[0.07] text-slate-500"
+                    }`}
+                  >
+                    {item.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-        <header className="mb-5 rounded-[30px] border border-white/10 bg-[#0b1028] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] lg:p-6">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-center">
+        <header className="mb-5 rounded-[26px] border border-white/[0.07] bg-[#0b1028] p-5 lg:p-6">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-500">
-                BYWC Oil & Gas Training
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">
+                BYWC Oil &amp; Gas Training
               </p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-white md:text-5xl">
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-white md:text-4xl">
                 Admin Dashboard
               </h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-                Review applications, update statuses, run auto-review, export
-                backups and manage applicant messages.
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                Manage applications, selections, arrivals and compliance in one place.
               </p>
               {lastUpdated && (
-                <p className="mt-2 text-xs font-semibold text-slate-400">
-                  Last updated: {lastUpdated.toLocaleTimeString()} ·
-                  Auto-refreshes every 15 minutes
+                <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1 text-[10px] font-semibold text-slate-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Live · updated {lastUpdated.toLocaleTimeString()}
                 </p>
               )}
             </div>
 
-            <div className="rounded-[24px] border border-orange-500/25 bg-orange-500/10 p-4">
+            <div className="rounded-[20px] border border-orange-500/20 bg-orange-500/[0.06] p-4">
               <div className="flex flex-col gap-4">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-400">
                     Selection Tools
                   </p>
-                  <h2 className="mt-1 text-lg font-black text-white">
+                  <h2 className="mt-0.5 text-base font-black text-white">
                     Master Selection
                   </h2>
-                  <p className="mt-1 text-xs leading-5 text-slate-300">
-                    Run selection internally first. Applicants will still see
-                    Submitted until you manually publish the results.
+                  <p className="mt-1 text-[11px] leading-5 text-slate-400">
+                    Run hidden selection first — applicants see Submitted until you publish.
                   </p>
                 </div>
 
@@ -4833,13 +4975,13 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
 
         {/* Stats bar — always visible regardless of active tab */}
         <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-          <StatCard title="Total" value={totalApplications} />
-          <StatCard title="Batch 1 Selected" value={internalBatchOneCount} />
-          <StatCard title="Waitlist" value={remainingEligibleCount} />
-          <StatCard title="Submitted / Unselected" value={submittedCount} />
-          <StatCard title="Failed Gates" value={rejectedCount} />
-          <StatCard title="Deferred" value={deferredCount} />
-          <StatCard title="Women" value={womenCount} />
+          <StatCard title="Total" value={totalApplications} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
+          <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Batch 1"); setCurrentPage(1); }} />
+          <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Remaining Eligible"); setCurrentPage(1); }} />
+          <StatCard title="Unselected" value={submittedCount} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("Submitted"); setCurrentPage(1); }} />
+          <StatCard title="Rejected" value={rejectedCount} accent="red" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Rejected"); setCurrentPage(1); }} />
+          <StatCard title="Deferred" value={deferredCount} accent="amber" onClick={() => { setActiveSection("applications"); setStatusFilter("Deferred"); setCurrentPage(1); }} />
+          <StatCard title="Women" value={womenCount} accent="pink" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
         </section>
 
         {/* ── Programme & Arrivals tab ── */}
@@ -5013,7 +5155,13 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
           </div>
         </section>
 
-        <section className="mb-5 rounded-[30px] border border-cyan-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+        <details className="mb-5 group">
+          <summary className="mb-3 flex cursor-pointer list-none items-center gap-3 rounded-2xl border border-cyan-500/20 bg-white/[0.02] px-5 py-3 text-xs font-black text-cyan-300 hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+            <span className="transition-transform group-open:rotate-90">▶</span>
+            350km Nearby Reserve Pool
+            <span className="ml-auto font-semibold text-slate-500">Expand to manage</span>
+          </summary>
+        <section className="rounded-[30px] border border-cyan-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">
@@ -5220,6 +5368,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             </div>
           </div>
         </section>
+        </details>
 
         <section className="mb-5 rounded-[30px] border border-emerald-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -5245,45 +5394,64 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
               </button>
               <button
                 type="button"
-                onClick={handleExportArrivalRegisterCsv}
-                className="rounded-2xl bg-emerald-500 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-600"
+                onClick={handleExportArrivedCsv}
+                className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
               >
-                Export Arrival Register
+                Export Arrived
+              </button>
+              <button
+                type="button"
+                onClick={handleExportNotArrivedCsv}
+                className="rounded-2xl bg-yellow-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-yellow-700"
+              >
+                Export Not Arrived
+              </button>
+              <button
+                type="button"
+                onClick={handleExportArrivalRegisterCsv}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
+              >
+                Full Register
               </button>
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+            <button type="button" onClick={() => setArrivalFilter("all")} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Accepted</p>
               <p className="mt-2 text-2xl font-black text-white">{acceptedApplications.length.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Eligible to arrive</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            </button>
+            <button type="button" onClick={() => setArrivalFilter("arrived")} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Arrived</p>
               <p className="mt-2 text-2xl font-black text-emerald-300">{arrivedApplicationsCount.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">QR confirmed</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            </button>
+            <button type="button" onClick={() => setArrivalFilter("not_arrived")} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Not Arrived</p>
               <p className="mt-2 text-2xl font-black text-yellow-300">{pendingArrivalApplicationsCount.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Still pending</p>
-            </div>
+            </button>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Arrival Rate</p>
               <p className="mt-2 text-2xl font-black text-blue-300">{arrivalRate}%</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Arrived / Accepted</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <button type="button" onClick={() => setArrivalFilter("dietary")} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Dietary</p>
               <p className="mt-2 text-2xl font-black text-orange-300">{dietaryRestrictionsCount.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Special meals</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            </button>
+            <button type="button" onClick={() => setArrivalFilter("disability")} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Disability</p>
+              <p className="mt-2 text-2xl font-black text-purple-300">{disabilityCount.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Declared</p>
+            </button>
+            <button type="button" onClick={() => setArrivalFilter("medical")} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Medical</p>
               <p className="mt-2 text-2xl font-black text-red-300">{medicalDeclarationsCount.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Declared notes</p>
-            </div>
+            </button>
           </div>
 
           <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -5296,6 +5464,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     { value: "arrived", label: `Arrived (${arrivedApplicationsCount})`, color: "bg-emerald-600 text-white" },
                     { value: "not_arrived", label: `Not Arrived (${pendingArrivalApplicationsCount})`, color: "bg-yellow-600 text-white" },
                     { value: "dietary", label: `Dietary (${dietaryRestrictionsCount})`, color: "bg-orange-600 text-white" },
+                    { value: "disability", label: `Disability (${disabilityCount})`, color: "bg-purple-600 text-white" },
                     { value: "medical", label: `Medical (${medicalDeclarationsCount})`, color: "bg-red-600 text-white" },
                   ] as const
                 ).map((btn) => (
@@ -6764,6 +6933,94 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             )}
           </section>
         )}
+        {/* ── Acceptance Letter Editor ── */}
+        <section className="mt-5 rounded-[30px] border border-emerald-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">
+                Documents
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">
+                Acceptance Letter Template
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+                Edit the text accepted applicants see when they download their letter. Use the placeholders below — they are replaced automatically with each applicant's details.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  ["{{fullName}}", "Full name"],
+                  ["{{firstName}}", "First name"],
+                  ["{{refNo}}", "Reference number"],
+                  ["{{constituency}}", "Constituency"],
+                  ["{{date}}", "Date of download"],
+                ].map(([tag, desc]) => (
+                  <span
+                    key={tag}
+                    className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px]"
+                  >
+                    <code className="font-black text-emerald-300">{tag}</code>
+                    <span className="text-slate-500">{desc}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={loadLetterTemplate}
+                disabled={letterLoading}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-50"
+              >
+                {letterLoading ? "Loading..." : "Reload"}
+              </button>
+              <button
+                type="button"
+                onClick={saveLetterTemplate}
+                disabled={letterSaving || letterLoading}
+                className={`rounded-2xl px-5 py-2.5 text-xs font-black text-white transition disabled:opacity-50 ${
+                  letterSaved
+                    ? "bg-emerald-500"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {letterSaved ? "Saved ✓" : letterSaving ? "Saving..." : "Save Template"}
+              </button>
+            </div>
+          </div>
+
+          {letterLoading ? (
+            <p className="text-sm font-semibold text-slate-400">Loading template...</p>
+          ) : (
+            <div className="grid gap-4">
+              <div>
+                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                  Subject Line (bold heading in the letter)
+                </label>
+                <input
+                  type="text"
+                  value={letterSubject}
+                  onChange={(e) => setLetterSubject(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400"
+                  placeholder="RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                  Letter Body — separate paragraphs with a blank line
+                </label>
+                <textarea
+                  value={letterBody}
+                  onChange={(e) => setLetterBody(e.target.value)}
+                  rows={18}
+                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm leading-7 text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400"
+                  placeholder="Write the letter body here. Use {{fullName}}, {{refNo}}, etc. for personalisation. Separate paragraphs with a blank line."
+                />
+              </div>
+            </div>
+          )}
+        </section>
         </> )} {/* end compliance tab */}
 
         {selectedApplication && (
@@ -7046,12 +7303,48 @@ function MiniStatCard({
   );
 }
 
-function StatCard({ title, value }: { title: string; value: number }) {
+function StatCard({
+  title,
+  value,
+  accent = "slate",
+  onClick,
+}: {
+  title: string;
+  value: number;
+  accent?: "orange" | "emerald" | "yellow" | "red" | "amber" | "slate" | "pink";
+  onClick?: () => void;
+}) {
+  const dot: Record<string, string> = {
+    orange: "bg-orange-500",
+    emerald: "bg-emerald-500",
+    yellow: "bg-yellow-400",
+    red: "bg-red-500",
+    amber: "bg-amber-400",
+    slate: "bg-slate-500",
+    pink: "bg-pink-500",
+  };
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="rounded-[26px] border border-white/10 bg-[#0b1028] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.30)]">
-      <p className="text-sm font-bold text-slate-400">{title}</p>
-      <p className="mt-2 text-3xl font-black text-white">{value}</p>
-    </div>
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`group w-full rounded-[22px] border border-white/[0.07] bg-white/[0.03] p-5 text-left transition hover:border-white/[0.12] hover:bg-white/[0.05] ${onClick ? "cursor-pointer active:scale-[0.98]" : ""}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+          {title}
+        </p>
+        <div className={`h-2 w-2 shrink-0 rounded-full ${dot[accent]}`} />
+      </div>
+      <p className="mt-4 text-[2.25rem] font-black leading-none tracking-tight text-white">
+        {value.toLocaleString()}
+      </p>
+      {onClick && (
+        <p className="mt-2 text-[10px] font-semibold text-slate-600 opacity-0 transition group-hover:opacity-100">
+          View list →
+        </p>
+      )}
+    </Tag>
   );
 }
 
