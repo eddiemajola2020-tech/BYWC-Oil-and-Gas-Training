@@ -26,15 +26,14 @@ export default function CreateNewPasswordPage() {
       (event, session) => {
         if (resolved) return;
 
-        if (event === "PASSWORD_RECOVERY" && session) {
-          // Supabase explicitly signals a recovery session — always trust this.
+        // Accept PASSWORD_RECOVERY or SIGNED_IN — newer Supabase versions fire
+        // SIGNED_IN after a successful code exchange instead of PASSWORD_RECOVERY.
+        if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
         } else if (event === "INITIAL_SESSION" && session && hasRecoveryHash) {
           // PASSWORD_RECOVERY fired before our listener was ready (timing race).
-          // The hash at mount confirms this was a recovery link, so the current
-          // session IS the recovery session.
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
@@ -48,17 +47,24 @@ export default function CreateNewPasswordPage() {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         window.history.replaceState({}, document.title, "/create-new-password");
 
-        if (error && !resolved) {
+        if (error) {
+          if (!resolved) {
+            resolved = true;
+            setErrorMessage(
+              "This reset link is invalid or has already been used. Please request a new one.",
+            );
+            setHasResetSession(false);
+            setIsCheckingLink(false);
+          }
+        } else if (!resolved) {
+          // Code exchange succeeded — session is valid regardless of which auth
+          // event fires next (PASSWORD_RECOVERY or SIGNED_IN).
           resolved = true;
-          setErrorMessage(
-            "This reset link is invalid or has already been used. Please request a new one.",
-          );
-          setHasResetSession(false);
+          setHasResetSession(true);
           setIsCheckingLink(false);
         }
       } else if (hasRecoveryHash) {
-        // Implicit flow: Supabase detects the hash automatically and fires
-        // PASSWORD_RECOVERY (or INITIAL_SESSION if it fired pre-subscription).
+        // Implicit flow: Supabase detects the hash and fires PASSWORD_RECOVERY.
         window.history.replaceState({}, document.title, "/create-new-password");
       } else {
         resolved = true;

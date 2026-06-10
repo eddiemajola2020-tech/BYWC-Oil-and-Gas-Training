@@ -261,6 +261,7 @@ const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
 const PAGE_SIZE = 50;
 const APPLICATIONS_TABLE = "applications";
 const WAITING_LIST_PER_CONSTITUENCY = 50;
+const SPECIALLY_ELECTED_SEATS = 20;
 
 const STRATEGIC_COVERAGE_BOOST = 15;
 const STRATEGIC_COVERAGE_EMAILS = [
@@ -4503,6 +4504,33 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     .sort((a, b) => (b.arrivedAt || "").localeCompare(a.arrivedAt || ""))
     .slice(0, 10);
 
+  // Constituency breakdown: arrived + accepted only (excludes deferred — acceptedApplications is already status=Accepted)
+  const arrivedConstituencyBreakdown = useMemo(() => {
+    const arrived = acceptedApplications.filter(
+      (app) => app.arrivalStatus === "Arrived",
+    );
+    const map: Record<string, { women: number; men: number; total: number }> = {};
+    for (const app of arrived) {
+      const c = app.constituency || "Unknown";
+      if (!map[c]) map[c] = { women: 0, men: 0, total: 0 };
+      const g = normalize(app.gender);
+      if (g === "female") map[c].women++;
+      else if (g === "male") map[c].men++;
+      map[c].total++;
+    }
+    const official = constituencies.map(
+      (c) => [c, map[c] ?? { women: 0, men: 0, total: 0 }] as const,
+    );
+    const extras = Object.entries(map)
+      .filter(([c]) => !constituencies.includes(c))
+      .map(([c, s]) => [c, s] as const);
+    return [...official, ...extras];
+  }, [acceptedApplications]);
+
+  const arrivedWomenTotal = arrivedConstituencyBreakdown.reduce((s, [, r]) => s + r.women, 0);
+  const arrivedMenTotal = arrivedConstituencyBreakdown.reduce((s, [, r]) => s + r.men, 0);
+  const arrivedGrandTotal = arrivedWomenTotal + arrivedMenTotal;
+
   const youthWomenCount = reportingStats
     ? reportingStats.constituencyRows.reduce(
         (sum, [, stats]) => sum + stats.women,
@@ -4691,6 +4719,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
       value: "Internal Remaining Eligible",
       count: remainingEligibleCount,
     },
+    { label: "Accepted", value: "Accepted", count: acceptedCount },
     { label: "Unselected", value: "Submitted", count: submittedCount },
     { label: "Rejected", value: "Internal Rejected", count: rejectedCount },
     { label: "Deferred", value: "Deferred", count: deferredCount },
@@ -5733,6 +5762,110 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
             </div>
           </div>
         </section>
+
+        {/* ── Constituency Count by Gender (arrived, accepted, not deferred) ── */}
+        <section className="mb-5 rounded-[30px] border border-sky-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-300">
+                Constituency Breakdown — Confirmed Arrivals
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">
+                Accepted &amp; Arrived by Constituency
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+                Counts only applicants with status = Accepted who have confirmed arrival. Deferred and not-arrived are excluded for a clean in-programme estimate.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Arrived total</p>
+              <p className="text-2xl font-black text-sky-300">{arrivedGrandTotal.toLocaleString()}</p>
+              <p className="text-xs font-semibold text-slate-500">
+                {arrivedWomenTotal.toLocaleString()} women · {arrivedMenTotal.toLocaleString()} men
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-white/10">
+            <div className="max-h-[520px] overflow-y-auto">
+              <table className="w-full text-[12px]">
+                <thead className="sticky top-0 bg-[#0f172a]">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-black uppercase tracking-[0.12em] text-slate-400">#</th>
+                    <th className="px-4 py-3 text-left font-black uppercase tracking-[0.12em] text-slate-400">Constituency</th>
+                    <th className="px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-pink-400">Women</th>
+                    <th className="px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-blue-400">Men</th>
+                    <th className="px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-emerald-400">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {arrivedConstituencyBreakdown.map(([name, stats], idx) => (
+                    <tr
+                      key={name}
+                      className={`border-t border-white/5 ${stats.total === 0 ? "opacity-30" : "hover:bg-white/[0.03]"}`}
+                    >
+                      <td className="px-4 py-2.5 text-slate-500">{idx + 1}</td>
+                      <td className="px-4 py-2.5 font-semibold text-white">{name}</td>
+                      <td className="px-4 py-2.5 text-right font-black text-pink-300">{stats.women || "—"}</td>
+                      <td className="px-4 py-2.5 text-right font-black text-blue-300">{stats.men || "—"}</td>
+                      <td className="px-4 py-2.5 text-right font-black text-emerald-300">{stats.total || "—"}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-sky-500/30 bg-sky-500/5">
+                    <td className="px-4 py-3" />
+                    <td className="px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-sky-300">Total</td>
+                    <td className="px-4 py-3 text-right text-sm font-black text-pink-300">{arrivedWomenTotal.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-sm font-black text-blue-300">{arrivedMenTotal.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-sm font-black text-emerald-300">{arrivedGrandTotal.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Specially Elected Pool ── */}
+        <section className="mb-5 rounded-[30px] border border-violet-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-300">
+                Specially Elected
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">
+                Reserved — {SPECIALLY_ELECTED_SEATS} Seats
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+                This pool is reserved for specially elected participants. These seats count towards the {TOTAL_PROGRAMME_INTAKE.toLocaleString()} programme total.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Seats</p>
+              <p className="text-2xl font-black text-violet-300">{SPECIALLY_ELECTED_SEATS}</p>
+              <p className="text-xs font-semibold text-slate-500">
+                {SPECIALLY_ELECTED_SEATS} of {TOTAL_PROGRAMME_INTAKE.toLocaleString()} total
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: SPECIALLY_ELECTED_SEATS }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-2xl border border-dashed border-violet-500/20 bg-violet-500/[0.03] px-4 py-3"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet-500/30 text-[10px] font-black text-violet-400">
+                  {i + 1}
+                </span>
+                <span className="text-xs font-semibold text-slate-500">Open seat</span>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-4 text-[11px] font-semibold text-slate-600">
+            Specially Elected seats are filled outside the constituency quota process and do not affect constituency allocations.
+          </p>
+        </section>
+
         </> )} {/* end programme tab */}
 
         {/* ── Selection & Reporting tab ── */}
