@@ -282,6 +282,12 @@ const STRATEGIC_COVERAGE_EMAILS = [
  "edmondkgosi@gmail.com",
  "beautypelaelo6@gmail.com",
  "tebomafote1996@gmail.com",
+  // Priority candidates — next batch
+  "lesenyaonalenna@gmail.com",
+  "pearlsithole21@gmail.com",
+  "thatomakw982@gmail.com",
+  "friedahherbert27@gmail.com",
+  "malopemopati@gmail.com",
 ];
 
 const constituencies = [
