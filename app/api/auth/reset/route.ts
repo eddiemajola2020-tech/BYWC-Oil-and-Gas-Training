@@ -32,20 +32,14 @@ export async function POST(request: Request) {
     }
 
     // 2. Create auth user if not yet registered (service role bypasses email confirm)
-    const { data: userList } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    const existing = userList?.users?.find(
-      (u) => u.email?.toLowerCase() === normalised,
-    );
-
-    if (!existing) {
-      const { error: createErr } = await admin.auth.admin.createUser({
-        email: normalised,
-        email_confirm: true,
-      });
-      if (createErr) {
-        console.error("[reset] createUser error:", createErr.message);
-        return NextResponse.json({ error: "Could not create account." }, { status: 500 });
-      }
+    const { error: createErr } = await admin.auth.admin.createUser({
+      email: normalised,
+      email_confirm: true,
+    });
+    // Ignore "already registered" errors — the account exists, just proceed
+    if (createErr && !createErr.message.toLowerCase().includes("already")) {
+      console.error("[reset] createUser error:", createErr.message);
+      return NextResponse.json({ error: "Could not create account." }, { status: 500 });
     }
 
     // 3. Generate and send recovery link

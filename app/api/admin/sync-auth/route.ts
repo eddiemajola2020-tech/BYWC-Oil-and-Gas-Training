@@ -29,24 +29,20 @@ export async function POST(request: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Check if auth user exists
-    const { data: userList } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    const existing = userList?.users?.find(
-      (u) => u.email?.toLowerCase() === normalised,
-    );
-
+    // Create auth user (no-op if already exists)
     let created = false;
-    if (!existing) {
-      const { error: createErr } = await admin.auth.admin.createUser({
-        email: normalised,
-        email_confirm: true,
-      });
-      if (createErr) {
+    const { error: createErr } = await admin.auth.admin.createUser({
+      email: normalised,
+      email_confirm: true,
+    });
+    if (createErr) {
+      if (!createErr.message.toLowerCase().includes("already")) {
         return NextResponse.json(
           { error: "Failed to create auth account: " + createErr.message },
           { status: 500 },
         );
       }
+    } else {
       created = true;
     }
 
