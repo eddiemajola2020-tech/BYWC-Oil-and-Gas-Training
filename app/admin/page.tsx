@@ -814,6 +814,11 @@ export default function AdminPage() {
   const [selectedArrivalIds, setSelectedArrivalIds] = useState<Set<string>>(new Set());
   const [bulkDeferring, setBulkDeferring] = useState(false);
 
+  const [currentAdminEmail, setCurrentAdminEmail] = useState("");
+  const [syncAuthEmail, setSyncAuthEmail] = useState("");
+  const [syncAuthLoading, setSyncAuthLoading] = useState(false);
+  const [syncAuthResult, setSyncAuthResult] = useState<{ ok?: boolean; created?: boolean; message?: string; error?: string } | null>(null);
+
   const [letterSubject, setLetterSubject] = useState("");
   const [letterBody, setLetterBody] = useState("");
   const [letterLoading, setLetterLoading] = useState(false);
@@ -1130,6 +1135,8 @@ export default function AdminPage() {
       router.push("/admin-login");
       return;
     }
+
+    setCurrentAdminEmail(email);
 
     if (showFullLoader) {
       setLoading(true);
@@ -2204,6 +2211,27 @@ export default function AdminPage() {
 
     await refreshAdminNumbers(false);
     setSavingId(null);
+  }
+
+  async function handleSyncAuth(e: React.FormEvent) {
+    e.preventDefault();
+    if (!syncAuthEmail.trim()) return;
+    setSyncAuthLoading(true);
+    setSyncAuthResult(null);
+    try {
+      const res = await fetch("/api/admin/sync-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: syncAuthEmail.trim(), callerEmail: currentAdminEmail }),
+      });
+      const data = await res.json();
+      setSyncAuthResult(data);
+      if (data.ok) setSyncAuthEmail("");
+    } catch {
+      setSyncAuthResult({ error: "Network error." });
+    } finally {
+      setSyncAuthLoading(false);
+    }
   }
 
   async function handleBulkDefer(applications: Application[]) {
@@ -5870,6 +5898,51 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
           <p className="mt-4 text-[11px] font-semibold text-slate-600">
             Specially Elected seats are filled outside the constituency quota process and do not affect constituency allocations.
           </p>
+        </section>
+
+        {/* ── Account Sync Tool ── */}
+        <section className="mb-5 rounded-[30px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+            Account Management
+          </p>
+          <h2 className="mt-1 text-lg font-black text-white">
+            Create Account &amp; Send Reset Link
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+            Use this for applicants who were manually added and have never created a password. Creates their auth account if missing, then sends a reset link to their email.
+          </p>
+
+          <form onSubmit={handleSyncAuth} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+                Applicant Email
+              </label>
+              <input
+                type="email"
+                required
+                value={syncAuthEmail}
+                onChange={(e) => { setSyncAuthEmail(e.target.value); setSyncAuthResult(null); }}
+                placeholder="applicant@email.com"
+                className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={syncAuthLoading || !syncAuthEmail.trim()}
+              className="shrink-0 rounded-2xl bg-sky-600 px-6 py-3 text-sm font-black text-white transition hover:bg-sky-700 disabled:opacity-50"
+            >
+              {syncAuthLoading ? "Sending..." : "Create Account + Send Reset"}
+            </button>
+          </form>
+
+          {syncAuthResult && (
+            <div className={`mt-3 rounded-2xl px-4 py-3 text-sm font-semibold ${syncAuthResult.ok ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border border-red-500/30 bg-red-500/10 text-red-300"}`}>
+              {syncAuthResult.message || syncAuthResult.error}
+              {syncAuthResult.created === false && syncAuthResult.ok && (
+                <span className="ml-2 text-xs text-emerald-400">(account already existed)</span>
+              )}
+            </div>
+          )}
         </section>
 
         </> )} {/* end programme tab */}

@@ -87,7 +87,7 @@ export default function CreateNewPasswordPage() {
         setHasResetSession(false);
         setIsCheckingLink(false);
       }
-    }, 8000);
+    }, 15000);
 
     return () => {
       subscription.unsubscribe();

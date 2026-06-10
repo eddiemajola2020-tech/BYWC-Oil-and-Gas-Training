@@ -26,13 +26,11 @@ export default function ResetPasswordPage() {
       (event, session) => {
         if (resolved) return;
 
-        if (event === "PASSWORD_RECOVERY" && session) {
+        if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
         } else if (event === "INITIAL_SESSION" && session && hasRecoveryHash) {
-          // PASSWORD_RECOVERY fired before our listener was ready (timing race).
-          // The hash at mount confirms this was a recovery link.
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
@@ -45,12 +43,18 @@ export default function ResetPasswordPage() {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         window.history.replaceState({}, document.title, "/reset-password");
 
-        if (error && !resolved) {
+        if (error) {
+          if (!resolved) {
+            resolved = true;
+            setErrorMessage(
+              "This reset link is invalid or has already been used. Please request a new one.",
+            );
+            setHasResetSession(false);
+            setIsCheckingLink(false);
+          }
+        } else if (!resolved) {
           resolved = true;
-          setErrorMessage(
-            "This reset link is invalid or has already been used. Please request a new one.",
-          );
-          setHasResetSession(false);
+          setHasResetSession(true);
           setIsCheckingLink(false);
         }
       } else if (hasRecoveryHash) {
@@ -76,7 +80,7 @@ export default function ResetPasswordPage() {
         setHasResetSession(false);
         setIsCheckingLink(false);
       }
-    }, 8000);
+    }, 15000);
 
     return () => {
       subscription.unsubscribe();
