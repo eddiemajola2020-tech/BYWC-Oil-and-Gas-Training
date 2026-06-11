@@ -51,7 +51,12 @@ function getAdminSelectionStatus(application: Pick<Application, "status" | "sele
 
 function isInternalBatchOneSelection(selectionBucket?: string | null) {
   const b = selectionBucket || "";
-  return b.includes("Batch 1 -") || b.includes("Batch 2 -");
+  return b.includes("Batch 1 -");
+}
+
+function isInternalBatchTwoSelection(selectionBucket?: string | null) {
+  const b = selectionBucket || "";
+  return b.includes("Batch 2 -");
 }
 
 type AuditAction =
@@ -78,6 +83,7 @@ type DashboardStats = {
   men: number;
   submitted: number;
   internalBatchOne: number;
+  batch2: number;
   remainingEligible: number;
   accepted: number;
   rejected: number;
@@ -90,6 +96,7 @@ const EMPTY_DASHBOARD_STATS: DashboardStats = {
   men: 0,
   submitted: 0,
   internalBatchOne: 0,
+  batch2: 0,
   remainingEligible: 0,
   accepted: 0,
   rejected: 0,
@@ -293,6 +300,9 @@ const STRATEGIC_COVERAGE_EMAILS = [
   "thatomakw982@gmail.com",
   "friedahherbert27@gmail.com",
   "malopemopati@gmail.com",
+  "babantshomatilda@gmail.com",
+  "pifelog@gmail.com",
+  "bafetetelo@gmail.com",
 ];
 
 const constituencies = [
@@ -797,6 +807,9 @@ export default function AdminPage() {
     useState(false);
   const [acceptedApplicationsSearchInput, setAcceptedApplicationsSearchInput] =
     useState("");
+  const [batch2SearchInput, setBatch2SearchInput] = useState("");
+  const [batch2Applications, setBatch2Applications] = useState<Application[]>([]);
+  const [batch2Loading, setBatch2Loading] = useState(false);
   const [nearbyReserveApplications, setNearbyReserveApplications] = useState<Application[]>(
     [],
   );
@@ -959,6 +972,7 @@ export default function AdminPage() {
         men,
         submitted,
         internalBatchOne,
+        batch2,
         remainingEligible,
         accepted,
         rejected,
@@ -976,6 +990,9 @@ export default function AdminPage() {
           query.ilike("selection_bucket", "%Batch 1 -%"),
         ),
         getApplicationCount((query) =>
+          query.ilike("selection_bucket", "%Batch 2 -%"),
+        ),
+        getApplicationCount((query) =>
           query.ilike("selection_bucket", "%Remaining Eligible%"),
         ),
         getApplicationCount((query) => query.eq("status", "Accepted")),
@@ -991,6 +1008,7 @@ export default function AdminPage() {
         men,
         submitted,
         internalBatchOne,
+        batch2,
         remainingEligible,
         accepted,
         rejected,
@@ -1191,6 +1209,8 @@ export default function AdminPage() {
 
     if (statusFilter === "Internal Batch 1") {
       query = query.ilike("selection_bucket", "%Batch 1 -%");
+    } else if (statusFilter === "Internal Batch 2") {
+      query = query.ilike("selection_bucket", "%Batch 2 -%");
     } else if (statusFilter === "Internal Remaining Eligible") {
       query = query.ilike("selection_bucket", "%Remaining Eligible%");
     } else if (statusFilter === "Internal Rejected") {
@@ -1305,6 +1325,31 @@ export default function AdminPage() {
       alert("Failed to load accepted applicants. Please try again.");
     } finally {
       setAcceptedApplicationsLoading(false);
+    }
+  }
+
+  async function loadBatch2Applications() {
+    setBatch2Loading(true);
+    try {
+      const batchSize = 1000;
+      let from = 0;
+      let all: Application[] = [];
+      while (true) {
+        const { data, error } = await supabase
+          .from(APPLICATIONS_TABLE)
+          .select("*")
+          .ilike("selection_bucket", "%Batch 2 -%")
+          .order("constituency", { ascending: true })
+          .order("first_name", { ascending: true })
+          .range(from, from + batchSize - 1);
+        if (error) { console.error(error); break; }
+        all = [...all, ...(data || []).map(formatApplication)];
+        if (!data || data.length < batchSize) break;
+        from += batchSize;
+      }
+      setBatch2Applications(all);
+    } finally {
+      setBatch2Loading(false);
     }
   }
 
@@ -1462,6 +1507,9 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeSection === "compliance" && !letterSubject && !letterBody) {
       loadLetterTemplate();
+    }
+    if (activeSection === "selection") {
+      loadBatch2Applications();
     }
   }, [activeSection]);
 
@@ -2372,7 +2420,7 @@ export default function AdminPage() {
       `• Priority override emails forced in first\n` +
       `• 450km+ constituencies (Chobe, Maun, Okavango, Ghanzi etc.) get major priority\n` +
       `• Equal constituency distribution, hard cap ${BATCH_2_MAX_PER_CONSTITUENCY} per constituency\n` +
-      `• Gender floor: ${BATCH_2_MIN_MEN_TARGET} men (fallback ${BATCH_2_MIN_MEN_FALLBACK}), youth women prioritised\n` +
+      `• Gender floor: ${BATCH_2_MIN_MEN_TARGET} men — HARD REQUIREMENT (3-pass guarantee)\n` +
       `• Disability: fill all ${DISABILITY_CAP} slots\n` +
       `• Deferred: up to ${BATCH_2_DEFERRED_SPRINKLE} sprinkled in, far areas first\n` +
       `• Already-Accepted applicants are excluded\n\n` +
@@ -2545,7 +2593,7 @@ export default function AdminPage() {
       candidate.review.recommendedStatus = "Submitted";
       const added = addToSelected(
         candidate,
-        `Batch 2 - Priority Override / ${getNormalSelectionBucket(candidate)}`,
+        `Batch 2 - Constituency Quota / ${getNormalSelectionBucket(candidate)}`,
         true,
       );
       if (added) priorityOverrideSelected.push(candidate);
@@ -2612,20 +2660,25 @@ export default function AdminPage() {
       });
     }
 
-    // PHASE 3 — Gender balance: ensure ≥200 men (fallback 180)
+    // PHASE 3 — Gender balance: MUST hit exactly 200 men. Hard requirement, no fallback.
+    // Pass A: respect constituency cap, use up to BATCH_2_INTAKE slots.
+    // Pass B: relax constituency cap if still under 200.
+    // Pass C: pull from deferred pool if still under 200.
     setSelectionProgress({
       active: true,
       title: "Running Batch 2 hidden selection",
-      phase: "Phase 3: Gender balance",
-      detail: "Checking men count and topping up if needed...",
+      phase: "Phase 3: Gender balance — 200 men required",
+      detail: "Topping up men to hit the 200 hard floor...",
       current: selected.size,
-      total: ELIGIBLE_SOFT_TARGET,
+      total: BATCH_2_INTAKE,
     });
 
     const menCount = () => Array.from(selected.values()).filter((a) => a.isMale).length;
 
-    if (menCount() < BATCH_2_MIN_MEN_TARGET && selected.size < ELIGIBLE_SOFT_TARGET) {
-      const eligibleMen = eligibleAll.filter((app) => app.isMale && !selected.has(app.applicationId));
+    if (menCount() < BATCH_2_MIN_MEN_TARGET) {
+      const allUnselectedMen = eligibleAll
+        .filter((app) => app.isMale && !selected.has(app.applicationId));
+
       // Sort: underrepresented constituencies first, then youth, then score
       const menByConstituency: Record<string, number> = {};
       for (const app of selected.values()) {
@@ -2634,19 +2687,42 @@ export default function AdminPage() {
           menByConstituency[c] = (menByConstituency[c] || 0) + 1;
         }
       }
-      eligibleMen.sort((a, b) => {
+      allUnselectedMen.sort((a, b) => {
         const ca = menByConstituency[a.constituency || ""] || 0;
         const cb = menByConstituency[b.constituency || ""] || 0;
         if (ca !== cb) return ca - cb;
         if (a.isYouth !== b.isYouth) return a.isYouth ? -1 : 1;
         return b.rankingScore - a.rankingScore;
       });
-      for (const man of eligibleMen) {
+
+      // Pass A — respect constituency cap
+      for (const man of allUnselectedMen) {
         if (menCount() >= BATCH_2_MIN_MEN_TARGET) break;
-        if (selected.size >= ELIGIBLE_SOFT_TARGET) break;
+        if (selected.size >= BATCH_2_INTAKE) break;
         const count = constituencyCounts[man.constituency || ""] || 0;
         if (count >= BATCH_2_MAX_PER_CONSTITUENCY) continue;
         addToSelected(man, `Batch 2 - Gender Balance Men / ${getNormalSelectionBucket(man)}`);
+      }
+
+      // Pass B — relax constituency cap to guarantee 200
+      if (menCount() < BATCH_2_MIN_MEN_TARGET) {
+        for (const man of allUnselectedMen) {
+          if (menCount() >= BATCH_2_MIN_MEN_TARGET) break;
+          if (selected.size >= BATCH_2_INTAKE) break;
+          if (selected.has(man.applicationId)) continue;
+          addToSelected(man, `Batch 2 - Gender Balance Men / ${getNormalSelectionBucket(man)}`);
+        }
+      }
+
+      // Pass C — pull from deferred pool if still under 200
+      if (menCount() < BATCH_2_MIN_MEN_TARGET) {
+        const deferredMen = deferredPool.filter((m) => m.isMale && !selected.has(m.applicationId));
+        deferredMen.sort((a, b) => b.rankingScore - a.rankingScore);
+        for (const man of deferredMen) {
+          if (menCount() >= BATCH_2_MIN_MEN_TARGET) break;
+          if (selected.size >= BATCH_2_INTAKE) break;
+          addToSelected(man, `Batch 2 - Gender Balance Men / Deferred`, true);
+        }
       }
     }
 
@@ -2837,7 +2913,6 @@ export default function AdminPage() {
       },
     });
 
-    const menFloorMet = finalMenCount >= BATCH_2_MIN_MEN_FALLBACK;
     const menTargetMet = finalMenCount >= BATCH_2_MIN_MEN_TARGET;
 
     alert(
@@ -2851,7 +2926,7 @@ export default function AdminPage() {
       `\n` +
       `Gender:\n` +
       `  Women: ${finalWomenCount} ${finalWomenCount > finalMenCount ? "(majority — youth women prioritised)" : ""}\n` +
-      `  Men: ${finalMenCount} ${menTargetMet ? "✓ target 200 met" : menFloorMet ? "⚠ below 200, floor 180 met" : "✗ below floor 180"}\n` +
+      `  Men: ${finalMenCount} ${menTargetMet ? "✓ 200 men met" : "✗ WARNING: below 200 — check eligible male pool"}\n` +
       `\n` +
       `Disability allocated: ${disabledSelected} / ${DISABILITY_CAP}\n` +
       `Applicant-facing status: NO change (publish separately)\n` +
@@ -2869,6 +2944,9 @@ export default function AdminPage() {
       total: updates.length || 1,
     });
     setMasterSelecting(false);
+    // Auto-load Batch 2 list so it's immediately visible
+    loadBatch2Applications();
+    setActiveSection("selection");
   }
 
   async function handleAddApplicant(e: React.FormEvent) {
@@ -4575,6 +4653,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
   const totalApplications = dashboardStats.total;
   const submittedCount = dashboardStats.submitted;
   const internalBatchOneCount = dashboardStats.internalBatchOne;
+  const batch2Count = dashboardStats.batch2;
   const remainingEligibleCount = dashboardStats.remainingEligible;
   const acceptedCount = dashboardStats.accepted;
   const rejectedCount = dashboardStats.rejected;
@@ -4610,9 +4689,40 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     isInternalBatchOneSelection(application.selectionBucket),
   ).length;
 
-  const acceptedManualOrBatchTwoCount = acceptedApplications.filter(
-    (application) => !isInternalBatchOneSelection(application.selectionBucket),
+  const acceptedBatch2Applications = useMemo(
+    () => acceptedApplications.filter((a) => isInternalBatchTwoSelection(a.selectionBucket)),
+    [acceptedApplications],
+  );
+
+  const acceptedBatch2Count = acceptedBatch2Applications.length;
+
+  const acceptedManualOrOtherCount = acceptedApplications.filter(
+    (a) => !isInternalBatchOneSelection(a.selectionBucket) && !isInternalBatchTwoSelection(a.selectionBucket),
   ).length;
+
+  const batch2SearchTerm = normalize(batch2SearchInput);
+  const visibleBatch2Applications = useMemo(() => {
+    if (!batch2SearchTerm) return batch2Applications;
+    return batch2Applications.filter((application) => {
+      const text = [
+        application.firstName, application.lastName, application.email,
+        application.omang, application.phone, application.constituency,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return text.includes(batch2SearchTerm);
+    });
+  }, [batch2Applications, batch2SearchTerm]);
+
+  const batch2ConstituencyRows = useMemo(() => {
+    const breakdown = batch2Applications.reduce(
+      (acc, application) => {
+        const constituency = application.constituency || "Unknown";
+        acc[constituency] = (acc[constituency] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+    return Object.entries(breakdown).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [batch2Applications]);
 
   const acceptedConstituencyRows = useMemo(() => {
     const breakdown = acceptedApplications.reduce(
@@ -5010,6 +5120,11 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
       count: internalBatchOneCount,
     },
     {
+      label: "Batch 2",
+      value: "Internal Batch 2",
+      count: batch2Count,
+    },
+    {
       label: "Waitlist",
       value: "Internal Remaining Eligible",
       count: remainingEligibleCount,
@@ -5301,6 +5416,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <StatCard title="Total" value={totalApplications} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Batch 1"); setCurrentPage(1); }} />
+          <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Batch 2"); setCurrentPage(1); }} />
           <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Remaining Eligible"); setCurrentPage(1); }} />
           <StatCard title="Unselected" value={submittedCount} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("Submitted"); setCurrentPage(1); }} />
           <StatCard title="Rejected" value={rejectedCount} accent="red" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Rejected"); setCurrentPage(1); }} />
@@ -5498,10 +5614,10 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                 All people currently marked as Accepted
               </h2>
               <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-400">
-                This section uses the public status field: status = Accepted. It includes Batch 1, Batch 2 priority overrides, and any manual accepted applicants.
+                This section shows all status = Accepted records. Use the Batch 2 section below for the full Batch 2 breakdown.
               </p>
               <p className="mt-2 text-xs font-semibold text-slate-500">
-                Total accepted: {acceptedApplications.length.toLocaleString()} • Batch 1: {acceptedBatchOneCount.toLocaleString()} • Manual / Batch 2 / Other: {acceptedManualOrBatchTwoCount.toLocaleString()}
+                Total accepted: {acceptedApplications.length.toLocaleString()} • Batch 1: {acceptedBatchOneCount.toLocaleString()} • Batch 2: {acceptedBatch2Count.toLocaleString()} • Other: {acceptedManualOrOtherCount.toLocaleString()}
               </p>
             </div>
 
@@ -5538,9 +5654,9 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
               <p className="mt-1 text-xs font-semibold text-slate-400">Accepted with Batch 1 bucket</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Manual / Batch 2 / Other</p>
-              <p className="mt-2 text-2xl font-black text-yellow-300">{acceptedManualOrBatchTwoCount.toLocaleString()}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-400">Accepted outside Batch 1 bucket</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Batch 2 Accepted</p>
+              <p className="mt-2 text-2xl font-black text-orange-300">{acceptedBatch2Count.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Accepted with Batch 2 bucket</p>
             </div>
           </div>
 
@@ -5648,6 +5764,146 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                       <span className="rounded-full bg-white/10 px-2 py-1 text-xs font-black text-white">
                         {count}
                       </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-5 rounded-[30px] border border-orange-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-400">
+                Batch 2 Selections
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">
+                Batch 2 — {acceptedBatch2Count.toLocaleString()} people selected
+              </h2>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-400">
+                All applicants assigned a Batch 2 bucket. 480 seats, 450km+ constituency priority, gender floor, deferred sprinkle.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadAcceptedApplications}
+                disabled={acceptedApplicationsLoading}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-50"
+              >
+                {acceptedApplicationsLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4 mb-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Total Batch 2</p>
+              <p className="mt-2 text-2xl font-black text-orange-300">{acceptedBatch2Count.toLocaleString()}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+              <p className="mt-2 text-2xl font-black text-white">{batch2ConstituencyRows.length}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">out of 61</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Women</p>
+              <p className="mt-2 text-2xl font-black text-pink-300">
+                {acceptedBatch2Applications.filter(a => (a.gender || "").toLowerCase() === "female").length.toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Men</p>
+              <p className="mt-2 text-2xl font-black text-blue-300">
+                {acceptedBatch2Applications.filter(a => (a.gender || "").toLowerCase() === "male").length.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+              <div className="mb-3">
+                <input
+                  type="search"
+                  value={batch2SearchInput}
+                  onChange={(e) => setBatch2SearchInput(e.target.value)}
+                  placeholder="Search Batch 2 by name, Omang, phone, email or constituency..."
+                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-orange-400 focus:bg-[#0f172a]"
+                />
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-white/10">
+                {acceptedApplicationsLoading ? (
+                  <div className="p-6 text-center text-sm font-semibold text-slate-400">Loading...</div>
+                ) : visibleBatch2Applications.length === 0 ? (
+                  <div className="p-6 text-center text-sm font-semibold text-slate-400">No Batch 2 applicants found.</div>
+                ) : (
+                  <div className="max-h-[480px] overflow-y-auto overflow-x-hidden">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup>
+                        <col className="w-[26%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[14%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[16%]" />
+                      </colgroup>
+                      <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Constituency</th>
+                          <th className="px-3 py-3 text-left font-black">Gender</th>
+                          <th className="px-3 py-3 text-left font-black">Label</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {visibleBatch2Applications.map((application) => {
+                          const bucket = application.selectionBucket || "";
+                          const labelMatch = bucket.match(/Batch 2 - ([^/]+)/);
+                          const label = labelMatch ? labelMatch[1].trim() : "Batch 2";
+                          return (
+                            <tr key={application.id} className="align-top text-slate-300 transition hover:bg-white/[0.03]">
+                              <td className="px-3 py-3">
+                                <button type="button" onClick={() => setSelectedApplication(application)} className="text-left">
+                                  <p className="font-black text-white underline-offset-2 hover:underline">
+                                    {application.firstName} {application.lastName}
+                                  </p>
+                                  <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">
+                                    {application.email || "No email"}
+                                  </p>
+                                </button>
+                              </td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "-"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "-"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{application.gender || "-"}</td>
+                              <td className="px-3 py-3">
+                                <span className="rounded-full bg-orange-500/10 px-2 py-1 text-[10px] font-black text-orange-300">
+                                  {label}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Batch 2 By Constituency</p>
+              <div className="mt-3 max-h-[480px] space-y-2 overflow-y-auto pr-1">
+                {batch2ConstituencyRows.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">No data yet.</p>
+                ) : (
+                  batch2ConstituencyRows.map(([constituency, count]) => (
+                    <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                      <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                      <span className="rounded-full bg-orange-500/10 px-2 py-1 text-xs font-black text-orange-300">{count}</span>
                     </div>
                   ))
                 )}
@@ -6439,6 +6695,157 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         {/* ── Selection & Reporting tab ── */}
         {activeSection === "selection" && (
         <>
+
+        {/* ── Batch 2 standalone section — top of Selection tab ── */}
+        <section className="mb-5 rounded-[30px] border border-orange-500/30 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-400">
+                Batch 2 Selections
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">
+                Batch 2 — {acceptedBatch2Count.toLocaleString()} selected
+              </h2>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-400">
+                480 seats · 450km+ priority · 200 men floor · deferred sprinkle · click any name to view full profile
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadBatch2Applications}
+                disabled={batch2Loading}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-50"
+              >
+                {batch2Loading ? "Loading..." : "Refresh Batch 2"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
+            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Total Selected</p>
+              <p className="mt-2 text-3xl font-black text-orange-300">{batch2Applications.length.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">of 480 seats</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+              <p className="mt-2 text-3xl font-black text-white">{batch2ConstituencyRows.length}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">of 61 represented</p>
+            </div>
+            <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-300">Women</p>
+              <p className="mt-2 text-3xl font-black text-pink-300">
+                {batch2Applications.filter(a => (a.gender || "").toLowerCase() === "female").length.toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Men</p>
+              <p className="mt-2 text-3xl font-black text-blue-300">
+                {batch2Applications.filter(a => (a.gender || "").toLowerCase() === "male").length.toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">floor: 200</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+              <div className="mb-3">
+                <input
+                  type="search"
+                  value={batch2SearchInput}
+                  onChange={(e) => setBatch2SearchInput(e.target.value)}
+                  placeholder="Search by name, Omang, phone, email or constituency..."
+                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-orange-400 focus:bg-[#0f172a]"
+                />
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-white/10">
+                {batch2Loading ? (
+                  <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading Batch 2...</div>
+                ) : visibleBatch2Applications.length === 0 ? (
+                  <div className="p-8 text-center text-sm font-semibold text-slate-400">
+                    {batch2Applications.length === 0
+                      ? 'No Batch 2 data yet — run master selection or click "Refresh Batch 2".'
+                      : "No results for this search."}
+                  </div>
+                ) : (
+                  <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup>
+                        <col className="w-[28%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[14%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[15%]" />
+                      </colgroup>
+                      <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Constituency</th>
+                          <th className="px-3 py-3 text-left font-black">Gender</th>
+                          <th className="px-3 py-3 text-left font-black">Label</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {visibleBatch2Applications.map((application) => {
+                          const bucket = application.selectionBucket || "";
+                          const labelMatch = bucket.match(/Batch 2 - ([^/]+)/);
+                          const label = labelMatch ? labelMatch[1].trim() : "Batch 2";
+                          const isMale = (application.gender || "").toLowerCase() === "male";
+                          return (
+                            <tr key={application.id} className="align-top transition hover:bg-white/[0.04] cursor-pointer" onClick={() => setSelectedApplication(application)}>
+                              <td className="px-3 py-3">
+                                <p className="font-black text-orange-300 underline-offset-2 hover:underline">
+                                  {application.firstName} {application.lastName}
+                                </p>
+                                <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
+                                  {application.email || "No email"}
+                                </p>
+                              </td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                              <td className="px-3 py-3">
+                                <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
+                                  {isMale ? "M" : "F"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="rounded-full bg-orange-500/10 px-2 py-1 text-[10px] font-black text-orange-300">
+                                  {label}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 mb-3">By Constituency</p>
+              <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+                {batch2ConstituencyRows.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">No data — refresh above.</p>
+                ) : (
+                  batch2ConstituencyRows.map(([constituency, count]) => (
+                    <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                      <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                      <span className="rounded-full bg-orange-500/10 px-2 py-1 text-xs font-black text-orange-300">{count}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="mb-5 rounded-[30px] border border-orange-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
