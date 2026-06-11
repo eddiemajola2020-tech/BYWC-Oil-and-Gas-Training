@@ -990,7 +990,7 @@ export default function AdminPage() {
           query.ilike("selection_bucket", "%Batch 1 -%"),
         ),
         getApplicationCount((query) =>
-          query.ilike("selection_bucket", "%Batch 2 -%"),
+          query.or("selection_bucket.ilike.Internal Hold - Do Not Notify / Batch 2 -%,selection_bucket.ilike.Published - Applicant Visible / Batch 2 -%"),
         ),
         getApplicationCount((query) =>
           query.ilike("selection_bucket", "%Remaining Eligible%"),
@@ -1210,7 +1210,7 @@ export default function AdminPage() {
     if (statusFilter === "Internal Batch 1") {
       query = query.ilike("selection_bucket", "%Batch 1 -%");
     } else if (statusFilter === "Internal Batch 2") {
-      query = query.ilike("selection_bucket", "%Batch 2 -%");
+      query = query.or("selection_bucket.ilike.Internal Hold - Do Not Notify / Batch 2 -%,selection_bucket.ilike.Published - Applicant Visible / Batch 2 -%");
     } else if (statusFilter === "Internal Remaining Eligible") {
       query = query.ilike("selection_bucket", "%Remaining Eligible%");
     } else if (statusFilter === "Internal Rejected") {
@@ -1338,7 +1338,7 @@ export default function AdminPage() {
         const { data, error } = await supabase
           .from(APPLICATIONS_TABLE)
           .select("*")
-          .ilike("selection_bucket", "%Batch 2 -%")
+          .or("selection_bucket.ilike.Internal Hold - Do Not Notify / Batch 2 -%,selection_bucket.ilike.Published - Applicant Visible / Batch 2 -%")
           .order("constituency", { ascending: true })
           .order("first_name", { ascending: true })
           .range(from, from + batchSize - 1);
