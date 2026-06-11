@@ -177,7 +177,7 @@ export default function DashboardPage() {
       doc.text(today, 195, 32, { align: "right" });
 
       // Reference
-      doc.text(`Ref: BYWC/OGT/2025/${refNo}`, 15, 44);
+      doc.text(`Ref: BYWC/OGT/2026/${refNo}`, 15, 44);
 
       // Dear line
       doc.setFontSize(11);
@@ -479,66 +479,29 @@ export default function DashboardPage() {
             </div>
 
             {status === "Accepted" && (
-              <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
-                  Arrival Registration
-                </p>
-
-                <h3 className="mt-3 text-2xl font-bold text-blue-950">
-                  {latestApplication?.arrivalStatus === "Arrived"
-                    ? "Arrival Confirmed"
-                    : "Scan Venue QR Code"}
-                </h3>
-
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  {latestApplication?.arrivalStatus === "Arrived"
-                    ? "Your arrival has been registered successfully. Please proceed with the programme registration process at the venue."
-                    : "To register your arrival, scan the official BYWC arrival QR code displayed at the venue. The dashboard cannot confirm arrival without the QR page."}
-                </p>
-
-                <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-slate-500">
-                      Arrival Status
-                    </span>
-                    <span className={`rounded-full px-3 py-1 text-xs font-black ${
-                      latestApplication?.arrivalStatus === "Arrived"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-orange-100 text-orange-700"
-                    }`}>
-                      {latestApplication?.arrivalStatus || "Not Arrived"}
-                    </span>
-                  </div>
-
-                  {latestApplication?.arrivedAt && (
-                    <div className="mt-3 flex items-center justify-between gap-4">
-                      <span className="text-sm text-slate-500">
-                        Arrived At
-                      </span>
-                      <span className="text-sm font-bold text-blue-950">
-                        {new Date(latestApplication.arrivedAt).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {latestApplication?.arrivalStatus !== "Arrived" && (
-                  <div className="mt-5 rounded-[24px] border border-orange-200 bg-orange-50 p-5 text-sm font-semibold leading-7 text-orange-800">
-                    Please scan the official arrival QR code at the registration area. After reading the arrival disclaimer, tap Confirm My Arrival on the QR page to record your arrival time.
-                  </div>
-                )}
-
-                <div className="mt-5 border-t border-slate-100 pt-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              <>
+                {/* Acceptance Letter download — always visible for accepted applicants */}
+                <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
                     Official Documents
+                  </p>
+                  <h3 className="mt-3 text-2xl font-bold text-blue-950">
+                    Your Acceptance Letter
+                  </h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-500">
+                    Your official letter of acceptance into the BYWC Oil &amp; Gas Training Programme 2026.
+                    Download and keep a copy — you will need it at the venue.
+                  </p>
+                  <p className="mt-2 text-xs text-slate-400">
+                    Ref: BYWC/OGT/2026/{latestApplication?.applicationId ?? latestApplication?.id}
                   </p>
                   <button
                     onClick={handleDownloadLetter}
-                    className="mt-3 flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition hover:bg-emerald-100"
+                    className="mt-5 flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition hover:bg-emerald-100"
                   >
                     <div>
                       <p className="text-sm font-bold text-emerald-800">
-                        Acceptance Letter
+                        Download Acceptance Letter
                       </p>
                       <p className="mt-0.5 text-xs text-emerald-600">
                         Official BYWC programme confirmation — PDF
@@ -549,7 +512,58 @@ export default function DashboardPage() {
                     </span>
                   </button>
                 </div>
-              </div>
+
+                {/* Arrival Registration */}
+                <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
+                    Arrival Registration
+                  </p>
+
+                  <h3 className="mt-3 text-2xl font-bold text-blue-950">
+                    {latestApplication?.arrivalStatus === "Arrived"
+                      ? "Arrival Confirmed"
+                      : "Scan Venue QR Code"}
+                  </h3>
+
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    {latestApplication?.arrivalStatus === "Arrived"
+                      ? "Your arrival has been registered successfully. Please proceed with the programme registration process at the venue."
+                      : "To register your arrival, scan the official BYWC arrival QR code displayed at the venue. The dashboard cannot confirm arrival without the QR page."}
+                  </p>
+
+                  <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm text-slate-500">
+                        Arrival Status
+                      </span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-black ${
+                        latestApplication?.arrivalStatus === "Arrived"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-orange-100 text-orange-700"
+                      }`}>
+                        {latestApplication?.arrivalStatus || "Not Arrived"}
+                      </span>
+                    </div>
+
+                    {latestApplication?.arrivedAt && (
+                      <div className="mt-3 flex items-center justify-between gap-4">
+                        <span className="text-sm text-slate-500">
+                          Arrived At
+                        </span>
+                        <span className="text-sm font-bold text-blue-950">
+                          {new Date(latestApplication.arrivedAt).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {latestApplication?.arrivalStatus !== "Arrived" && (
+                    <div className="mt-5 rounded-[24px] border border-orange-200 bg-orange-50 p-5 text-sm font-semibold leading-7 text-orange-800">
+                      Please scan the official arrival QR code at the registration area. After reading the arrival disclaimer, tap Confirm My Arrival on the QR page to record your arrival time.
+                    </div>
+                  )}
+                </div>
+              </>
             )}
             <div
               id="profile"
