@@ -303,6 +303,8 @@ const STRATEGIC_COVERAGE_EMAILS = [
   "babantshomatilda@gmail.com",
   "pifelog@gmail.com",
   "bafetetelo@gmail.com",
+  "rantshabokatlo@gmail.com",
+  "tefobagali@gmail.com",
 ];
 
 const constituencies = [
@@ -5416,7 +5418,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <StatCard title="Total" value={totalApplications} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Batch 1"); setCurrentPage(1); }} />
-          <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Batch 2"); setCurrentPage(1); }} />
+          <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("selection"); }} />
           <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Remaining Eligible"); setCurrentPage(1); }} />
           <StatCard title="Unselected" value={submittedCount} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("Submitted"); setCurrentPage(1); }} />
           <StatCard title="Rejected" value={rejectedCount} accent="red" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Rejected"); setCurrentPage(1); }} />
@@ -5779,7 +5781,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                 Batch 2 Selections
               </p>
               <h2 className="mt-1 text-xl font-black text-white">
-                Batch 2 — {acceptedBatch2Count.toLocaleString()} people selected
+                Batch 2 — {batch2Applications.length.toLocaleString()} people selected
               </h2>
               <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-400">
                 All applicants assigned a Batch 2 bucket. 480 seats, 450km+ constituency priority, gender floor, deferred sprinkle.
@@ -6704,7 +6706,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                 Batch 2 Selections
               </p>
               <h2 className="mt-1 text-xl font-black text-white">
-                Batch 2 — {acceptedBatch2Count.toLocaleString()} selected
+                Batch 2 — {batch2Applications.length.toLocaleString()} selected
               </h2>
               <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-400">
                 480 seats · 450km+ priority · 200 men floor · deferred sprinkle · click any name to view full profile
