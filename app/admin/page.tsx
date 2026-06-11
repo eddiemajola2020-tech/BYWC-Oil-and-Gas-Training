@@ -31,7 +31,7 @@ function getAdminSelectionLabel(application: Pick<Application, "status" | "selec
   const bucket = application.selectionBucket || "";
 
   if (bucket.includes("Batch 1 -")) return "Batch 1 Selected";
-  if (bucket.includes("Batch 2 -")) return "Batch 2 Reserved";
+  if (bucket.includes("Batch 2 -")) return "Batch 2 Selected";
   if (bucket.includes("Remaining Eligible")) return "Remaining Eligible";
   if (bucket.includes("Rejected -")) return "Rejected";
 
@@ -42,7 +42,7 @@ function getAdminSelectionStatus(application: Pick<Application, "status" | "sele
   const label = getAdminSelectionLabel(application);
 
   if (label === "Batch 1 Selected") return "Accepted";
-  if (label === "Batch 2 Reserved") return "Remaining Eligible";
+  if (label === "Batch 2 Selected") return "Accepted";
   if (label === "Remaining Eligible") return "Remaining Eligible";
   if (label === "Rejected") return "Rejected";
 
@@ -50,7 +50,8 @@ function getAdminSelectionStatus(application: Pick<Application, "status" | "sele
 }
 
 function isInternalBatchOneSelection(selectionBucket?: string | null) {
-  return Boolean((selectionBucket || "").includes("Batch 1 -"));
+  const b = selectionBucket || "";
+  return b.includes("Batch 1 -") || b.includes("Batch 2 -");
 }
 
 type AuditAction =
@@ -239,10 +240,10 @@ type ReportingStats = {
 
 const CONSTITUENCY_COUNT = 61;
 const BATCH_BASE_PER_CONSTITUENCY = 8;
-const BATCH_1_INTAKE = BATCH_BASE_PER_CONSTITUENCY * CONSTITUENCY_COUNT; // 488 automatic seats: 8 per constituency
-const BATCH_2_INTAKE = BATCH_BASE_PER_CONSTITUENCY * CONSTITUENCY_COUNT; // 488 automatic seats: 8 per constituency
+const BATCH_1_INTAKE = 488; // Batch 1 legacy size
+const BATCH_2_INTAKE = 480; // Batch 2: 480 seats with new rules
 const BATCH_1_MANUAL_REMAINING_SEATS = 12;
-const BATCH_2_MANUAL_REMAINING_SEATS = 12;
+const BATCH_2_MANUAL_REMAINING_SEATS = 0;
 const TOTAL_PROGRAMME_INTAKE = 1000;
 const BATCH_EXTRA_CONSTITUENCIES = 0;
 const BATCH_1_EXTRA_START_INDEX = 0;
@@ -253,6 +254,10 @@ const TOTAL_YOUTH_MEN = 315;
 const TOTAL_NON_YOUTH = 250;
 const TOTAL_AUTO_SELECTED_INTAKE = BATCH_1_INTAKE + BATCH_2_INTAKE;
 const DISABILITY_CAP = 8;
+const BATCH_2_MAX_PER_CONSTITUENCY = 16;
+const BATCH_2_DEFERRED_SPRINKLE = 25;
+const BATCH_2_MIN_MEN_TARGET = 200;
+const BATCH_2_MIN_MEN_FALLBACK = 180;
 const MIN_BGCSE_POINTS = 25;
 const MIN_MOTIVATION_WORDS = 40;
 const MIN_POST_PROGRAM_WORDS = 30;
@@ -393,6 +398,24 @@ const NEARBY_350KM_CONSTITUENCIES = [
   "Selibe Phikwe West",
   "Tswapong North",
   "Tswapong South",
+];
+
+// Constituencies 450km+ from Gaborone — get major priority in Batch 2 selection
+const FAR_450KM_CONSTITUENCIES = [
+  "Chobe",           // ~700km – Kasane
+  "Ngami",           // ~650km – Maun area
+  "Maun East",       // ~650km
+  "Maun North",      // ~650km
+  "Maun West",       // ~650km
+  "Okavango East",   // ~750km
+  "Okavango West",   // ~800km – Shakawe
+  "Boteti East",     // ~500km
+  "Boteti West",     // ~500km
+  "Nata - Gweta",    // ~500km
+  "Tutume",          // ~450km
+  "Ghanzi",          // ~600km
+  "Charleshill",     // ~600km – far west
+  "Kgalagadi North", // ~500km
 ];
 
 const NEARBY_RESERVE_TARGET = 50;
@@ -728,6 +751,18 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [masterSelecting, setMasterSelecting] = useState(false);
   const [publishingSelection, setPublishingSelection] = useState(false);
+  const [addApplicantLoading, setAddApplicantLoading] = useState(false);
+  const [addApplicantError, setAddApplicantError] = useState("");
+  const [addApplicantSuccess, setAddApplicantSuccess] = useState("");
+  const emptyAddForm = {
+    firstName: "", lastName: "", email: "", phone: "", omang: "",
+    gender: "Female", dateOfBirth: "", district: "", townVillage: "",
+    constituency: constituencies[0] || "",
+    highestQualification: "BGCSE/IGCSE", bgcsePoints: "",
+    employmentStatus: "Unemployed", disabilityStatus: "No", ovcStatus: "No",
+    preferredLanguage: "English", status: "Remaining Eligible" as ApplicationStatus,
+  };
+  const [addApplicantForm, setAddApplicantForm] = useState(emptyAddForm);
   const [nearbyReserveSelecting, setNearbyReserveSelecting] = useState(false);
   const [selectionProgress, setSelectionProgress] = useState<SelectionProgress>(
     EMPTY_SELECTION_PROGRESS,
@@ -1881,8 +1916,8 @@ export default function AdminPage() {
 
     if (!bucket.includes("Internal Hold - Do Not Notify")) return null;
     if (bucket.includes("Batch 1 -")) return "Accepted";
+    if (bucket.includes("Batch 2 -")) return "Accepted";
     if (bucket.includes("Remaining Eligible")) return "Remaining Eligible";
-    if (bucket.includes("Batch 2 -")) return "Remaining Eligible";
     if (bucket.includes("Rejected -")) return "Rejected";
 
     return null;
@@ -2332,7 +2367,16 @@ export default function AdminPage() {
 
   async function handleMasterSelection() {
     const confirmed = window.confirm(
-      "Run Batch 1 hidden selection now? This will select up to 488 applicants internally only: 8 per constituency. Applicant-facing statuses will remain unchanged until you publish results later.",
+      `Run Batch 2 hidden selection? 480 seats total.\n\n` +
+      `Rules:\n` +
+      `• Priority override emails forced in first\n` +
+      `• 450km+ constituencies (Chobe, Maun, Okavango, Ghanzi etc.) get major priority\n` +
+      `• Equal constituency distribution, hard cap ${BATCH_2_MAX_PER_CONSTITUENCY} per constituency\n` +
+      `• Gender floor: ${BATCH_2_MIN_MEN_TARGET} men (fallback ${BATCH_2_MIN_MEN_FALLBACK}), youth women prioritised\n` +
+      `• Disability: fill all ${DISABILITY_CAP} slots\n` +
+      `• Deferred: up to ${BATCH_2_DEFERRED_SPRINKLE} sprinkled in, far areas first\n` +
+      `• Already-Accepted applicants are excluded\n\n` +
+      `Applicant-facing statuses stay as Submitted until you publish.`
     );
 
     if (!confirmed) return;
@@ -2340,7 +2384,7 @@ export default function AdminPage() {
     setMasterSelecting(true);
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
+      title: "Running Batch 2 hidden selection",
       phase: "Loading applications",
       detail: "Fetching all applications from Supabase...",
       current: 0,
@@ -2355,11 +2399,8 @@ export default function AdminPage() {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to load all applications for Batch 1 selection";
-      console.error(
-        "Failed to load all applications for Batch 1 selection:",
-        error,
-      );
+          : "Failed to load applications for Batch 2 selection";
+      console.error("Failed to load applications for Batch 2 selection:", error);
       alert(message);
       setMasterSelecting(false);
       setSelectionProgress(EMPTY_SELECTION_PROGRESS);
@@ -2368,9 +2409,9 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
+      title: "Running Batch 2 hidden selection",
       phase: "Scoring applications",
-      detail: `Scoring ${selectionApplications.length.toLocaleString()} applications and checking hard-reject rules...`,
+      detail: `Scoring ${selectionApplications.length.toLocaleString()} applications...`,
       current: 0,
       total: selectionApplications.length || 1,
     });
@@ -2379,20 +2420,17 @@ export default function AdminPage() {
       if (index % 500 === 0) {
         setSelectionProgress({
           active: true,
-          title: "Running Batch 1 hidden selection",
+          title: "Running Batch 2 hidden selection",
           phase: "Scoring applications",
-          detail: `Scoring application ${index.toLocaleString()} of ${selectionApplications.length.toLocaleString()}...`,
+          detail: `Scoring ${index.toLocaleString()} / ${selectionApplications.length.toLocaleString()}...`,
           current: index,
           total: selectionApplications.length || 1,
         });
       }
-
       const review = calculateEligibility(application);
       const age = Number(application.age);
       const isStrategicCoverage = isStrategicCoverageParticipant(application.email);
-      const rankingScore =
-        review.score + (isStrategicCoverage ? STRATEGIC_COVERAGE_BOOST : 0);
-
+      const rankingScore = review.score + (isStrategicCoverage ? STRATEGIC_COVERAGE_BOOST : 0);
       return {
         ...application,
         review,
@@ -2407,186 +2445,293 @@ export default function AdminPage() {
       };
     });
 
-    setSelectionProgress({
-      active: true,
-      title: "Running Batch 1 hidden selection",
-      phase: "Building Batch 1",
-      detail: "Forcing priority emails into Batch 1 first, then filling up to 8 eligible applicants per constituency for today's Batch 1 only.",
-      current: 0,
-      total: constituencies.length,
-    });
-
     type ReviewedApplication = (typeof reviewed)[number];
 
     const hardRejectedAll = reviewed.filter((app) => app.isHardRejected);
-    const eligible = reviewed
-      .filter((app) => !app.isHardRejected)
-      .sort((a, b) => {
-        if (b.rankingScore !== a.rankingScore) {
-          return b.rankingScore - a.rankingScore;
-        }
+    const farSet = new Set(FAR_450KM_CONSTITUENCIES);
 
-        return (
-          (b.review.documentCompletenessScore || 0) -
-          (a.review.documentCompletenessScore || 0)
-        );
+    // Separate deferred pool from main eligible pool. Exclude already-Accepted.
+    const deferredPool = reviewed
+      .filter((app) =>
+        !app.isHardRejected &&
+        app.status !== "Accepted" &&
+        (app.status === "Deferred" || (app.selectionBucket || "").includes("Deferred"))
+      )
+      .sort((a, b) => {
+        const aFar = farSet.has(a.constituency || "");
+        const bFar = farSet.has(b.constituency || "");
+        if (aFar !== bFar) return aFar ? -1 : 1;
+        if (a.isYouth !== b.isYouth) return a.isYouth ? -1 : 1;
+        return b.rankingScore - a.rankingScore;
       });
 
-    const batchOneSelected = new Map<string, ReviewedApplication>();
-    const batchOneConstituencyCounts: Record<string, number> = {};
+    const deferredIds = new Set(deferredPool.map((a) => a.applicationId));
+
+    // Main eligible pool: youth first, score second. Excludes Accepted and Deferred.
+    const eligibleAll = reviewed
+      .filter((app) =>
+        !app.isHardRejected &&
+        app.status !== "Accepted" &&
+        !deferredIds.has(app.applicationId)
+      )
+      .sort((a, b) => {
+        if (a.isYouth !== b.isYouth) return a.isYouth ? -1 : 1;
+        if (b.rankingScore !== a.rankingScore) return b.rankingScore - a.rankingScore;
+        return (b.review.documentCompletenessScore || 0) - (a.review.documentCompletenessScore || 0);
+      });
+
+    // Fast lookup: eligible candidates per constituency (already sorted)
+    const eligibleByConstituency = new Map<string, ReviewedApplication[]>();
+    for (const app of eligibleAll) {
+      const c = app.constituency || "Unknown";
+      if (!eligibleByConstituency.has(c)) eligibleByConstituency.set(c, []);
+      eligibleByConstituency.get(c)!.push(app);
+    }
+
+    const selected = new Map<string, ReviewedApplication>();
+    const constituencyCounts: Record<string, number> = {};
     let disabledSelected = 0;
 
     function canSelect(candidate: ReviewedApplication, forceOverride = false) {
       if (!candidate.applicationId) return false;
-      if (batchOneSelected.has(candidate.applicationId)) return false;
-      if (!forceOverride && candidate.hasDisability && disabledSelected >= DISABILITY_CAP) {
-        return false;
-      }
+      if (selected.has(candidate.applicationId)) return false;
+      if (!forceOverride && candidate.hasDisability && disabledSelected >= DISABILITY_CAP) return false;
       return true;
     }
 
     function getNormalSelectionBucket(candidate: ReviewedApplication) {
-      if (candidate.isYouth && candidate.isFemale) {
-        return "Youth Women Priority";
-      }
+      if (candidate.isYouth && candidate.isFemale) return "Youth Women Priority";
       if (candidate.isYouth && candidate.isMale) return "Youth Men Priority";
       return "Non-Youth Allocation";
     }
 
-    function addToBatchOne(
-      candidate: ReviewedApplication,
-      bucket: string,
-      forceOverride = false,
-    ) {
-      if (batchOneSelected.size >= BATCH_1_INTAKE) return false;
+    function addToSelected(candidate: ReviewedApplication, bucket: string, forceOverride = false) {
+      if (selected.size >= BATCH_2_INTAKE) return false;
       if (!canSelect(candidate, forceOverride)) return false;
-
       candidate.review.selectionBucket = bucket;
-      batchOneSelected.set(candidate.applicationId, candidate);
-
-      const constituency = candidate.constituency || "Unknown";
-      batchOneConstituencyCounts[constituency] =
-        (batchOneConstituencyCounts[constituency] || 0) + 1;
-
-      if (candidate.hasDisability) {
-        disabledSelected += 1;
-      }
-
+      selected.set(candidate.applicationId, candidate);
+      const c = candidate.constituency || "Unknown";
+      constituencyCounts[c] = (constituencyCounts[c] || 0) + 1;
+      if (candidate.hasDisability) disabledSelected++;
       return true;
     }
 
-    // Strategic coverage emails are forced into Batch 1 first.
-    // This deliberately bypasses normal hard-gate rejection rules for these listed emails only.
-    // The override is clearly marked internally and still kept hidden from applicants until publishing.
-    const strategicCoverageSelected: ReviewedApplication[] = [];
+    // PHASE 1 — Priority overrides (bypass hard-gate, bypass constituency cap)
+    setSelectionProgress({
+      active: true,
+      title: "Running Batch 2 hidden selection",
+      phase: "Phase 1: Priority overrides",
+      detail: `Forcing ${STRATEGIC_COVERAGE_EMAILS.length} priority emails into selection...`,
+      current: 0,
+      total: STRATEGIC_COVERAGE_EMAILS.length,
+    });
 
+    const priorityOverrideSelected: ReviewedApplication[] = [];
     for (const priorityEmail of STRATEGIC_COVERAGE_EMAILS) {
-      if (batchOneSelected.size >= BATCH_1_INTAKE) break;
-
+      if (selected.size >= BATCH_2_INTAKE) break;
       const candidate = reviewed.find(
-        (app) =>
-          normalize(app.email) === normalize(priorityEmail) &&
-          app.isStrategicCoverage,
+        (app) => normalize(app.email) === normalize(priorityEmail) && app.isStrategicCoverage
       );
-
       if (!candidate) continue;
-
-      const overrideNotes = [
+      candidate.review.notes = [
         candidate.review.notes,
         candidate.review.hardRejectReason
           ? `Priority override bypassed hard gate: ${candidate.review.hardRejectReason}`
           : "Priority override selected before normal ranking",
-      ]
-        .filter(Boolean)
-        .join(", ");
-
-      candidate.review.notes = overrideNotes;
+      ].filter(Boolean).join(", ");
       candidate.review.result = candidate.review.isHardRejected
         ? "Priority override - selected despite hard gate"
         : "Priority override - selected before normal ranking";
       candidate.review.recommendedStatus = "Submitted";
-
-      const added = addToBatchOne(
+      const added = addToSelected(
         candidate,
-        `Batch 1 - Priority Override / ${getNormalSelectionBucket(candidate)}`,
+        `Batch 2 - Priority Override / ${getNormalSelectionBucket(candidate)}`,
         true,
       );
-
-      if (added) {
-        strategicCoverageSelected.push(candidate);
-      }
+      if (added) priorityOverrideSelected.push(candidate);
     }
 
-    // Batch 1 rule for today: 8 applicants per constituency only.
-    // This creates 488 internal selections: 61 constituencies x 8.
-    // The extra 12 seats to reach 500 are deliberately left for manual admin allocation.
-    for (const [constituencyIndex, constituency] of constituencies.entries()) {
-      setSelectionProgress({
-        active: true,
-        title: "Running Batch 1 hidden selection",
-        phase: "Building Batch 1",
-        detail: `Batch 1: processing ${constituency} (${constituencyIndex + 1}/${constituencies.length})`,
-        current: constituencyIndex + 1,
-        total: constituencies.length,
+    // PHASE 2 — Round-robin constituency fill from eligible pool.
+    // 450km+ constituencies come first in every round — they get first pick each pass.
+    // Continue until we reach the eligible-pool target (leaving 25 slots for deferred).
+    const ELIGIBLE_SOFT_TARGET = BATCH_2_INTAKE - BATCH_2_DEFERRED_SPRINKLE;
+
+    // Ordered list: far constituencies first, then the rest
+    const orderedConstituencies = [
+      ...constituencies.filter((c) => farSet.has(c)),
+      ...constituencies.filter((c) => !farSet.has(c)),
+    ];
+
+    setSelectionProgress({
+      active: true,
+      title: "Running Batch 2 hidden selection",
+      phase: "Phase 2: Constituency fill (450km+ priority)",
+      detail: "Round-robin fill — 450km+ constituencies lead each pass...",
+      current: 0,
+      total: ELIGIBLE_SOFT_TARGET,
+    });
+
+    for (let round = 0; round < BATCH_2_MAX_PER_CONSTITUENCY; round++) {
+      if (selected.size >= ELIGIBLE_SOFT_TARGET) break;
+      let addedThisRound = false;
+
+      // Sort within each round: lower-count constituencies first (equalizes representation)
+      const sortedThisRound = [...orderedConstituencies].sort((a, b) => {
+        const ca = constituencyCounts[a] || 0;
+        const cb = constituencyCounts[b] || 0;
+        if (ca !== cb) return ca - cb;
+        // Within same count: far still leads
+        const aFar = farSet.has(a);
+        const bFar = farSet.has(b);
+        if (aFar !== bFar) return aFar ? -1 : 1;
+        return 0;
       });
 
-      if (batchOneSelected.size >= BATCH_1_INTAKE) break;
+      for (const c of sortedThisRound) {
+        if (selected.size >= ELIGIBLE_SOFT_TARGET) break;
+        if ((constituencyCounts[c] || 0) >= BATCH_2_MAX_PER_CONSTITUENCY) continue;
 
-      const constituencyPool = eligible.filter(
-        (app) => app.constituency === constituency,
-      );
+        const pool = eligibleByConstituency.get(c) || [];
+        const candidate = pool.find((app) => !selected.has(app.applicationId));
+        if (!candidate) continue;
 
-      for (const candidate of constituencyPool) {
-        if (batchOneSelected.size >= BATCH_1_INTAKE) break;
+        const label = farSet.has(c) ? "450km+ Priority" : "Constituency Quota";
+        addToSelected(candidate, `Batch 2 - ${label} / ${getNormalSelectionBucket(candidate)}`);
+        addedThisRound = true;
+      }
 
-        const currentConstituencyCount =
-          batchOneConstituencyCounts[constituency] || 0;
+      if (!addedThisRound) break;
 
-        if (currentConstituencyCount >= BATCH_BASE_PER_CONSTITUENCY) {
-          break;
+      setSelectionProgress({
+        active: true,
+        title: "Running Batch 2 hidden selection",
+        phase: "Phase 2: Constituency fill (450km+ priority)",
+        detail: `Round ${round + 1} complete — ${selected.size.toLocaleString()} / ${ELIGIBLE_SOFT_TARGET} selected`,
+        current: selected.size,
+        total: ELIGIBLE_SOFT_TARGET,
+      });
+    }
+
+    // PHASE 3 — Gender balance: ensure ≥200 men (fallback 180)
+    setSelectionProgress({
+      active: true,
+      title: "Running Batch 2 hidden selection",
+      phase: "Phase 3: Gender balance",
+      detail: "Checking men count and topping up if needed...",
+      current: selected.size,
+      total: ELIGIBLE_SOFT_TARGET,
+    });
+
+    const menCount = () => Array.from(selected.values()).filter((a) => a.isMale).length;
+
+    if (menCount() < BATCH_2_MIN_MEN_TARGET && selected.size < ELIGIBLE_SOFT_TARGET) {
+      const eligibleMen = eligibleAll.filter((app) => app.isMale && !selected.has(app.applicationId));
+      // Sort: underrepresented constituencies first, then youth, then score
+      const menByConstituency: Record<string, number> = {};
+      for (const app of selected.values()) {
+        if (app.isMale) {
+          const c = app.constituency || "Unknown";
+          menByConstituency[c] = (menByConstituency[c] || 0) + 1;
         }
-
-        addToBatchOne(
-          candidate,
-          `Batch 1 - Constituency Quota ${BATCH_BASE_PER_CONSTITUENCY} / ${getNormalSelectionBucket(candidate)}`,
-        );
+      }
+      eligibleMen.sort((a, b) => {
+        const ca = menByConstituency[a.constituency || ""] || 0;
+        const cb = menByConstituency[b.constituency || ""] || 0;
+        if (ca !== cb) return ca - cb;
+        if (a.isYouth !== b.isYouth) return a.isYouth ? -1 : 1;
+        return b.rankingScore - a.rankingScore;
+      });
+      for (const man of eligibleMen) {
+        if (menCount() >= BATCH_2_MIN_MEN_TARGET) break;
+        if (selected.size >= ELIGIBLE_SOFT_TARGET) break;
+        const count = constituencyCounts[man.constituency || ""] || 0;
+        if (count >= BATCH_2_MAX_PER_CONSTITUENCY) continue;
+        addToSelected(man, `Batch 2 - Gender Balance Men / ${getNormalSelectionBucket(man)}`);
       }
     }
 
-    const batchOneSelectedIds = new Set(
-      Array.from(batchOneSelected.values()).map((app) => app.applicationId),
-    );
-    const hardRejected = hardRejectedAll.filter(
-      (app) => !batchOneSelectedIds.has(app.applicationId),
-    );
+    // PHASE 4 — Disability top-up: fill all 8 slots
+    setSelectionProgress({
+      active: true,
+      title: "Running Batch 2 hidden selection",
+      phase: "Phase 4: Disability allocation",
+      detail: `Filling disability slots (${disabledSelected}/${DISABILITY_CAP})...`,
+      current: selected.size,
+      total: ELIGIBLE_SOFT_TARGET,
+    });
+
+    if (disabledSelected < DISABILITY_CAP && selected.size < ELIGIBLE_SOFT_TARGET) {
+      const eligibleDisabled = eligibleAll.filter(
+        (app) => app.hasDisability && !selected.has(app.applicationId)
+      );
+      for (const person of eligibleDisabled) {
+        if (disabledSelected >= DISABILITY_CAP) break;
+        if (selected.size >= ELIGIBLE_SOFT_TARGET) break;
+        const count = constituencyCounts[person.constituency || ""] || 0;
+        if (count >= BATCH_2_MAX_PER_CONSTITUENCY) continue;
+        // Force-override the disability cap so we can add them
+        if (!selected.has(person.applicationId) && person.applicationId) {
+          person.review.selectionBucket = `Batch 2 - Disability Allocation / ${getNormalSelectionBucket(person)}`;
+          selected.set(person.applicationId, person);
+          const c = person.constituency || "Unknown";
+          constituencyCounts[c] = (constituencyCounts[c] || 0) + 1;
+          disabledSelected++;
+        }
+      }
+    }
+
+    // PHASE 5 — Deferred sprinkle: up to 25, far areas first, youth first
+    setSelectionProgress({
+      active: true,
+      title: "Running Batch 2 hidden selection",
+      phase: "Phase 5: Deferred sprinkle (far areas first)",
+      detail: `Adding up to ${BATCH_2_DEFERRED_SPRINKLE} deferred candidates — 450km+ priority...`,
+      current: selected.size,
+      total: BATCH_2_INTAKE,
+    });
+
+    let deferredAdded = 0;
+    for (const person of deferredPool) {
+      if (selected.size >= BATCH_2_INTAKE) break;
+      if (deferredAdded >= BATCH_2_DEFERRED_SPRINKLE) break;
+      const count = constituencyCounts[person.constituency || ""] || 0;
+      if (count >= BATCH_2_MAX_PER_CONSTITUENCY) continue;
+      if (!canSelect(person)) continue;
+      const farLabel = farSet.has(person.constituency || "") ? "Deferred-Far Priority" : "Deferred-Sprinkle";
+      addToSelected(person, `Batch 2 - ${farLabel} / ${getNormalSelectionBucket(person)}`);
+      deferredAdded++;
+    }
+
+    // If still below BATCH_2_INTAKE after deferred, fill remaining from eligible
+    if (selected.size < BATCH_2_INTAKE) {
+      for (const app of eligibleAll) {
+        if (selected.size >= BATCH_2_INTAKE) break;
+        const count = constituencyCounts[app.constituency || ""] || 0;
+        if (count >= BATCH_2_MAX_PER_CONSTITUENCY) continue;
+        addToSelected(app, `Batch 2 - Constituency Quota / ${getNormalSelectionBucket(app)}`);
+      }
+    }
+
+    // Build waitlist and rejected lists
+    const selectedIds = new Set(Array.from(selected.values()).map((a) => a.applicationId));
+    const hardRejected = hardRejectedAll.filter((app) => !selectedIds.has(app.applicationId));
     const constituencyWaitingListCounts: Record<string, number> = {};
 
-    const waitingListEligible = eligible.filter((app) => {
-      if (batchOneSelectedIds.has(app.applicationId)) return false;
-
-      const constituency = app.constituency || "Unknown";
-
-      if (!constituencyWaitingListCounts[constituency]) {
-        constituencyWaitingListCounts[constituency] = 0;
-      }
-
-      if (
-        constituencyWaitingListCounts[constituency] >=
-        WAITING_LIST_PER_CONSTITUENCY
-      ) {
-        return false;
-      }
-
-      constituencyWaitingListCounts[constituency] += 1;
+    const waitingListEligible = [...eligibleAll, ...deferredPool].filter((app) => {
+      if (selectedIds.has(app.applicationId)) return false;
+      const c = app.constituency || "Unknown";
+      if (!constituencyWaitingListCounts[c]) constituencyWaitingListCounts[c] = 0;
+      if (constituencyWaitingListCounts[c] >= WAITING_LIST_PER_CONSTITUENCY) return false;
+      constituencyWaitingListCounts[c]++;
       app.review.selectionBucket = `Remaining Eligible - Constituency Waitlist / ${getNormalSelectionBucket(app)}`;
       return true;
     });
 
     const updates = [
-      ...Array.from(batchOneSelected.values()).map((app) => ({
+      ...Array.from(selected.values()).map((app) => ({
         app,
         status: "Submitted" as ApplicationStatus,
-        bucket: `Internal Hold - Do Not Notify / ${app.review.selectionBucket || "Batch 1 Selected"}`,
+        bucket: `Internal Hold - Do Not Notify / ${app.review.selectionBucket || "Batch 2 Selected"}`,
       })),
       ...waitingListEligible.map((app) => ({
         app,
@@ -2596,9 +2741,7 @@ export default function AdminPage() {
       ...hardRejected.map((app) => ({
         app,
         status: "Submitted" as ApplicationStatus,
-        bucket: app.review.hardRejectReason.includes(
-          "Invalid or unrecognised constituency",
-        )
+        bucket: app.review.hardRejectReason.includes("Invalid or unrecognised constituency")
           ? "Internal Hold - Do Not Notify / Rejected - Invalid Constituency"
           : "Internal Hold - Do Not Notify / Rejected - Hard Gate",
       })),
@@ -2606,9 +2749,9 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
-      phase: "Saving Batch 1, waitlist, and failed-gate internal results",
-      detail: "Writing Batch 1 selections, constituency waitlist, and failed-gate internal buckets. Applicants still see Submitted.",
+      title: "Running Batch 2 hidden selection",
+      phase: "Saving results",
+      detail: `Writing ${updates.length.toLocaleString()} internal result records. Applicants still see Submitted.`,
       current: 0,
       total: updates.length || 1,
     });
@@ -2622,9 +2765,9 @@ export default function AdminPage() {
         (completed, total, failed) => {
           setSelectionProgress({
             active: true,
-            title: "Running Batch 1 hidden selection",
-            phase: "Saving Batch 1, waitlist, and failed-gate internal results",
-            detail: `Processed ${completed.toLocaleString()} of ${total.toLocaleString()} internal result records. Failed: ${failed.toLocaleString()}.`,
+            title: "Running Batch 2 hidden selection",
+            phase: "Saving results",
+            detail: `Saved ${completed.toLocaleString()} / ${total.toLocaleString()} records. Failed: ${failed.toLocaleString()}.`,
             current: completed,
             total,
           });
@@ -2632,10 +2775,8 @@ export default function AdminPage() {
       );
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Batch 1 selection update failed";
-      console.error("Batch 1 selection update failed:", error);
+        error instanceof Error ? error.message : "Batch 2 selection update failed";
+      console.error("Batch 2 selection update failed:", error);
       alert(message);
       setMasterSelecting(false);
       setSelectionProgress(EMPTY_SELECTION_PROGRESS);
@@ -2644,21 +2785,17 @@ export default function AdminPage() {
 
     setSelectionProgress({
       active: true,
-      title: "Running Batch 1 hidden selection",
+      title: "Running Batch 2 hidden selection",
       phase: "Refreshing dashboard",
-      detail: "Updating admin view and dashboard stats...",
+      detail: "Updating admin view...",
       current: updates.length,
       total: updates.length || 1,
     });
 
     setApplications((prev) =>
       prev.map((application) => {
-        const found = updates.find(
-          (update) => update.app.applicationId === application.applicationId,
-        );
-
+        const found = updates.find((u) => u.app.applicationId === application.applicationId);
         if (!found) return application;
-
         return {
           ...application,
           autoReviewScore: found.app.review.score,
@@ -2674,55 +2811,139 @@ export default function AdminPage() {
 
     await refreshAdminNumbers(false);
 
-    const constituenciesWithFullBatchOneQuota = constituencies.filter(
-      (constituency) =>
-        (batchOneConstituencyCounts[constituency] || 0) >=
-        BATCH_BASE_PER_CONSTITUENCY,
-    ).length;
+    const finalMenCount = Array.from(selected.values()).filter((a) => a.isMale).length;
+    const finalWomenCount = Array.from(selected.values()).filter((a) => a.isFemale).length;
+    const farSelected = Array.from(selected.values()).filter((a) => farSet.has(a.constituency || "")).length;
+    const constituenciesHit = Object.keys(constituencyCounts).filter((c) => constituencyCounts[c] > 0).length;
 
     await logAdminAction({
       action: "master_selection",
       details: {
-        resultsVisibleToApplicants: SELECTION_RESULTS_VISIBLE_TO_APPLICANTS,
-        selectionMode: "Batch 1 only - hidden internal selection",
-        internalSelectionUpdatesAttempted: updates.length,
-        internalSelectionUpdatesSaved:
-          updates.length - internalSelectionFailures.length,
-        internalSelectionUpdatesFailed: internalSelectionFailures.length,
-        firstInternalSelectionFailures: internalSelectionFailures.slice(0, 10),
-        batchOneRule:
-          "Constituency quota only: all 61 constituencies receive up to 8 automatic seats; 12 seats remain for manual admin allocation",
-        batchOneSelected: batchOneSelected.size,
-        priorityOverrideSelected: strategicCoverageSelected.length,
-        strategicCoverageEmailsConfigured: STRATEGIC_COVERAGE_EMAILS.length,
-        batchTwoSelected: 0,
+        selectionMode: "Batch 2 — 480 seats, 450km+ priority, gender floor, deferred sprinkle",
+        batchTwoSelected: selected.size,
+        priorityOverrideSelected: priorityOverrideSelected.length,
+        deferredAdded,
+        farConstituencySelected: farSelected,
+        menSelected: finalMenCount,
+        womenSelected: finalWomenCount,
+        disabledSelected,
+        constituenciesRepresented: constituenciesHit,
         remainingEligiblePersisted: waitingListEligible.length,
         rejectedPersisted: hardRejected.length,
-        hardRejectedCountedOnly: 0,
-        disabledSelected,
-        constituenciesWithFullBatchOneQuota,
-        batchOneIntake: BATCH_1_INTAKE,
-        batchBasePerConstituency: BATCH_BASE_PER_CONSTITUENCY,
-        batchOneManualRemainingSeats: BATCH_1_MANUAL_REMAINING_SEATS,
+        failures: internalSelectionFailures.length,
+        batchTwoIntake: BATCH_2_INTAKE,
+        maxPerConstituency: BATCH_2_MAX_PER_CONSTITUENCY,
         totalProgrammeIntake: TOTAL_PROGRAMME_INTAKE,
       },
     });
 
+    const menFloorMet = finalMenCount >= BATCH_2_MIN_MEN_FALLBACK;
+    const menTargetMet = finalMenCount >= BATCH_2_MIN_MEN_TARGET;
+
     alert(
-      `Batch 1 Hidden Selection Complete:\nApplicant-facing results visible: NO\nBatch 1 Internal Selected: ${batchOneSelected.size}/${BATCH_1_INTAKE}\nPriority override selected: ${strategicCoverageSelected.length}/${STRATEGIC_COVERAGE_EMAILS.length}\nRule: ${BATCH_BASE_PER_CONSTITUENCY} per constituency across ${constituencies.length} constituencies\nFull Constituency Quotas: ${constituenciesWithFullBatchOneQuota}/${constituencies.length}\nManual seats left for today: ${BATCH_1_MANUAL_REMAINING_SEATS}\nFailed-gate applicants saved internally: ${hardRejected.length}\nDisabled selected: ${disabledSelected}\nFailed row updates: ${internalSelectionFailures.length}`,
+      `Batch 2 Hidden Selection Complete\n` +
+      `══════════════════════════════════\n` +
+      `Total selected: ${selected.size} / ${BATCH_2_INTAKE}\n` +
+      `Priority overrides: ${priorityOverrideSelected.length}\n` +
+      `Deferred sprinkled: ${deferredAdded} / ${BATCH_2_DEFERRED_SPRINKLE}\n` +
+      `450km+ far-area selected: ${farSelected}\n` +
+      `Constituencies represented: ${constituenciesHit} / ${constituencies.length}\n` +
+      `\n` +
+      `Gender:\n` +
+      `  Women: ${finalWomenCount} ${finalWomenCount > finalMenCount ? "(majority — youth women prioritised)" : ""}\n` +
+      `  Men: ${finalMenCount} ${menTargetMet ? "✓ target 200 met" : menFloorMet ? "⚠ below 200, floor 180 met" : "✗ below floor 180"}\n` +
+      `\n` +
+      `Disability allocated: ${disabledSelected} / ${DISABILITY_CAP}\n` +
+      `Applicant-facing status: NO change (publish separately)\n` +
+      `Failed row updates: ${internalSelectionFailures.length}`
     );
 
     setSelectionProgress({
       active: false,
-      title: "Batch 1 hidden selection complete",
+      title: "Batch 2 hidden selection complete",
       phase: "Complete",
       detail: internalSelectionFailures.length
-        ? "Batch 1 completed with some failed row updates. Applicants were not notified and visible statuses were not changed."
-        : "Batch 1 internal selections were saved. Applicants were not notified and visible statuses were not changed.",
+        ? "Completed with some failed row updates. Applicants were not notified."
+        : "Internal selections saved. Publish when ready to notify applicants.",
       current: updates.length,
       total: updates.length || 1,
     });
     setMasterSelecting(false);
+  }
+
+  async function handleAddApplicant(e: React.FormEvent) {
+    e.preventDefault();
+    setAddApplicantError("");
+    setAddApplicantSuccess("");
+    setAddApplicantLoading(true);
+
+    const f = addApplicantForm;
+    if (!f.firstName.trim() || !f.lastName.trim() || !f.email.trim() || !f.omang.trim()) {
+      setAddApplicantError("First name, last name, email, and Omang are required.");
+      setAddApplicantLoading(false);
+      return;
+    }
+
+    const { data: existing } = await supabase
+      .from("applications")
+      .select("id")
+      .ilike("omang", f.omang.trim())
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      setAddApplicantError(`An application with Omang ${f.omang.trim()} already exists.`);
+      setAddApplicantLoading(false);
+      return;
+    }
+
+    const calcAge = (dob: string) => {
+      const diff = Date.now() - new Date(dob).getTime();
+      return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+    };
+    const payload: Record<string, unknown> = {
+      first_name: f.firstName.trim(),
+      last_name: f.lastName.trim(),
+      email: f.email.trim().toLowerCase(),
+      phone: f.phone.trim(),
+      omang: f.omang.trim(),
+      gender: f.gender,
+      date_of_birth: f.dateOfBirth || null,
+      age: f.dateOfBirth ? calcAge(f.dateOfBirth) : null,
+      district: f.district.trim() || null,
+      town_village: f.townVillage.trim() || null,
+      constituency: f.constituency,
+      highest_qualification: f.highestQualification,
+      bgcse_points: f.bgcsePoints ? Number(f.bgcsePoints) : null,
+      employment_status: f.employmentStatus,
+      disability_status: f.disabilityStatus,
+      ovc_status: f.ovcStatus,
+      preferred_language: f.preferredLanguage,
+      status: f.status,
+      selection_bucket: f.status === "Accepted"
+        ? "Published - Applicant Visible / Batch 2 - Manual Add"
+        : f.status === "Remaining Eligible"
+          ? "Published - Applicant Visible / Remaining Eligible - Manual Add"
+          : null,
+      auto_review_score: 50,
+      submitted_at: new Date().toISOString(),
+      interest_area: "Oil and Gas",
+      citizenship: "Citizen",
+    };
+
+    const { error } = await supabase.from("applications").insert(payload);
+
+    if (error) {
+      setAddApplicantError(`Failed to add applicant: ${error.message}`);
+      setAddApplicantLoading(false);
+      return;
+    }
+
+    setAddApplicantSuccess(
+      `Successfully added ${f.firstName} ${f.lastName} (${f.email}) with status ${f.status}.`
+    );
+    setAddApplicantForm(emptyAddForm);
+    setAddApplicantLoading(false);
+    await refreshAdminNumbers(false);
   }
 
   async function handleNearbyReserveSelection() {
@@ -4565,6 +4786,46 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
   const arrivedMenTotal = arrivedConstituencyBreakdown.reduce((s, [, r]) => s + r.men, 0);
   const arrivedGrandTotal = arrivedWomenTotal + arrivedMenTotal;
 
+  // Batch 2 pool tracker: eligible candidates by constituency (excludes Accepted, Deferred)
+  const batchPoolTracker = useMemo(() => {
+    const eligiblePool = applications.filter((app) =>
+      app.status !== "Accepted" &&
+      app.status !== "Rejected" &&
+      app.status !== "Deferred" &&
+      !(app.selectionBucket || "").includes("Rejected") &&
+      !(app.selectionBucket || "").includes("Batch 2 -")
+    );
+    const deferredPool2 = applications.filter((app) =>
+      app.status === "Deferred" || (app.selectionBucket || "").includes("Deferred")
+    );
+    const map: Record<string, { eligible: number; women: number; men: number; youth: number; deferred: number; isFar: boolean }> = {};
+    for (const c of constituencies) {
+      map[c] = { eligible: 0, women: 0, men: 0, youth: 0, deferred: 0, isFar: FAR_450KM_CONSTITUENCIES.includes(c) };
+    }
+    for (const app of eligiblePool) {
+      const c = app.constituency || "Unknown";
+      if (!map[c]) map[c] = { eligible: 0, women: 0, men: 0, youth: 0, deferred: 0, isFar: false };
+      map[c].eligible++;
+      const g = normalize(app.gender);
+      if (g === "female") map[c].women++;
+      else if (g === "male") map[c].men++;
+      const age = Number(app.age);
+      if (!Number.isNaN(age) && age <= 35) map[c].youth++;
+    }
+    for (const app of deferredPool2) {
+      const c = app.constituency || "Unknown";
+      if (!map[c]) map[c] = { eligible: 0, women: 0, men: 0, youth: 0, deferred: 0, isFar: false };
+      map[c].deferred++;
+    }
+    return constituencies
+      .map((c) => [c, map[c] ?? { eligible: 0, women: 0, men: 0, youth: 0, deferred: 0, isFar: false }] as const)
+      .sort((a, b) => {
+        // Far first, then by eligible count descending
+        if (a[1].isFar !== b[1].isFar) return a[1].isFar ? -1 : 1;
+        return b[1].eligible - a[1].eligible;
+      });
+  }, [applications]);
+
   const youthWomenCount = reportingStats
     ? reportingStats.constituencyRows.reduce(
         (sum, [, stats]) => sum + stats.women,
@@ -4952,7 +5213,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     Master Selection
                   </h2>
                   <p className="mt-1 text-[11px] leading-5 text-slate-400">
-                    Run hidden selection first — applicants see Submitted until you publish.
+                    Run Batch 2 hidden selection — 480 seats, 450km+ priority, gender floor, deferred sprinkle. Applicants see Submitted until published.
                   </p>
                 </div>
 
@@ -5050,6 +5311,183 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         {/* ── Programme & Arrivals tab ── */}
         {activeSection === "programme" && (
         <>
+
+        {/* Manual Add Applicant */}
+        <section className="mb-5 rounded-[30px] border border-blue-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-400">
+              Admin Tool
+            </p>
+            <h2 className="mt-0.5 text-base font-black text-white">
+              Add Applicant Manually
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-slate-400">
+              Directly insert a person into the database. Duplicate Omang check is enforced. Use for manual entries that bypassed the online form.
+            </p>
+          </div>
+
+          <form onSubmit={handleAddApplicant} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Name */}
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">First Name *</span>
+              <input required value={addApplicantForm.firstName}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, firstName: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="Katlego" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Last Name *</span>
+              <input required value={addApplicantForm.lastName}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, lastName: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="Mosweu" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email *</span>
+              <input required type="email" value={addApplicantForm.email}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, email: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="email@example.com" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Omang / ID *</span>
+              <input required value={addApplicantForm.omang}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, omang: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="1234567890" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Phone</span>
+              <input value={addApplicantForm.phone}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, phone: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="+267 7X XXX XXX" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Date of Birth</span>
+              <input type="date" value={addApplicantForm.dateOfBirth}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, dateOfBirth: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Gender</span>
+              <select value={addApplicantForm.gender}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, gender: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none focus:border-blue-400">
+                <option>Female</option><option>Male</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Constituency</span>
+              <select value={addApplicantForm.constituency}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, constituency: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none focus:border-blue-400">
+                {constituencies.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">District</span>
+              <input value={addApplicantForm.district}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, district: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="Central" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Town / Village</span>
+              <input value={addApplicantForm.townVillage}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, townVillage: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="Maun" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Highest Qualification</span>
+              <select value={addApplicantForm.highestQualification}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, highestQualification: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none focus:border-blue-400">
+                <option>BGCSE/IGCSE</option>
+                <option>Certificate</option>
+                <option>Diploma</option>
+                <option>Degree</option>
+                <option>Postgraduate</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">BGCSE Points</span>
+              <input type="number" min="0" max="120" value={addApplicantForm.bgcsePoints}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, bgcsePoints: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="36" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Employment Status</span>
+              <select value={addApplicantForm.employmentStatus}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, employmentStatus: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none focus:border-blue-400">
+                <option>Unemployed</option>
+                <option>Employed Part-Time</option>
+                <option>Employed Full-Time</option>
+                <option>Self-Employed</option>
+                <option>Student</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Disability</span>
+              <select value={addApplicantForm.disabilityStatus}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, disabilityStatus: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none focus:border-blue-400">
+                <option>No</option><option>Yes</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">OVC Status</span>
+              <select value={addApplicantForm.ovcStatus}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, ovcStatus: e.target.value }))}
+                className="rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none focus:border-blue-400">
+                <option>No</option><option>Yes</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Status</span>
+              <select value={addApplicantForm.status}
+                onChange={(e) => setAddApplicantForm((p) => ({ ...p, status: e.target.value as ApplicationStatus }))}
+                className="rounded-xl border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none focus:border-blue-400">
+                <option value="Remaining Eligible">Remaining Eligible</option>
+                <option value="Accepted">Accepted</option>
+                <option value="Submitted">Submitted (unreviewed)</option>
+                <option value="Deferred">Deferred</option>
+              </select>
+            </label>
+
+            {/* Feedback messages + submit — span full width */}
+            {addApplicantError && (
+              <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-300">
+                {addApplicantError}
+              </div>
+            )}
+            {addApplicantSuccess && (
+              <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-semibold text-emerald-300">
+                {addApplicantSuccess}
+              </div>
+            )}
+            <div className="sm:col-span-2 lg:col-span-3 flex gap-3">
+              <button
+                type="submit"
+                disabled={addApplicantLoading}
+                className="rounded-2xl bg-blue-600 px-6 py-2.5 text-xs font-black text-white transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                {addApplicantLoading ? "Adding..." : "Add Applicant"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAddApplicantForm(emptyAddForm); setAddApplicantError(""); setAddApplicantSuccess(""); }}
+                className="rounded-2xl border border-white/10 px-6 py-2.5 text-xs font-black text-slate-400 transition hover:text-white"
+              >
+                Clear
+              </button>
+            </div>
+          </form>
+        </section>
+
         <section className="mb-5 rounded-[30px] border border-emerald-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -5943,6 +6381,57 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
               )}
             </div>
           )}
+        </section>
+
+        {/* Batch 2 Pool Tracker */}
+        <section className="mb-5 rounded-[30px] border border-yellow-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+          <div className="mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-yellow-400">
+              Batch 2 Prep
+            </p>
+            <h2 className="mt-0.5 text-base font-black text-white">
+              Pool Tracker — Eligible by Constituency
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-slate-400">
+              Eligible = not Accepted, not Rejected, not in Batch 2 selection. 450km+ constituencies shown first.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-4 text-xs font-semibold text-slate-400">
+              <span>Total eligible: <span className="text-white">{batchPoolTracker.reduce((s, [, r]) => s + r.eligible, 0).toLocaleString()}</span></span>
+              <span>Total deferred: <span className="text-amber-300">{batchPoolTracker.reduce((s, [, r]) => s + r.deferred, 0).toLocaleString()}</span></span>
+              <span>Youth eligible: <span className="text-emerald-300">{batchPoolTracker.reduce((s, [, r]) => s + r.youth, 0).toLocaleString()}</span></span>
+              <span>Far (450km+) eligible: <span className="text-orange-300">{batchPoolTracker.filter(([, r]) => r.isFar).reduce((s, [, r]) => s + r.eligible, 0).toLocaleString()}</span></span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-white/10">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.03]">
+                  <th className="px-3 py-2.5 text-left font-black uppercase tracking-wider text-slate-400">Constituency</th>
+                  <th className="px-3 py-2.5 text-right font-black uppercase tracking-wider text-slate-400">Eligible</th>
+                  <th className="px-3 py-2.5 text-right font-black uppercase tracking-wider text-slate-400">Women</th>
+                  <th className="px-3 py-2.5 text-right font-black uppercase tracking-wider text-slate-400">Men</th>
+                  <th className="px-3 py-2.5 text-right font-black uppercase tracking-wider text-slate-400">Youth</th>
+                  <th className="px-3 py-2.5 text-right font-black uppercase tracking-wider text-amber-400">Deferred</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batchPoolTracker.map(([name, stats], idx) => (
+                  <tr key={name} className={`border-b border-white/5 ${stats.isFar ? "bg-orange-500/[0.05]" : idx % 2 === 0 ? "bg-white/[0.01]" : ""}`}>
+                    <td className="px-3 py-2 font-semibold text-white">
+                      {stats.isFar && <span className="mr-1.5 text-orange-400">★</span>}
+                      {name}
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold text-white">{stats.eligible || <span className="text-slate-600">—</span>}</td>
+                    <td className="px-3 py-2 text-right text-pink-300">{stats.women || <span className="text-slate-600">—</span>}</td>
+                    <td className="px-3 py-2 text-right text-blue-300">{stats.men || <span className="text-slate-600">—</span>}</td>
+                    <td className="px-3 py-2 text-right text-emerald-300">{stats.youth || <span className="text-slate-600">—</span>}</td>
+                    <td className="px-3 py-2 text-right text-amber-300">{stats.deferred || <span className="text-slate-600">—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         </> )} {/* end programme tab */}
