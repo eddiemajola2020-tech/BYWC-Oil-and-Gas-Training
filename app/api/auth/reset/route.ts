@@ -59,16 +59,23 @@ export async function POST(request: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // 1. Verify email exists in applications table
-    const { data: appRow, error: appErr } = await admin
+    // 1. Verify email exists in applications table OR auth.users
+    const { data: appRow } = await admin
       .from("applications")
       .select("id, email")
       .ilike("email", normalised)
       .limit(1)
       .single();
 
-    if (appErr || !appRow) {
-      return NextResponse.json({ ok: true });
+    if (!appRow) {
+      // Fall back to auth.users (covers admin accounts and direct signups)
+      const { data: usersData } = await admin.auth.admin.listUsers({ perPage: 1000 });
+      const authMatch = usersData?.users?.find(
+        (u) => u.email?.toLowerCase() === normalised
+      );
+      if (!authMatch) {
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // 2. Create auth user if not yet registered
