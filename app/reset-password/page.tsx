@@ -58,7 +58,23 @@ export default function ResetPasswordPage() {
           setIsCheckingLink(false);
         }
       } else if (hasRecoveryHash) {
+        const params = new URLSearchParams(hashAtMount.substring(1));
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token") ?? "";
         window.history.replaceState({}, document.title, "/reset-password");
+        if (accessToken && !resolved) {
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (!error && !resolved) {
+            resolved = true;
+            setHasResetSession(true);
+            setIsCheckingLink(false);
+          } else if (error && !resolved) {
+            resolved = true;
+            setErrorMessage("This reset link is invalid or has already been used. Please request a new one.");
+            setHasResetSession(false);
+            setIsCheckingLink(false);
+          }
+        }
       } else {
         resolved = true;
         setErrorMessage(

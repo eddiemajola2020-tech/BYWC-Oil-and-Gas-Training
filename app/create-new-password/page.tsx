@@ -64,8 +64,25 @@ export default function CreateNewPasswordPage() {
           setIsCheckingLink(false);
         }
       } else if (hasRecoveryHash) {
-        // Implicit flow: Supabase detects the hash and fires PASSWORD_RECOVERY.
+        // Implicit flow: manually extract tokens from hash and set session.
+        // Waiting for onAuthStateChange is unreliable when client is in PKCE mode.
+        const params = new URLSearchParams(hashAtMount.substring(1));
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token") ?? "";
         window.history.replaceState({}, document.title, "/create-new-password");
+        if (accessToken && !resolved) {
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (!error && !resolved) {
+            resolved = true;
+            setHasResetSession(true);
+            setIsCheckingLink(false);
+          } else if (error && !resolved) {
+            resolved = true;
+            setErrorMessage("This reset link is invalid or has already been used. Please request a new one.");
+            setHasResetSession(false);
+            setIsCheckingLink(false);
+          }
+        }
       } else {
         resolved = true;
         setErrorMessage(
