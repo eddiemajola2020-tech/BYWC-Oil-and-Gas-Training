@@ -1,0 +1,23 @@
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+
+  instructions: |
+    Focus on:
+    - Business logic correctness, not syntax or formatting
+    - SQL injection vectors in any Supabase queries
+    - Unhandled edge cases and missing null checks
+    - N+1 query patterns (multiple DB calls inside loops)
+    - Architecture decisions, not variable naming
+
+    Always flag with HIGH severity any code touching:
+    - Authentication or session management
+    - Payment processing
+    - Data deletion or bulk updates
+    - User role/permission checks
+
+  path_instructions:
+    - path: "**/auth/**"
+      instructions: "Flag everything. Auth is critical."
+    - path: "**/api/**"
+      instructions: "Check for missing input validation and SQL injection."
