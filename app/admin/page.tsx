@@ -10,7 +10,7 @@ const DEFAULT_LETTER_SUBJECT = `RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING 
 
 const DEFAULT_LETTER_BODY = `Congratulations, {{fullName}}!
 
-You have been selected for Batch 2 of the Botswana Youth, Women and Citizen (BYWC) Oil and Gas Training Programme 2026. This letter is your official confirmation of acceptance and must be presented upon registration at the training venue.
+You have been selected for Batch 2 of the BYWC Oil and Gas Training Programme 2026. This letter is your official confirmation of acceptance.
 
 Acceptance Details:
  •  Full Name: {{fullName}}
@@ -18,10 +18,8 @@ Acceptance Details:
  •  Letter Reference: {{refNo}}
  •  Programme: BYWC Oil & Gas Training Programme 2026 Batch 2
 
-The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
-
 REPORTING & ORIENTATION
-Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1-3 pm). Formal orientation begins Monday at 08:00.
+Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1-3 pm). Formal orientation begins Monday at 08:00. Accommodation and meals are provided for all 10 days.
 
 WHAT TO BRING
  •  This acceptance letter (printed or on your phone)
@@ -29,11 +27,9 @@ WHAT TO BRING
  •  Pen and notebook
 
 IMPORTANT NOTICE
-Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox to avoid forfeiture of your placement.
+Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox.
 
-We look forward to welcoming you to the programme.
-
-For enquiries call 355 2838 or WhatsApp 74781608.`;
+We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 74781608.`;
 const ADMIN_EMAILS = [
   "eddiemajola2020@gmail.com",
   "bandaseilaneng@gmail.com",

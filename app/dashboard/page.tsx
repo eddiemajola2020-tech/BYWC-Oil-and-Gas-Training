@@ -177,7 +177,7 @@ export default function DashboardPage() {
       const defaultSubject = "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME 2026 \u2014 BATCH 2";
       const defaultBody = `Congratulations, {{fullName}}!
 
-You have been selected for Batch 2 of the Botswana Youth, Women and Citizen (BYWC) Oil and Gas Training Programme 2026. This letter is your official confirmation of acceptance and must be presented upon registration at the training venue.
+You have been selected for Batch 2 of the BYWC Oil and Gas Training Programme 2026. This letter is your official confirmation of acceptance.
 
 Acceptance Details:
  •  Full Name: {{fullName}}
@@ -185,10 +185,8 @@ Acceptance Details:
  •  Letter Reference: {{refNo}}
  •  Programme: BYWC Oil & Gas Training Programme 2026 Batch 2
 
-The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
-
 REPORTING & ORIENTATION
-Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1-3 pm). Formal orientation begins Monday at 08:00.
+Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1-3 pm). Formal orientation begins Monday at 08:00. Accommodation and meals are provided for all 10 days.
 
 WHAT TO BRING
  •  This acceptance letter (printed or on your phone)
@@ -196,11 +194,9 @@ WHAT TO BRING
  •  Pen and notebook
 
 IMPORTANT NOTICE
-Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox to avoid forfeiture of your placement.
+Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox.
 
-We look forward to welcoming you to the programme.
-
-For enquiries call 355 2838 or WhatsApp 74781608.`;
+We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 74781608.`;
 
       let rawSubject = defaultSubject;
       let rawBody = defaultBody;
@@ -228,20 +224,22 @@ For enquiries call 355 2838 or WhatsApp 74781608.`;
           .replace(/\{\{date\}\}/g, today);
 
       const subject = fill(rawSubject);
+      // CRLF-safe paragraph split; strip stray \r from each paragraph
       const paragraphs = fill(rawBody)
-        .split(/\n\n+/)
-        .map((p) => p.trim())
+        .split(/\r?\n\r?\n+/)
+        .map((p) => p.replace(/\r/g, "").trim())
         .filter(Boolean);
 
       doc.setTextColor(25, 25, 25);
-      const lineH = 6;
+      const W = 180;
+      const LH = 5.5; // line height mm
 
       // Date right-aligned
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       doc.text(today, 195, 38, { align: "right" });
 
-      // Letter ID — bold and prominent
+      // Letter Ref — bold
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.text(`Letter Ref: ${letterId}`, 15, 47);
@@ -251,46 +249,62 @@ For enquiries call 355 2838 or WhatsApp 74781608.`;
       doc.setFontSize(11);
       doc.text(fullName.toUpperCase(), 15, 57);
       if (constituency) doc.text(`${constituency}, Botswana`, 15, 63);
-
-      // Dear line
       doc.text(`Dear ${fullName},`, 15, 73);
 
       // Subject — bold
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
-      const subjectLines = doc.splitTextToSize(subject, 180);
+      const subjectLines = doc.splitTextToSize(subject, W);
       doc.text(subjectLines, 15, 83);
 
       // Body paragraphs
-      doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
-      let y = 83 + subjectLines.length * lineH + 7;
-      const PAGE_LIMIT = 263;
+      let y = 83 + subjectLines.length * LH + 6;
+      const PAGE_LIMIT = 270;
+
+      // Render a block of pre-split lines, justifying non-bullet non-last lines
+      const renderLines = (lines: string[], startY: number) => {
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const isBullet = /^\s*•/.test(line);
+          const isLast = i === lines.length - 1;
+          if (!isBullet && !isLast) {
+            doc.text(line, 15, startY + i * LH, { maxWidth: W, align: "justify" });
+          } else {
+            doc.text(line, 15, startY + i * LH);
+          }
+        }
+      };
 
       for (const para of paragraphs) {
-        const subLines = para.split("\n");
-        const firstLine = subLines[0];
-        const isBoldHeading =
-          firstLine === firstLine.toUpperCase() && /[A-Z]/.test(firstLine);
+        const rawLines = para.split("\n");
+        const heading = rawLines[0].replace(/\r/g, "");
+        const isHeading = heading === heading.toUpperCase() && /[A-Z]/.test(heading);
 
-        if (isBoldHeading && subLines.length > 1) {
+        if (isHeading && rawLines.length > 1) {
+          // Bold heading + justified body
           doc.setFont("helvetica", "bold");
-          const headLines = doc.splitTextToSize(firstLine, 180);
+          const hLines = doc.splitTextToSize(heading, W);
           doc.setFont("helvetica", "normal");
-          const bodyLines = doc.splitTextToSize(subLines.slice(1).join("\n"), 180);
-          if (y + (headLines.length + bodyLines.length) * lineH > PAGE_LIMIT) break;
+          const bodyText = rawLines.slice(1).join("\n");
+          const bLines = doc.splitTextToSize(bodyText, W);
+          if (y + (hLines.length + bLines.length) * LH > PAGE_LIMIT) break;
           doc.setFont("helvetica", "bold");
-          doc.text(headLines, 15, y);
-          y += headLines.length * lineH;
+          doc.text(hLines, 15, y);
+          y += hLines.length * LH;
           doc.setFont("helvetica", "normal");
-          doc.text(bodyLines, 15, y);
-          y += bodyLines.length * lineH + 4;
+          renderLines(bLines, y);
+          y += bLines.length * LH + 4;
         } else {
-          doc.setFont("helvetica", isBoldHeading ? "bold" : "normal");
-          const lines = doc.splitTextToSize(para, 180);
-          if (y + lines.length * lineH > PAGE_LIMIT) break;
-          doc.text(lines, 15, y);
-          y += lines.length * lineH + 4;
+          doc.setFont("helvetica", isHeading ? "bold" : "normal");
+          const lines = doc.splitTextToSize(para, W);
+          if (y + lines.length * LH > PAGE_LIMIT) break;
+          if (!isHeading) {
+            renderLines(lines, y);
+          } else {
+            doc.text(lines, 15, y);
+          }
+          y += lines.length * LH + 4;
           doc.setFont("helvetica", "normal");
         }
       }
