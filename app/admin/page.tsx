@@ -4656,15 +4656,21 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     try {
       const { default: jsPDF } = await import("jspdf");
 
-      const response = await fetch("/letterhead.png");
-      const buffer = await response.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), ""),
-      );
-      const imgData = `data:image/png;base64,${base64}`;
-
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      doc.addImage(imgData, "PNG", 0, 0, 210, 297);
+
+      // Try to load letterhead background — skip silently if missing
+      try {
+        const response = await fetch("/letterhead.png");
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          const base64 = btoa(
+            new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), ""),
+          );
+          doc.addImage(`data:image/png;base64,${base64}`, "PNG", 0, 0, 210, 297);
+        }
+      } catch {
+        // No letterhead — letter will render on plain white
+      }
 
       const fullName = "Sample Applicant";
       const refNo = "BYWC/OGT/2026/PREVIEW-001";

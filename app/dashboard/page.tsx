@@ -142,21 +142,24 @@ export default function DashboardPage() {
     try {
       const { default: jsPDF } = await import("jspdf");
 
-      // Load letterhead from public folder and convert to base64
-      const response = await fetch("/letterhead.png");
-      const buffer = await response.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce(
-          (data, byte) => data + String.fromCharCode(byte),
-          "",
-        ),
-      );
-      const imgData = `data:image/png;base64,${base64}`;
-
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-      // Full-page letterhead background
-      doc.addImage(imgData, "PNG", 0, 0, 210, 297);
+      // Load letterhead background — skip silently if missing
+      try {
+        const response = await fetch("/letterhead.png");
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          const base64 = btoa(
+            new Uint8Array(buffer).reduce(
+              (data, byte) => data + String.fromCharCode(byte),
+              "",
+            ),
+          );
+          doc.addImage(`data:image/png;base64,${base64}`, "PNG", 0, 0, 210, 297);
+        }
+      } catch {
+        // No letterhead — letter renders on plain white
+      }
 
       const fullName =
         `${latestApplication.firstName ?? ""} ${latestApplication.lastName ?? ""}`.trim() ||
