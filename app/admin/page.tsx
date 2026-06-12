@@ -25,13 +25,15 @@ Venue: University of Botswana, in front of the Student Centre. Report on Sunday 
 
 WHAT TO BRING
  •  This acceptance letter (printed or on your phone)
- •  Valid national identity document (Omang) — mandatory
+ •  🔒 Valid national identity document (Omang) — mandatory
  •  Pen and notebook
 
-🔒 IMPORTANT NOTICE
+IMPORTANT NOTICE
 Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox to avoid forfeiture of your placement.
 
-We look forward to welcoming you to the programme.`;
+We look forward to welcoming you to the programme.
+
+For enquiries call 355 2838 or WhatsApp 74781608.`;
 const ADMIN_EMAILS = [
   "eddiemajola2020@gmail.com",
   "bandaseilaneng@gmail.com",
