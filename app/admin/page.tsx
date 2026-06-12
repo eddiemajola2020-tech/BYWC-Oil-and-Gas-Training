@@ -848,6 +848,7 @@ export default function AdminPage() {
   >({});
   const [fullBackupExporting, setFullBackupExporting] = useState(false);
   const [batchOneExporting, setBatchOneExporting] = useState(false);
+  const [batchTwoExporting, setBatchTwoExporting] = useState(false);
   const [acceptedApplications, setAcceptedApplications] = useState<Application[]>(
     [],
   );
@@ -4801,6 +4802,56 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     }
   }
 
+  async function handleExportBatchTwoSelectedCsv() {
+    setBatchTwoExporting(true);
+    try {
+      const { data, error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .select("constituency, first_name, last_name, omang, phone, email, gender, district, selection_bucket")
+        .eq("status", "Accepted")
+        .order("constituency", { ascending: true });
+
+      if (error) throw new Error(error.message);
+      if (!data || data.length === 0) {
+        alert("No Batch 2 accepted applicants found.");
+        return;
+      }
+
+      const headers = ["Constituency", "Full Name", "Omang", "Phone", "Email", "Gender", "District", "Selection Bucket"];
+      const rows = data.map((r: any) => [
+        r.constituency,
+        `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim(),
+        r.omang,
+        r.phone,
+        r.email,
+        r.gender,
+        r.district,
+        r.selection_bucket,
+      ]);
+
+      const csvContent = [
+        headers.map(escapeCsvValue).join(","),
+        ...rows.map((row: any[]) => row.map(escapeCsvValue).join(",")),
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      link.href = url;
+      link.download = `BYWC-batch-2-accepted-${timestamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      alert(`Batch 2 export complete. ${data.length} records exported.`);
+    } catch (err: any) {
+      alert("Batch 2 export failed: " + err.message);
+    } finally {
+      setBatchTwoExporting(false);
+    }
+  }
+
   function handleExportAcceptedApplicantsCsv() {
     if (acceptedApplications.length === 0) {
       alert("No accepted applicants found to export.");
@@ -5777,6 +5828,15 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-emerald-300 transition hover:bg-white/10 disabled:opacity-50"
                   >
                     {batchOneExporting ? "Exporting..." : "Export Batch 1"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportBatchTwoSelectedCsv}
+                    disabled={batchTwoExporting}
+                    className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-teal-300 transition hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {batchTwoExporting ? "Exporting..." : "Export Batch 2"}
                   </button>
 
                   <button
