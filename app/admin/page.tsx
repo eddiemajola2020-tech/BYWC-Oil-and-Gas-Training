@@ -4652,6 +4652,72 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     setTimeout(() => setLetterSaved(false), 3000);
   }
 
+  async function handlePreviewLetter() {
+    try {
+      const { default: jsPDF } = await import("jspdf");
+
+      const response = await fetch("/letterhead.png");
+      const buffer = await response.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), ""),
+      );
+      const imgData = `data:image/png;base64,${base64}`;
+
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      doc.addImage(imgData, "PNG", 0, 0, 210, 297);
+
+      const fullName = "Sample Applicant";
+      const refNo = "BYWC/OGT/2026/PREVIEW-001";
+      const constituency = "Serowe North";
+      const today = new Date().toLocaleDateString("en-GB", {
+        day: "numeric", month: "long", year: "numeric",
+      });
+
+      const fill = (text: string) =>
+        text
+          .replace(/\{\{fullName\}\}/g, fullName)
+          .replace(/\{\{firstName\}\}/g, "Sample")
+          .replace(/\{\{refNo\}\}/g, refNo)
+          .replace(/\{\{constituency\}\}/g, constituency)
+          .replace(/\{\{date\}\}/g, today);
+
+      const rawSubject = letterSubject || "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME";
+      const rawBody = letterBody || "We are pleased to inform you that your application has been successful.";
+
+      const subject = fill(rawSubject);
+      const paragraphs = fill(rawBody).split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+
+      doc.setTextColor(25, 25, 25);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(today, 195, 32, { align: "right" });
+      doc.text(`Ref: ${refNo}`, 15, 44);
+
+      doc.setFontSize(11);
+      doc.text(`Dear ${fullName},`, 15, 56);
+
+      doc.setFont("helvetica", "bold");
+      const subjectLines = doc.splitTextToSize(subject, 180);
+      doc.text(subjectLines, 15, 66);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      const lineH = 6;
+      let y = 66 + subjectLines.length * lineH + 6;
+
+      for (const para of paragraphs) {
+        const lines = doc.splitTextToSize(para, 180);
+        doc.text(lines, 15, y);
+        y += lines.length * lineH + 5;
+      }
+
+      doc.save("BYWC-Acceptance-Letter-PREVIEW.pdf");
+    } catch (err) {
+      console.error("Letter preview failed:", err);
+      alert("Could not generate preview. Please try again.");
+    }
+  }
+
   const totalApplications = dashboardStats.total;
   const submittedCount = dashboardStats.submitted;
   const internalBatchOneCount = dashboardStats.internalBatchOne;
@@ -8083,6 +8149,14 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-50"
               >
                 {letterLoading ? "Loading..." : "Reload"}
+              </button>
+              <button
+                type="button"
+                onClick={handlePreviewLetter}
+                disabled={letterLoading}
+                className="rounded-2xl border border-orange-400/40 bg-orange-500/20 px-4 py-2.5 text-xs font-black text-orange-300 transition hover:bg-orange-500/30 disabled:opacity-50"
+              >
+                Preview PDF
               </button>
               <button
                 type="button"
