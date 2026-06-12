@@ -327,6 +327,7 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
     if (status === "Shortlisted") return "78%";
     if (status === "Waiting List") return "78%";
     if (status === "Accepted") return "100%";
+    if (status === "Completed") return "100%";
     if (status === "Rejected") return "100%";
     return "0%";
   }, [status]);
@@ -334,6 +335,10 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
   const statusMessage = useMemo(() => {
     if (!latestApplication || status === "No Application Yet") {
       return "You have not submitted an application yet. Start your application to begin tracking your progress.";
+    }
+
+    if (status === "Completed") {
+      return "Congratulations. You have successfully completed the BYWC Oil and Gas Training Programme 2026 Batch 1. Thank you for your participation.";
     }
 
     if (status === "Accepted") {
@@ -550,7 +555,7 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
               </div>
             </div>
 
-            {status === "Accepted" && (
+            {(status === "Accepted" || status === "Completed") && (
               <>
                 {/* Acceptance Letter download — always visible for accepted applicants */}
                 <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
@@ -742,7 +747,9 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
               </p>
 
               <h3 className="mt-3 text-2xl font-bold text-blue-950">
-                {status === "Accepted"
+                {status === "Completed"
+                  ? "Programme Completed"
+                  : status === "Accepted"
                   ? "Prepare for Onboarding"
                   : status === "Rejected"
                   ? "Application Closed"

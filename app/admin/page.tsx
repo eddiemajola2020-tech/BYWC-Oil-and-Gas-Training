@@ -42,9 +42,11 @@ type ApplicationStatus =
   | "Remaining Eligible"
   | "Accepted"
   | "Rejected"
-  | "Deferred";
+  | "Deferred"
+  | "Completed";
 
 function normalizeApplicationStatus(value?: string | null): ApplicationStatus {
+  if (value === "Completed") return "Completed";
   if (value === "Accepted") return "Accepted";
   if (value === "Remaining Eligible") return "Remaining Eligible";
   if (value === "Rejected") return "Rejected";
@@ -5394,6 +5396,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         Submitted: [],
         Accepted: [],
         Deferred: [],
+        Completed: [],
       }) as Record<ApplicationStatus, Application[]>;
 
     const grouped = constituencies.reduce(
