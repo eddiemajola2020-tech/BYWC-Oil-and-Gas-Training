@@ -4672,8 +4672,8 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         // No letterhead — letter will render on plain white
       }
 
-      const fullName = "Sample Applicant";
-      const refNo = "BYWC/OGT/2026/PREVIEW-001";
+      const fullName = "SAMPLE APPLICANT";
+      const letterId = "BYWC/OGT/2026/B2-PREVIEW";
       const constituency = "Serowe North";
       const today = new Date().toLocaleDateString("en-GB", {
         day: "numeric", month: "long", year: "numeric",
@@ -4683,36 +4683,52 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         text
           .replace(/\{\{fullName\}\}/g, fullName)
           .replace(/\{\{firstName\}\}/g, "Sample")
-          .replace(/\{\{refNo\}\}/g, refNo)
+          .replace(/\{\{refNo\}\}/g, letterId)
           .replace(/\{\{constituency\}\}/g, constituency)
           .replace(/\{\{date\}\}/g, today);
 
-      const rawSubject = letterSubject || "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME";
+      const rawSubject = letterSubject || "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME 2026";
       const rawBody = letterBody || "We are pleased to inform you that your application has been successful.";
 
       const subject = fill(rawSubject);
       const paragraphs = fill(rawBody).split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
 
       doc.setTextColor(25, 25, 25);
+      const lineH = 6;
+
+      // Date right-aligned
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-      doc.text(today, 195, 32, { align: "right" });
-      doc.text(`Ref: ${refNo}`, 15, 44);
+      doc.text(today, 195, 38, { align: "right" });
 
-      doc.setFontSize(11);
-      doc.text(`Dear ${fullName},`, 15, 56);
-
+      // Letter ID — bold and prominent
       doc.setFont("helvetica", "bold");
-      const subjectLines = doc.splitTextToSize(subject, 180);
-      doc.text(subjectLines, 15, 66);
+      doc.setFontSize(10);
+      doc.text(`Letter Ref: ${letterId}`, 15, 47);
 
+      // Addressee block
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
-      const lineH = 6;
-      let y = 66 + subjectLines.length * lineH + 6;
+      doc.text(fullName, 15, 57);
+      doc.text(`${constituency}, Botswana`, 15, 63);
+
+      // Dear line
+      doc.text(`Dear ${fullName},`, 15, 73);
+
+      // Subject — bold
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      const subjectLines = doc.splitTextToSize(subject, 180);
+      doc.text(subjectLines, 15, 83);
+
+      // Body paragraphs
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      let y = 83 + subjectLines.length * lineH + 7;
 
       for (const para of paragraphs) {
         const lines = doc.splitTextToSize(para, 180);
+        if (y + lines.length * lineH > 248) break;
         doc.text(lines, 15, y);
         y += lines.length * lineH + 5;
       }

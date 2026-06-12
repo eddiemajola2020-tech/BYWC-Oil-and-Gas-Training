@@ -164,7 +164,8 @@ export default function DashboardPage() {
       const fullName =
         `${latestApplication.firstName ?? ""} ${latestApplication.lastName ?? ""}`.trim() ||
         "Applicant";
-      const refNo = latestApplication.applicationId ?? latestApplication.id ?? "N/A";
+      const numericId = String(latestApplication.id ?? "").replace(/D/g, "");
+      const letterId = `BYWC/OGT/2026/B2-${numericId.padStart(6, "0")}`;
       const constituency = latestApplication.constituency ?? "";
       const today = new Date().toLocaleDateString("en-GB", {
         day: "numeric",
@@ -172,33 +173,16 @@ export default function DashboardPage() {
         year: "numeric",
       });
 
-      doc.setTextColor(25, 25, 25);
-
-      // Date — right-aligned
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text(today, 195, 32, { align: "right" });
-
-      // Reference
-      doc.text(`Ref: BYWC/OGT/2026/${refNo}`, 15, 44);
-
-      // Dear line
-      doc.setFontSize(11);
-      doc.text(`Dear ${fullName},`, 15, 56);
-
-      // Subject — bold
-      doc.setFont("helvetica", "bold");
-      // Fetch editable template from admin_settings
+      // Fetch template from admin_settings
       const { data: settingsData } = await supabase
         .from("admin_settings")
         .select("key, value")
         .in("key", ["acceptance_letter_subject", "acceptance_letter_body"]);
 
-      const defaultSubject =
-        "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME";
+      const defaultSubject = "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME 2026";
       const defaultBody = [
         "We are pleased to inform you that your application to the Botswana Youth in the World of Commerce (BYWC) Oil & Gas Training Programme has been reviewed and you have been successfully selected for participation in the programme.",
-        "Your acceptance is confirmed under the following details:\n \u2022  Full Name: {{fullName}}\n \u2022  Constituency: {{constituency}}\n \u2022  Reference Number: {{refNo}}\n \u2022  Programme: BYWC Oil & Gas Training",
+        "Your acceptance is confirmed under the following details:\n \u2022  Full Name: {{fullName}}\n \u2022  Constituency: {{constituency}}\n \u2022  Letter Reference: {{refNo}}\n \u2022  Programme: BYWC Oil & Gas Training",
         "This letter serves as your official confirmation of acceptance and must be presented upon registration at the training venue together with your valid national identity document (Omang).",
         "Further details regarding the reporting date, venue address, programme schedule, and items to bring will be communicated through your registered account profile and inbox on the BYWC applicant portal at bywcprogram.org.",
         "We look forward to welcoming you and wish you every success in your training.",
@@ -215,7 +199,7 @@ export default function DashboardPage() {
         text
           .replace(/\{\{fullName\}\}/g, fullName)
           .replace(/\{\{firstName\}\}/g, latestApplication.firstName ?? "")
-          .replace(/\{\{refNo\}\}/g, refNo)
+          .replace(/\{\{refNo\}\}/g, letterId)
           .replace(/\{\{constituency\}\}/g, constituency)
           .replace(/\{\{date\}\}/g, today);
 
@@ -225,17 +209,42 @@ export default function DashboardPage() {
         .map((p) => p.trim())
         .filter(Boolean);
 
-      const subjectLines = doc.splitTextToSize(subject, 180);
-      doc.text(subjectLines, 15, 66);
+      doc.setTextColor(25, 25, 25);
+      const lineH = 6;
 
+      // Date right-aligned
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(today, 195, 38, { align: "right" });
+
+      // Letter ID — bold and prominent
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`Letter Ref: ${letterId}`, 15, 47);
+
+      // Addressee block
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
+      doc.text(fullName.toUpperCase(), 15, 57);
+      if (constituency) doc.text(`${constituency}, Botswana`, 15, 63);
 
-      const lineH = 6;
-      let y = 66 + subjectLines.length * lineH + 6;
+      // Dear line
+      doc.text(`Dear ${fullName},`, 15, 73);
+
+      // Subject — bold
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      const subjectLines = doc.splitTextToSize(subject, 180);
+      doc.text(subjectLines, 15, 83);
+
+      // Body paragraphs
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      let y = 83 + subjectLines.length * lineH + 7;
 
       for (const para of paragraphs) {
         const lines = doc.splitTextToSize(para, 180);
+        if (y + lines.length * lineH > 248) break;
         doc.text(lines, 15, y);
         y += lines.length * lineH + 5;
       }
