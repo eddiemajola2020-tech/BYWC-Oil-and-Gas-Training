@@ -793,6 +793,22 @@ export default function AdminPage() {
   const [publishingBatch2, setPublishingBatch2] = useState(false);
   const [publishingRejected, setPublishingRejected] = useState(false);
   const [markingBatch1Arrived, setMarkingBatch1Arrived] = useState(false);
+
+  // ── Tools section state ──────────────────────────────────────────────────
+  const [toolsPersonQuery, setToolsPersonQuery] = useState("");
+  const [toolsPersonResults, setToolsPersonResults] = useState<Application[]>([]);
+  const [toolsPersonSearching, setToolsPersonSearching] = useState(false);
+  const [toolsPersonStatusMap, setToolsPersonStatusMap] = useState<Record<string, ApplicationStatus>>({});
+  const [toolsPersonSavingId, setToolsPersonSavingId] = useState<string | null>(null);
+  const [toolsDiagnostics, setToolsDiagnostics] = useState<{
+    accepted: number; completed: number; rejected: number;
+    remainingEligible: number; deferred: number; internalHold: number;
+    reservePool: number; anomalies: Application[];
+  } | null>(null);
+  const [toolsDiagnosticsLoading, setToolsDiagnosticsLoading] = useState(false);
+  const [toolsPublishingAll, setToolsPublishingAll] = useState(false);
+  const [toolsFixingAnomalies, setToolsFixingAnomalies] = useState(false);
+  const [toolsMessage, setToolsMessage] = useState("");
   const [addApplicantLoading, setAddApplicantLoading] = useState(false);
   const [addApplicantError, setAddApplicantError] = useState("");
   const [addApplicantSuccess, setAddApplicantSuccess] = useState("");
@@ -888,7 +904,7 @@ export default function AdminPage() {
     useState<Record<string, boolean>>({});
 
   const [activeSection, setActiveSection] = useState<
-    "applications" | "programme" | "selection" | "compliance"
+    "applications" | "programme" | "selection" | "compliance" | "tools"
   >("applications");
 
   const [selectedArrivalIds, setSelectedArrivalIds] = useState<Set<string>>(new Set());
@@ -2450,6 +2466,195 @@ export default function AdminPage() {
 
     alert(`Batch 1 marked as Arrived.\n\nUpdated: ${updated} of ${ids.length}`);
     setMarkingBatch1Arrived(false);
+  }
+
+  // ── Tools: person search ────────────────────────────────────────────────
+  async function handleToolsPersonSearch() {
+    const q = toolsPersonQuery.trim();
+    if (!q) return;
+    setToolsPersonSearching(true);
+    setToolsPersonResults([]);
+
+    const isOmang = /^\d{6,}$/.test(q);
+    let query = supabase
+      .from(APPLICATIONS_TABLE)
+      .select("id, application_id, first_name, last_name, email, omang, status, selection_bucket, arrival_status")
+      .limit(20);
+
+    if (isOmang) {
+      query = query.eq("omang", q);
+    } else if (q.includes("@")) {
+      query = query.ilike("email", `%${q}%`);
+    } else {
+      const parts = q.split(" ").filter(Boolean);
+      if (parts.length >= 2) {
+        query = query.ilike("first_name", `%${parts[0]}%`).ilike("last_name", `%${parts[1]}%`);
+      } else {
+        query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
+      }
+    }
+
+    const { data } = await query;
+    const mapped: Application[] = (data || []).map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      databaseId: String(r.id),
+      applicationId: String(r.application_id ?? r.id),
+      firstName: String(r.first_name ?? ""),
+      lastName: String(r.last_name ?? ""),
+      email: String(r.email ?? ""),
+      phone: "",
+      omang: String(r.omang ?? ""),
+      gender: "",
+      age: "",
+      citizenship: "",
+      constituency: "",
+      disabilityStatus: "",
+      employmentStatus: "",
+      interestArea: "",
+      highestQualification: "",
+      bgcsePoints: "",
+      preferredLanguage: "",
+      status: normalizeApplicationStatus(String(r.status ?? "")),
+      selectionBucket: r.selection_bucket ? String(r.selection_bucket) : null,
+      arrivalStatus: r.arrival_status ? String(r.arrival_status) : null,
+    }));
+    setToolsPersonResults(mapped);
+    const init: Record<string, ApplicationStatus> = {};
+    mapped.forEach((r) => { init[r.id] = r.status; });
+    setToolsPersonStatusMap(init);
+    setToolsPersonSearching(false);
+  }
+
+  async function handleToolsSavePersonStatus(person: Application) {
+    const newStatus = toolsPersonStatusMap[person.id];
+    if (!newStatus || newStatus === person.status) return;
+    const confirmed = window.confirm(
+      `Change ${person.firstName} ${person.lastName} from "${person.status}" to "${newStatus}"?`
+    );
+    if (!confirmed) return;
+    setToolsPersonSavingId(person.id);
+    const { error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update({ status: newStatus })
+      .eq("id", person.databaseId ?? person.id);
+    if (error) {
+      alert("Failed: " + error.message);
+    } else {
+      setToolsPersonResults((prev) =>
+        prev.map((p) => p.id === person.id ? { ...p, status: newStatus } : p)
+      );
+      setToolsMessage(`${person.firstName} ${person.lastName} updated to ${newStatus}`);
+    }
+    setToolsPersonSavingId(null);
+  }
+
+  // ── Tools: diagnostics ───────────────────────────────────────────────────
+  async function handleToolsLoadDiagnostics() {
+    setToolsDiagnosticsLoading(true);
+    const statuses = ["Accepted", "Completed", "Rejected", "Remaining Eligible", "Deferred"] as const;
+    const counts: Record<string, number> = {};
+    for (const s of statuses) {
+      const { count } = await supabase.from(APPLICATIONS_TABLE).select("id", { count: "exact", head: true }).eq("status", s);
+      counts[s] = count ?? 0;
+    }
+    const { count: ihCount } = await supabase.from(APPLICATIONS_TABLE).select("id", { count: "exact", head: true }).ilike("selection_bucket", "Internal Hold%");
+    const { count: rpCount } = await supabase.from(APPLICATIONS_TABLE).select("id", { count: "exact", head: true }).eq("status", "Constituency Reserve Pool");
+    const { data: anomalyData } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .select("id, application_id, first_name, last_name, email, omang, status, selection_bucket, arrival_status")
+      .eq("status", "Accepted")
+      .eq("arrival_status", "Arrived");
+    const anomalies: Application[] = (anomalyData || []).map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      databaseId: String(r.id),
+      applicationId: String(r.application_id ?? r.id),
+      firstName: String(r.first_name ?? ""),
+      lastName: String(r.last_name ?? ""),
+      email: String(r.email ?? ""),
+      phone: "", omang: String(r.omang ?? ""), gender: "", age: "",
+      citizenship: "", constituency: "", disabilityStatus: "",
+      employmentStatus: "", interestArea: "", highestQualification: "",
+      bgcsePoints: "", preferredLanguage: "",
+      status: normalizeApplicationStatus(String(r.status ?? "")),
+      selectionBucket: r.selection_bucket ? String(r.selection_bucket) : null,
+      arrivalStatus: r.arrival_status ? String(r.arrival_status) : null,
+    }));
+    setToolsDiagnostics({
+      accepted: counts["Accepted"] ?? 0,
+      completed: counts["Completed"] ?? 0,
+      rejected: counts["Rejected"] ?? 0,
+      remainingEligible: counts["Remaining Eligible"] ?? 0,
+      deferred: counts["Deferred"] ?? 0,
+      internalHold: ihCount ?? 0,
+      reservePool: rpCount ?? 0,
+      anomalies,
+    });
+    setToolsDiagnosticsLoading(false);
+  }
+
+  // ── Tools: publish all remaining Internal Hold ───────────────────────────
+  async function handleToolsPublishAllRemaining() {
+    const confirmed = window.confirm(
+      "Publish ALL remaining Internal Hold records?\n\nThis will flip every 'Internal Hold - Do Not Notify' bucket to 'Published - Applicant Visible' and set status based on bucket content. Cannot be undone."
+    );
+    if (!confirmed) return;
+    setToolsPublishingAll(true);
+    setToolsMessage("Fetching Internal Hold records...");
+
+    let published = 0;
+    let offset = 0;
+    const CHUNK = 200;
+
+    while (true) {
+      const { data } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .select("id, selection_bucket, status")
+        .ilike("selection_bucket", "Internal Hold%")
+        .range(offset, offset + CHUNK - 1);
+      if (!data || data.length === 0) break;
+
+      for (const row of data) {
+        const bucket = String(row.selection_bucket ?? "");
+        const newBucket = bucket.replace("Internal Hold - Do Not Notify", "Published - Applicant Visible");
+        let newStatus: ApplicationStatus = normalizeApplicationStatus(String(row.status ?? ""));
+        if (bucket.includes("Rejected")) newStatus = "Rejected";
+        else if (bucket.includes("Remaining Eligible")) newStatus = "Remaining Eligible";
+        else if (bucket.includes("Batch 1")) newStatus = "Completed";
+        else if (bucket.includes("Batch 2")) newStatus = "Accepted";
+        const { error } = await supabase
+          .from(APPLICATIONS_TABLE)
+          .update({ status: newStatus, selection_bucket: newBucket })
+          .eq("id", row.id);
+        if (!error) published++;
+      }
+      offset += CHUNK;
+    }
+
+    setToolsMessage(`Done. Published ${published} records.`);
+    setToolsPublishingAll(false);
+    await handleToolsLoadDiagnostics();
+  }
+
+  // ── Tools: fix anomalies (Accepted + Arrived → Completed) ────────────────
+  async function handleToolsFixAnomalies() {
+    if (!toolsDiagnostics?.anomalies.length) return;
+    const ids = toolsDiagnostics.anomalies.map((a) => a.databaseId ?? a.id);
+    const confirmed = window.confirm(
+      `Move ${ids.length} Accepted+Arrived applicant(s) to Completed?\n\nThese people attended Batch 1 but are still marked Accepted for Batch 2.`
+    );
+    if (!confirmed) return;
+    setToolsFixingAnomalies(true);
+    const { error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update({ status: "Completed", selection_bucket: "Published - Applicant Visible / Batch 1 - Completed" })
+      .in("id", ids);
+    if (error) {
+      alert("Failed: " + error.message);
+    } else {
+      setToolsMessage(`Fixed ${ids.length} anomaly(ies). Refreshing diagnostics...`);
+      await handleToolsLoadDiagnostics();
+    }
+    setToolsFixingAnomalies(false);
   }
 
   async function handleStatusChange(
@@ -5506,6 +5711,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                   { id: "programme", label: "Programme" },
                   { id: "selection", label: "Selection" },
                   { id: "compliance", label: "Compliance" },
+                  { id: "tools", label: "Tools" },
                 ] as const
               ).map((item) => (
                 <button

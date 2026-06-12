@@ -149,12 +149,13 @@ export default function DashboardPage() {
         const response = await fetch("/letterhead.png");
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          const base64 = btoa(
-            new Uint8Array(buffer).reduce(
-              (data, byte) => data + String.fromCharCode(byte),
-              "",
-            ),
-          );
+          const bytes = new Uint8Array(buffer);
+          let binary = "";
+          const CHUNK = 8192;
+          for (let i = 0; i < bytes.length; i += CHUNK) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+          }
+          const base64 = btoa(binary);
           doc.addImage(`data:image/png;base64,${base64}`, "PNG", 0, 0, 210, 297);
         }
       } catch {
@@ -309,10 +310,10 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
         }
       }
 
-      doc.save(`BYWC-Acceptance-Letter-${fullName.replace(/\s+/g, "-")}.pdf`);
+      await doc.save(`BYWC-Acceptance-Letter-${fullName.replace(/\s+/g, "-")}.pdf`, { returnPromise: true });
     } catch (err) {
       console.error("Letter generation failed:", err);
-      alert("Could not generate the letter. Please try again.");
+      alert(`Could not generate the letter: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
