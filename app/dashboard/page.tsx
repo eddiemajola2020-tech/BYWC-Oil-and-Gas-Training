@@ -327,6 +327,8 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
     if (status === "Under Review") return "62%";
     if (status === "Shortlisted") return "78%";
     if (status === "Waiting List") return "78%";
+    if (status === "Remaining Eligible") return "85%";
+    if (status === "Deferred") return "50%";
     if (status === "Accepted") return "100%";
     if (status === "Completed") return "100%";
     if (status === "Rejected") return "100%";
@@ -339,34 +341,42 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
     }
 
     if (status === "Completed") {
-      return "Congratulations. You have successfully completed the BYWC Oil and Gas Training Programme 2026 Batch 1. Thank you for your participation.";
+      return "Congratulations. You have successfully completed the BYWC Oil and Gas Training Programme 2026 Batch 1. Thank you for your participation and dedication throughout the programme.";
     }
 
     if (status === "Accepted") {
-      return "Congratulations. Your application has been accepted by the programme administration team.";
+      return "Congratulations! Your application has been accepted for Batch 2 of the BYWC Oil and Gas Training Programme 2026. Please download your acceptance letter below and report to the venue as instructed.";
     }
 
     if (status === "Rejected") {
-      return "Your application was reviewed and was not successful for this intake.";
+      return "Thank you for applying. After careful review, your application was not successful for this intake. We encourage you to continue developing your skills and apply for future opportunities.";
+    }
+
+    if (status === "Remaining Eligible") {
+      return "Your application has been reviewed and you remain eligible for consideration. You are on the reserve list and will be contacted directly if a placement becomes available. Please continue monitoring your dashboard.";
+    }
+
+    if (status === "Deferred") {
+      return "Your application has been deferred to a future intake of the programme. You will be given priority consideration when the next intake opens. Please monitor your dashboard for updates.";
     }
 
     if (status === "Constituency Reserve Pool") {
-      return "Your application remains in the Constituency Reserve Pool and may be considered for additional placement opportunities as allocations are finalized.";
+      return "Your application is in the Constituency Reserve Pool. You may be considered for additional placement opportunities as allocations are finalised. Please monitor your dashboard.";
     }
 
     if (status === "Shortlisted") {
-      return "You have been shortlisted. Please monitor your inbox for next steps from programme administration.";
+      return "You have been shortlisted. Please monitor your inbox closely for next steps from programme administration.";
     }
 
     if (status === "Waiting List") {
-      return "Your application is eligible but currently on the waiting list due to available placement limits.";
+      return "Your application is eligible but currently on the waiting list due to available placement limits. You will be notified if a placement opens.";
     }
 
     if (status === "Under Review") {
-      return "Your application is currently being reviewed by the programme administration team.";
+      return "Your application is currently being reviewed by the programme administration team. No action is required from you at this stage.";
     }
 
-    return "Your application has been received and is awaiting admin review.";
+    return "Your application has been received and is awaiting review.";
   }, [latestApplication, status]);
 
   function handleProfileImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -556,41 +566,42 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
               </div>
             </div>
 
+            {status === "Accepted" && (
+              <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
+                  Official Documents
+                </p>
+                <h3 className="mt-3 text-2xl font-bold text-blue-950">
+                  Your Acceptance Letter
+                </h3>
+                <p className="mt-2 text-sm leading-7 text-slate-500">
+                  Your official letter of acceptance into the BYWC Oil &amp; Gas Training Programme 2026 — Batch 2.
+                  Download and keep a copy — you will need it at the venue.
+                </p>
+                <p className="mt-2 text-xs text-slate-400">
+                  Ref: BYWC/OGT/2026/{latestApplication?.applicationId ?? latestApplication?.id}
+                </p>
+                <button
+                  onClick={handleDownloadLetter}
+                  className="mt-5 flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition hover:bg-emerald-100"
+                >
+                  <div>
+                    <p className="text-sm font-bold text-emerald-800">
+                      Download Acceptance Letter
+                    </p>
+                    <p className="mt-0.5 text-xs text-emerald-600">
+                      Official BYWC programme confirmation — PDF
+                    </p>
+                  </div>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                    ↓
+                  </span>
+                </button>
+              </div>
+            )}
+
             {(status === "Accepted" || status === "Completed") && (
               <>
-                {/* Acceptance Letter download — always visible for accepted applicants */}
-                <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
-                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
-                    Official Documents
-                  </p>
-                  <h3 className="mt-3 text-2xl font-bold text-blue-950">
-                    Your Acceptance Letter
-                  </h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-500">
-                    Your official letter of acceptance into the BYWC Oil &amp; Gas Training Programme 2026.
-                    Download and keep a copy — you will need it at the venue.
-                  </p>
-                  <p className="mt-2 text-xs text-slate-400">
-                    Ref: BYWC/OGT/2026/{latestApplication?.applicationId ?? latestApplication?.id}
-                  </p>
-                  <button
-                    onClick={handleDownloadLetter}
-                    className="mt-5 flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition hover:bg-emerald-100"
-                  >
-                    <div>
-                      <p className="text-sm font-bold text-emerald-800">
-                        Download Acceptance Letter
-                      </p>
-                      <p className="mt-0.5 text-xs text-emerald-600">
-                        Official BYWC programme confirmation — PDF
-                      </p>
-                    </div>
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                      ↓
-                    </span>
-                  </button>
-                </div>
-
                 {/* Arrival Registration */}
                 <div className="rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.08)] lg:rounded-[34px] lg:p-8">
                   <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">
