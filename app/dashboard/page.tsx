@@ -177,51 +177,28 @@ export default function DashboardPage() {
       const defaultSubject = "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME 2026 \u2014 BATCH 2";
       const defaultBody = `Congratulations, {{fullName}}!
 
-We are delighted to inform you that you have been selected for the Second Batch of the Botswana Youth, Women and Citizen (BYWC) Oil and Gas Training Programme 2026. This is a significant achievement and we commend you for your application and commitment to advancing Botswana's energy sector.
+You have been selected for Batch 2 of the Botswana Youth, Women and Citizen (BYWC) Oil and Gas Training Programme 2026. This letter is your official confirmation of acceptance and must be presented upon registration at the training venue.
 
-This letter serves as your official confirmation of acceptance. Please retain it as you will be required to present it upon registration at the training venue.
+Acceptance Details:
+ •  Full Name: {{fullName}}
+ •  Constituency: {{constituency}}
+ •  Letter Reference: {{refNo}}
+ •  Programme: BYWC Oil & Gas Training Programme 2026 — Batch 2
 
-Your acceptance details are as follows:
- \u2022  Full Name: {{fullName}}
- \u2022  Constituency: {{constituency}}
- \u2022  Letter Reference: {{refNo}}
- \u2022  Programme: BYWC Oil & Gas Training Programme 2026 \u2014 Batch 2
+The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
 
-PROGRAMME OVERVIEW
-
-The training is a structured 10-day programme covering the following areas:
-
- \u2022  Introduction to the Oil and Gas Industry in Botswana and Africa
- \u2022  Health, Safety and Environment (HSE) Standards and Practices
- \u2022  Petroleum Exploration and Production Fundamentals
- \u2022  Pipeline Operations and Infrastructure
- \u2022  Oil and Gas Business, Contracts and Supply Chain
- \u2022  Entrepreneurship and Business Development in the Energy Sector
- \u2022  Community Development and Corporate Social Responsibility
- \u2022  Career Pathways and Professional Development in Oil and Gas
-
-REPORTING AND ORIENTATION
-
-Participants are required to report to the training venue on Sunday. Please arrive between 14:00 and 17:00 to complete registration and receive your programme materials. Formal orientation takes place on Monday morning beginning at 08:00.
-
-Full venue address, detailed programme schedule, and daily timings will be communicated through your applicant profile and inbox on the BYWC portal at bywcprogram.org. Please log in regularly to check for updates.
+REPORTING & ORIENTATION
+Report to the venue on Sunday between 14:00 and 17:00. Orientation begins Monday at 08:00. Full venue address and programme schedule will be shared on your portal at bywcprogram.org.
 
 WHAT TO BRING
-
-Please ensure you bring the following on registration day:
-
- \u2022  This acceptance letter (printed or on your phone)
- \u2022  Your valid national identity document (Omang) \u2014 this is mandatory
- \u2022  A pen and notebook for orientation
- \u2022  Any prescribed medication or personal items required for the duration of the programme
-
-Accommodation and meals will be provided for the full 10 days of training.
+ •  This acceptance letter (printed or on your phone)
+ •  Valid national identity document (Omang) — mandatory
+ •  Pen and notebook
 
 IMPORTANT NOTICE
+Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox to avoid forfeiture of your placement.
 
-Attendance from Day 1 is compulsory. Failure to report on the designated Sunday without prior written communication to programme administration may result in forfeiture of your placement. If you are unable to attend, please notify us immediately through your portal inbox so that your space may be reallocated.
-
-We look forward to welcoming you to the programme. This is an important step toward building a skilled, diverse and capable workforce for Botswana's growing energy sector.`;
+We look forward to welcoming you to the programme.`;
 
       let rawSubject = defaultSubject;
       let rawBody = defaultBody;

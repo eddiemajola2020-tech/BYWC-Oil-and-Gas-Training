@@ -10,51 +10,28 @@ const DEFAULT_LETTER_SUBJECT = `RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING 
 
 const DEFAULT_LETTER_BODY = `Congratulations, {{fullName}}!
 
-We are delighted to inform you that you have been selected for the Second Batch of the Botswana Youth, Women and Citizen (BYWC) Oil and Gas Training Programme 2026. This is a significant achievement and we commend you for your application and commitment to advancing Botswana's energy sector.
+You have been selected for Batch 2 of the Botswana Youth, Women and Citizen (BYWC) Oil and Gas Training Programme 2026. This letter is your official confirmation of acceptance and must be presented upon registration at the training venue.
 
-This letter serves as your official confirmation of acceptance. Please retain it as you will be required to present it upon registration at the training venue.
-
-Your acceptance details are as follows:
+Acceptance Details:
  •  Full Name: {{fullName}}
  •  Constituency: {{constituency}}
  •  Letter Reference: {{refNo}}
  •  Programme: BYWC Oil & Gas Training Programme 2026 — Batch 2
 
-PROGRAMME OVERVIEW
+The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
 
-The training is a structured 10-day programme covering the following areas:
-
- •  Introduction to the Oil and Gas Industry in Botswana and Africa
- •  Health, Safety and Environment (HSE) Standards and Practices
- •  Petroleum Exploration and Production Fundamentals
- •  Pipeline Operations and Infrastructure
- •  Oil and Gas Business, Contracts and Supply Chain
- •  Entrepreneurship and Business Development in the Energy Sector
- •  Community Development and Corporate Social Responsibility
- •  Career Pathways and Professional Development in Oil and Gas
-
-REPORTING AND ORIENTATION
-
-Participants are required to report to the training venue on Sunday. Please arrive between 14:00 and 17:00 to complete registration and receive your programme materials. Formal orientation takes place on Monday morning beginning at 08:00.
-
-Full venue address, detailed programme schedule, and daily timings will be communicated through your applicant profile and inbox on the BYWC portal at bywcprogram.org. Please log in regularly to check for updates.
+REPORTING & ORIENTATION
+Report to the venue on Sunday between 14:00 and 17:00. Orientation begins Monday at 08:00. Full venue address and programme schedule will be shared on your portal at bywcprogram.org.
 
 WHAT TO BRING
-
-Please ensure you bring the following on registration day:
-
  •  This acceptance letter (printed or on your phone)
- •  Your valid national identity document (Omang) — this is mandatory
- •  A pen and notebook for orientation
- •  Any prescribed medication or personal items required for the duration of the programme
-
-Accommodation and meals will be provided for the full 10 days of training.
+ •  Valid national identity document (Omang) — mandatory
+ •  Pen and notebook
 
 IMPORTANT NOTICE
+Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox to avoid forfeiture of your placement.
 
-Attendance from Day 1 is compulsory. Failure to report on the designated Sunday without prior written communication to programme administration may result in forfeiture of your placement. If you are unable to attend, please notify us immediately through your portal inbox so that your space may be reallocated.
-
-We look forward to welcoming you to the programme. This is an important step toward building a skilled, diverse and capable workforce for Botswana's growing energy sector.`;
+We look forward to welcoming you to the programme.`;
 const ADMIN_EMAILS = [
   "eddiemajola2020@gmail.com",
   "bandaseilaneng@gmail.com",
@@ -813,6 +790,7 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [masterSelecting, setMasterSelecting] = useState(false);
   const [publishingSelection, setPublishingSelection] = useState(false);
+  const [publishingBatch2, setPublishingBatch2] = useState(false);
   const [addApplicantLoading, setAddApplicantLoading] = useState(false);
   const [addApplicantError, setAddApplicantError] = useState("");
   const [addApplicantSuccess, setAddApplicantSuccess] = useState("");
@@ -2246,6 +2224,100 @@ export default function AdminPage() {
       total: updates.length || 1,
     });
     setPublishingSelection(false);
+  }
+
+  async function handlePublishBatch2() {
+    const confirmed = window.confirm(
+      "Publish Batch 2 acceptance letters?\n\nThis will make the acceptance letter visible on the dashboard for all applicants in the 'Internal Hold - Batch 2' selection bucket, setting their status to Accepted.\n\nNo emails or SMS messages will be sent."
+    );
+    if (!confirmed) return;
+
+    const secondConfirm = window.confirm(
+      "Second confirmation: publish Batch 2 to applicant dashboards now?"
+    );
+    if (!secondConfirm) return;
+
+    setPublishingBatch2(true);
+    setSelectionProgress({
+      active: true,
+      title: "Publishing Batch 2",
+      phase: "Loading",
+      detail: "Fetching Internal Hold Batch 2 records...",
+      current: 0,
+      total: 1,
+    });
+
+    const { data, error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .select("*")
+      .ilike("selection_bucket", "Internal Hold - Do Not Notify / Batch 2 -%");
+
+    if (error || !data) {
+      alert("Failed to load Batch 2 applications: " + (error?.message ?? "no data"));
+      setPublishingBatch2(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    const unpublished = data.map(formatApplication).filter(
+      (app) => app.selectionBucket?.startsWith("Internal Hold - Do Not Notify")
+    );
+
+    if (unpublished.length === 0) {
+      alert("No unpublished Batch 2 records found. They may already be published.");
+      setPublishingBatch2(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    const updates = unpublished.map((app) => ({
+      application: app,
+      status: "Accepted" as ApplicationStatus,
+      selectionBucket: getPublishedSelectionBucket(app.selectionBucket),
+    }));
+
+    setSelectionProgress({
+      active: true,
+      title: "Publishing Batch 2",
+      phase: "Updating dashboards",
+      detail: `Publishing ${updates.length} Batch 2 applicants...`,
+      current: 0,
+      total: updates.length,
+    });
+
+    let failures: string[] = [];
+    try {
+      failures = await updatePublishedSelectionStatusesInChunks(updates, 25, (completed, total, failed) => {
+        setSelectionProgress({
+          active: true,
+          title: "Publishing Batch 2",
+          phase: "Updating dashboards",
+          detail: `Processed ${completed} of ${total}. Failed: ${failed}.`,
+          current: completed,
+          total,
+        });
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert("Batch 2 publish failed: " + message);
+      setPublishingBatch2(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    alert(
+      `Batch 2 published.\n\nSuccessfully published: ${updates.length - failures.length}\nFailed: ${failures.length}\n\nApplicant dashboards now show the acceptance letter.`
+    );
+
+    setSelectionProgress({
+      active: true,
+      title: "Publishing Batch 2",
+      phase: "Complete",
+      detail: `${updates.length - failures.length} Batch 2 applicants published. No emails or SMS sent.`,
+      current: updates.length,
+      total: updates.length || 1,
+    });
+    setPublishingBatch2(false);
   }
 
   async function handleStatusChange(
@@ -5487,12 +5559,23 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                   <button
                     type="button"
                     onClick={handlePublishSelectionResults}
-                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2}
                     className="rounded-2xl bg-emerald-500 px-5 py-3 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
                   >
                     {publishingSelection
                       ? "Publishing..."
                       : "Publish Results to Dashboard"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePublishBatch2}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2}
+                    className="rounded-2xl bg-teal-500 px-5 py-3 text-xs font-black text-white transition hover:bg-teal-600 disabled:opacity-50"
+                  >
+                    {publishingBatch2
+                      ? "Publishing Batch 2..."
+                      : "Publish Batch 2"}
                   </button>
 
                   <button
