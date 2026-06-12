@@ -21,14 +21,14 @@ Acceptance Details:
 The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
 
 REPORTING & ORIENTATION
-Report to the venue on Sunday between 14:00 and 17:00. Orientation begins Monday at 08:00. Full venue address and programme schedule will be shared on your portal at bywcprogram.org.
+Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1–3 pm). Formal orientation begins Monday at 08:00.
 
 WHAT TO BRING
  •  This acceptance letter (printed or on your phone)
  •  Valid national identity document (Omang) — mandatory
  •  Pen and notebook
 
-IMPORTANT NOTICE
+🔒 IMPORTANT NOTICE
 Attendance from Day 1 is compulsory. If you are unable to attend, notify us immediately via your portal inbox to avoid forfeiture of your placement.
 
 We look forward to welcoming you to the programme.`;
