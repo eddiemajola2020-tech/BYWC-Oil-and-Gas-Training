@@ -265,6 +265,7 @@ For enquiries call 355 2838 or WhatsApp 74781608.`;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       let y = 83 + subjectLines.length * lineH + 7;
+      const PAGE_LIMIT = 263;
 
       for (const para of paragraphs) {
         const subLines = para.split("\n");
@@ -273,24 +274,23 @@ For enquiries call 355 2838 or WhatsApp 74781608.`;
           firstLine === firstLine.toUpperCase() && /[A-Z]/.test(firstLine);
 
         if (isBoldHeading && subLines.length > 1) {
-          // Bold heading line + normal body
           doc.setFont("helvetica", "bold");
           const headLines = doc.splitTextToSize(firstLine, 180);
           doc.setFont("helvetica", "normal");
           const bodyLines = doc.splitTextToSize(subLines.slice(1).join("\n"), 180);
-          if (y + (headLines.length + bodyLines.length) * lineH > 248) break;
+          if (y + (headLines.length + bodyLines.length) * lineH > PAGE_LIMIT) break;
           doc.setFont("helvetica", "bold");
           doc.text(headLines, 15, y);
           y += headLines.length * lineH;
           doc.setFont("helvetica", "normal");
           doc.text(bodyLines, 15, y);
-          y += bodyLines.length * lineH + 5;
+          y += bodyLines.length * lineH + 4;
         } else {
           doc.setFont("helvetica", isBoldHeading ? "bold" : "normal");
           const lines = doc.splitTextToSize(para, 180);
-          if (y + lines.length * lineH > 248) break;
+          if (y + lines.length * lineH > PAGE_LIMIT) break;
           doc.text(lines, 15, y);
-          y += lines.length * lineH + 5;
+          y += lines.length * lineH + 4;
           doc.setFont("helvetica", "normal");
         }
       }
