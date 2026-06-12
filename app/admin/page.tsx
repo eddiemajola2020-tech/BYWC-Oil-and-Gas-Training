@@ -2664,9 +2664,15 @@ export default function AdminPage() {
   ) {
     setSavingId(application.id);
 
+    const updatePayload: Record<string, unknown> = { status: newStatus };
+    if (newStatus === "Accepted") {
+      updatePayload.selection_bucket =
+        "Published - Applicant Visible / Batch 2 - Priority Override / Accepted Manually";
+    }
+
     const { error } = await supabase
       .from(APPLICATIONS_TABLE)
-      .update({ status: newStatus })
+      .update(updatePayload)
       .eq("application_id", application.applicationId);
 
     if (error) {
@@ -4807,7 +4813,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
     try {
       const { data, error } = await supabase
         .from(APPLICATIONS_TABLE)
-        .select("constituency, first_name, last_name, omang, phone, email, gender, district, selection_bucket")
+        .select("constituency, first_name, last_name, omang, phone, email, gender, district")
         .eq("status", "Accepted")
         .order("constituency", { ascending: true });
 
@@ -4817,7 +4823,7 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         return;
       }
 
-      const headers = ["Constituency", "Full Name", "Omang", "Phone", "Email", "Gender", "District", "Selection Bucket"];
+      const headers = ["Constituency", "Full Name", "Omang", "Phone", "Email", "Gender", "District"];
       const rows = data.map((r: any) => [
         r.constituency,
         `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim(),
@@ -4826,7 +4832,6 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
         r.email,
         r.gender,
         r.district,
-        r.selection_bucket,
       ]);
 
       const csvContent = [
