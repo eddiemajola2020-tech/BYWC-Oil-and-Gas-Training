@@ -21,11 +21,11 @@ Acceptance Details:
 The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
 
 REPORTING & ORIENTATION
-Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1–3 pm). Formal orientation begins Monday at 08:00.
+Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1-3 pm). Formal orientation begins Monday at 08:00.
 
 WHAT TO BRING
  •  This acceptance letter (printed or on your phone)
- •  🔒 Valid national identity document (Omang) — mandatory
+ •  Valid national identity document (Omang) — MANDATORY
  •  Pen and notebook
 
 IMPORTANT NOTICE
@@ -793,6 +793,8 @@ export default function AdminPage() {
   const [masterSelecting, setMasterSelecting] = useState(false);
   const [publishingSelection, setPublishingSelection] = useState(false);
   const [publishingBatch2, setPublishingBatch2] = useState(false);
+  const [publishingRejected, setPublishingRejected] = useState(false);
+  const [markingBatch1Arrived, setMarkingBatch1Arrived] = useState(false);
   const [addApplicantLoading, setAddApplicantLoading] = useState(false);
   const [addApplicantError, setAddApplicantError] = useState("");
   const [addApplicantSuccess, setAddApplicantSuccess] = useState("");
@@ -2320,6 +2322,136 @@ export default function AdminPage() {
       total: updates.length || 1,
     });
     setPublishingBatch2(false);
+  }
+
+  async function handlePublishRejected() {
+    const confirmed = window.confirm(
+      "Publish rejection results to applicant dashboards?\n\nThis will make the 'Rejected' status visible for all Internal Hold Rejected applicants. No emails or SMS will be sent."
+    );
+    if (!confirmed) return;
+
+    setPublishingRejected(true);
+    setSelectionProgress({
+      active: true,
+      title: "Publishing Rejected",
+      phase: "Loading",
+      detail: "Fetching Internal Hold Rejected records...",
+      current: 0,
+      total: 1,
+    });
+
+    const { data, error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .select("*")
+      .ilike("selection_bucket", "Internal Hold - Do Not Notify / Rejected -%");
+
+    if (error || !data) {
+      alert("Failed to load rejected applications: " + (error?.message ?? "no data"));
+      setPublishingRejected(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    const unpublished = data.map(formatApplication).filter(
+      (app) => app.selectionBucket?.startsWith("Internal Hold - Do Not Notify")
+    );
+
+    if (unpublished.length === 0) {
+      alert("No unpublished rejected records found. They may already be published.");
+      setPublishingRejected(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    const updates = unpublished.map((app) => ({
+      application: app,
+      status: "Rejected" as ApplicationStatus,
+      selectionBucket: getPublishedSelectionBucket(app.selectionBucket),
+    }));
+
+    setSelectionProgress({
+      active: true,
+      title: "Publishing Rejected",
+      phase: "Updating dashboards",
+      detail: `Publishing ${updates.length} rejected applicants...`,
+      current: 0,
+      total: updates.length,
+    });
+
+    let failures: string[] = [];
+    try {
+      failures = await updatePublishedSelectionStatusesInChunks(updates, 25, (completed, total, failed) => {
+        setSelectionProgress({
+          active: true,
+          title: "Publishing Rejected",
+          phase: "Updating dashboards",
+          detail: `Processed ${completed} of ${total}. Failed: ${failed}.`,
+          current: completed,
+          total,
+        });
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert("Rejected publish failed: " + message);
+      setPublishingRejected(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    alert(
+      `Rejected results published.\n\nPublished: ${updates.length - failures.length}\nFailed: ${failures.length}`
+    );
+    setSelectionProgress({
+      active: true,
+      title: "Publishing Rejected",
+      phase: "Complete",
+      detail: `${updates.length - failures.length} rejected applicants notified on dashboard.`,
+      current: updates.length,
+      total: updates.length || 1,
+    });
+    setPublishingRejected(false);
+  }
+
+  async function handleMarkBatch1Arrived() {
+    const confirmed = window.confirm(
+      "Mark all Batch 1 applicants as Arrived?\n\nThis will set arrival_status = 'Arrived' for all applicants in the Batch 1 selection bucket. Use this to bulk-confirm that Batch 1 participants attended the programme."
+    );
+    if (!confirmed) return;
+
+    setMarkingBatch1Arrived(true);
+
+    const { data, error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .select("id")
+      .ilike("selection_bucket", "%Batch 1 -%");
+
+    if (error || !data) {
+      alert("Failed to load Batch 1 applications: " + (error?.message ?? "no data"));
+      setMarkingBatch1Arrived(false);
+      return;
+    }
+
+    const arrivedAt = new Date().toISOString();
+    const ids = data.map((r) => r.id);
+    const CHUNK = 50;
+    let updated = 0;
+
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      const { error: upErr } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .update({
+          arrival_status: "Arrived",
+          arrived_at: arrivedAt,
+          arrival_confirmed_by: "Admin Bulk Mark",
+        })
+        .in("id", chunk);
+      if (upErr) console.error("Chunk failed:", upErr.message);
+      else updated += chunk.length;
+    }
+
+    alert(`Batch 1 marked as Arrived.\n\nUpdated: ${updated} of ${ids.length}`);
+    setMarkingBatch1Arrived(false);
   }
 
   async function handleStatusChange(
@@ -5572,12 +5704,34 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                   <button
                     type="button"
                     onClick={handlePublishBatch2}
-                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2 || publishingRejected || markingBatch1Arrived}
                     className="rounded-2xl bg-teal-500 px-5 py-3 text-xs font-black text-white transition hover:bg-teal-600 disabled:opacity-50"
                   >
                     {publishingBatch2
                       ? "Publishing Batch 2..."
                       : "Publish Batch 2"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePublishRejected}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2 || publishingRejected || markingBatch1Arrived}
+                    className="rounded-2xl bg-red-500 px-5 py-3 text-xs font-black text-white transition hover:bg-red-600 disabled:opacity-50"
+                  >
+                    {publishingRejected
+                      ? "Publishing Rejected..."
+                      : "Publish Rejected"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleMarkBatch1Arrived}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2 || publishingRejected || markingBatch1Arrived}
+                    className="rounded-2xl bg-violet-500 px-5 py-3 text-xs font-black text-white transition hover:bg-violet-600 disabled:opacity-50"
+                  >
+                    {markingBatch1Arrived
+                      ? "Marking Arrived..."
+                      : "Mark Batch 1 Arrived"}
                   </button>
 
                   <button
