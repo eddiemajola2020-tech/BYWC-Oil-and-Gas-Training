@@ -16,7 +16,7 @@ Acceptance Details:
  •  Full Name: {{fullName}}
  •  Constituency: {{constituency}}
  •  Letter Reference: {{refNo}}
- •  Programme: BYWC Oil & Gas Training Programme 2026 — Batch 2
+ •  Programme: BYWC Oil & Gas Training Programme 2026 Batch 2
 
 The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
 

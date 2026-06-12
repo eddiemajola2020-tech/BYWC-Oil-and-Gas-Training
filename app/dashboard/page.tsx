@@ -183,7 +183,7 @@ Acceptance Details:
  •  Full Name: {{fullName}}
  •  Constituency: {{constituency}}
  •  Letter Reference: {{refNo}}
- •  Programme: BYWC Oil & Gas Training Programme 2026 — Batch 2
+ •  Programme: BYWC Oil & Gas Training Programme 2026 Batch 2
 
 The programme is a structured 10-day training covering the oil and gas industry, HSE standards, petroleum fundamentals, pipeline operations, energy sector business and entrepreneurship, and career development. Accommodation and meals are provided for all 10 days.
 
@@ -267,10 +267,32 @@ For enquiries call 355 2838 or WhatsApp 74781608.`;
       let y = 83 + subjectLines.length * lineH + 7;
 
       for (const para of paragraphs) {
-        const lines = doc.splitTextToSize(para, 180);
-        if (y + lines.length * lineH > 248) break;
-        doc.text(lines, 15, y);
-        y += lines.length * lineH + 5;
+        const subLines = para.split("\n");
+        const firstLine = subLines[0];
+        const isBoldHeading =
+          firstLine === firstLine.toUpperCase() && /[A-Z]/.test(firstLine);
+
+        if (isBoldHeading && subLines.length > 1) {
+          // Bold heading line + normal body
+          doc.setFont("helvetica", "bold");
+          const headLines = doc.splitTextToSize(firstLine, 180);
+          doc.setFont("helvetica", "normal");
+          const bodyLines = doc.splitTextToSize(subLines.slice(1).join("\n"), 180);
+          if (y + (headLines.length + bodyLines.length) * lineH > 248) break;
+          doc.setFont("helvetica", "bold");
+          doc.text(headLines, 15, y);
+          y += headLines.length * lineH;
+          doc.setFont("helvetica", "normal");
+          doc.text(bodyLines, 15, y);
+          y += bodyLines.length * lineH + 5;
+        } else {
+          doc.setFont("helvetica", isBoldHeading ? "bold" : "normal");
+          const lines = doc.splitTextToSize(para, 180);
+          if (y + lines.length * lineH > 248) break;
+          doc.text(lines, 15, y);
+          y += lines.length * lineH + 5;
+          doc.setFont("helvetica", "normal");
+        }
       }
 
       doc.save(`BYWC-Acceptance-Letter-${fullName.replace(/\s+/g, "-")}.pdf`);
