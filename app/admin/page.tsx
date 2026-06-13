@@ -2772,6 +2772,59 @@ export default function AdminPage() {
     setSavingId(null);
   }
 
+  async function handleMoveToBatch2Deferred(application: Application) {
+    const confirmed = window.confirm(
+      `Move ${application.firstName} ${application.lastName} to Batch 2 — Deferred Sprinkle?\n\nThis places them inside the Batch 2 internal selection (not visible to the applicant until published). Their selectionBucket will be set to "Batch 2 - Deferred-Sprinkle".`
+    );
+    if (!confirmed) return;
+
+    setSavingId(application.id);
+    const newBucket = "Internal Hold - Do Not Notify / Batch 2 - Deferred-Sprinkle";
+
+    const { error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update({ status: "Submitted", selection_bucket: newBucket })
+      .eq("application_id", application.applicationId);
+
+    if (error) {
+      console.error("Failed to move to Batch 2 Deferred:", error);
+      alert(error.message);
+      setSavingId(null);
+      return;
+    }
+
+    await logAdminAction({
+      action: "status_change",
+      applicationId: application.applicationId,
+      details: {
+        previousStatus: application.status,
+        newStatus: "Submitted",
+        selectionBucket: newBucket,
+        applicantEmail: application.email,
+        applicantName: `${application.firstName} ${application.lastName}`,
+      },
+    });
+
+    setApplications((prev) =>
+      prev.map((item) =>
+        item.applicationId === application.applicationId
+          ? { ...item, status: "Submitted" as ApplicationStatus, selectionBucket: newBucket }
+          : item,
+      ),
+    );
+
+    if (selectedApplication?.applicationId === application.applicationId) {
+      setSelectedApplication({
+        ...selectedApplication,
+        status: "Submitted" as ApplicationStatus,
+        selectionBucket: newBucket,
+      });
+    }
+
+    await refreshAdminNumbers(false);
+    setSavingId(null);
+  }
+
   async function handleSyncAuth(e: React.FormEvent) {
     e.preventDefault();
     if (!syncAuthEmail.trim()) return;
@@ -5348,6 +5401,10 @@ BYWC Programme Administration`;
   const womenCount = dashboardStats.women;
   const menCount = dashboardStats.men;
   const constituenciesRepresentedCount = reportingStats?.constituenciesWithApplications ?? 0;
+  const batch2DeferredCount = useMemo(
+    () => batch2Applications.filter(a => (a.selectionBucket || "").includes("Deferred")).length,
+    [batch2Applications]
+  );
 
   const acceptedApplicationsSearchTerm = normalize(
     acceptedApplicationsSearchInput,
@@ -6162,7 +6219,7 @@ BYWC Programme Administration`;
           <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("batch1"); setStatusFilter("Internal Batch 1"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("selection"); }} />
           <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("waitlist"); setStatusFilter("Internal Remaining Eligible"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
-          <StatCard title="Unselected" value={submittedCount} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("Submitted"); setCurrentPage(1); }} />
+          <StatCard title="B2 Deferred" value={batch2DeferredCount} accent="amber" onClick={() => { setActiveSection("selection"); }} />
           <StatCard title="Rejected" value={rejectedCount} accent="red" onClick={() => { setActiveSection("rejected"); setStatusFilter("Internal Rejected"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Deferred" value={deferredCount} accent="amber" onClick={() => { setActiveSection("deferred"); setStatusFilter("Deferred"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Women" value={womenCount} accent="pink" onClick={() => { setActiveSection("women"); setStatusFilter("All"); setGenderFilter("Female"); setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} />
@@ -9991,6 +10048,14 @@ BYWC Programme Administration`;
                   className="bg-amber-500 text-white px-5 py-3 rounded-xl font-semibold hover:bg-amber-600 transition disabled:opacity-50"
                 >
                   Defer — Next Intake
+                </button>
+
+                <button
+                  onClick={() => handleMoveToBatch2Deferred(selectedApplication)}
+                  disabled={savingId === selectedApplication.id}
+                  className="bg-violet-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-violet-700 transition disabled:opacity-50"
+                >
+                  Move to Batch 2 Deferred
                 </button>
               </div>
             </div>
