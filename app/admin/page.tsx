@@ -8369,7 +8369,7 @@ BYWC Programme Administration`;
                                   </td>
                                   <td className="px-3 py-3">
                                     <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-[10px] font-black text-yellow-300">
-                                      {application.documentScore ?? "—"}
+                                      {application.autoReviewScore ?? "—"}
                                     </span>
                                   </td>
                                 </tr>
