@@ -829,6 +829,8 @@ export default function AdminPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [genderFilter, setGenderFilter] = useState("All");
+  const [profileApp, setProfileApp] = useState<Application | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedApplication, setSelectedApplication] =
     useState<Application | null>(null);
@@ -906,7 +908,8 @@ export default function AdminPage() {
     useState<Record<string, boolean>>({});
 
   const [activeSection, setActiveSection] = useState<
-    "applications" | "programme" | "selection" | "compliance" | "tools"
+    "applications" | "programme" | "selection" | "compliance" | "tools" |
+    "batch1" | "waitlist" | "rejected" | "deferred" | "women" | "men"
   >("applications");
 
   const [selectedArrivalIds, setSelectedArrivalIds] = useState<Set<string>>(new Set());
@@ -1273,6 +1276,10 @@ export default function AdminPage() {
       query = query.eq("status", statusFilter);
     }
 
+    if (genderFilter !== "All") {
+      query = query.ilike("gender", genderFilter);
+    }
+
     if (cleanedSearch) {
       const safeSearch = cleanedSearch
         .replace(/[%_,]/g, "")
@@ -1466,7 +1473,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  }, [searchTerm, statusFilter, genderFilter]);
 
   useEffect(() => {
     loadApplications(true, currentPage);
@@ -1476,7 +1483,7 @@ export default function AdminPage() {
     }, REFRESH_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [router, currentPage, searchTerm, statusFilter]);
+  }, [router, currentPage, searchTerm, statusFilter, genderFilter]);
 
   async function loadQuotaStats() {
     setQuotaStatsLoading(true);
@@ -5340,6 +5347,7 @@ BYWC Programme Administration`;
   const deferredCount = dashboardStats.deferred;
   const womenCount = dashboardStats.women;
   const menCount = dashboardStats.men;
+  const constituenciesRepresentedCount = reportingStats?.constituenciesWithApplications ?? 0;
 
   const acceptedApplicationsSearchTerm = normalize(
     acceptedApplicationsSearchInput,
@@ -5848,7 +5856,8 @@ BYWC Programme Administration`;
                   type="button"
                   onClick={() => setActiveSection(item.id)}
                   className={`rounded-xl px-5 py-2 text-sm font-semibold transition ${
-                    activeSection === item.id
+                    activeSection === item.id ||
+                    (item.id === "applications" && ["batch1","waitlist","rejected","deferred","women","men"].includes(activeSection))
                       ? "bg-white text-[#050816] shadow"
                       : "text-slate-400 hover:text-white"
                   }`}
@@ -6150,13 +6159,15 @@ BYWC Programme Administration`;
         {/* Stats bar — always visible regardless of active tab */}
         <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <StatCard title="Total" value={totalApplications} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
-          <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Batch 1"); setCurrentPage(1); }} />
+          <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("batch1"); setStatusFilter("Internal Batch 1"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("selection"); }} />
-          <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Remaining Eligible"); setCurrentPage(1); }} />
+          <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("waitlist"); setStatusFilter("Internal Remaining Eligible"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Unselected" value={submittedCount} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("Submitted"); setCurrentPage(1); }} />
-          <StatCard title="Rejected" value={rejectedCount} accent="red" onClick={() => { setActiveSection("applications"); setStatusFilter("Internal Rejected"); setCurrentPage(1); }} />
-          <StatCard title="Deferred" value={deferredCount} accent="amber" onClick={() => { setActiveSection("applications"); setStatusFilter("Deferred"); setCurrentPage(1); }} />
-          <StatCard title="Women" value={womenCount} accent="pink" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
+          <StatCard title="Rejected" value={rejectedCount} accent="red" onClick={() => { setActiveSection("rejected"); setStatusFilter("Internal Rejected"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
+          <StatCard title="Deferred" value={deferredCount} accent="amber" onClick={() => { setActiveSection("deferred"); setStatusFilter("Deferred"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
+          <StatCard title="Women" value={womenCount} accent="pink" onClick={() => { setActiveSection("women"); setStatusFilter("All"); setGenderFilter("Female"); setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} />
+          <StatCard title="Men" value={menCount} accent="slate" onClick={() => { setActiveSection("men"); setStatusFilter("All"); setGenderFilter("Male"); setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} />
+          <StatCard title="Constituencies" value={constituenciesRepresentedCount} accent="emerald" onClick={() => { setActiveSection("compliance"); }} />
         </section>
 
         {/* ── Programme & Arrivals tab ── */}
@@ -7848,6 +7859,7 @@ BYWC Programme Administration`;
         {/* ── Applications tab ── */}
         {activeSection === "applications" && (
         <section className="rounded-[32px] border border-white/10 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.30)]">
+
           <div className="mb-4 grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(420px,640px)] 2xl:items-center">
             <div>
               <h2 className="text-2xl font-black text-white">Applications</h2>
@@ -7888,6 +7900,7 @@ BYWC Programme Administration`;
                   onClick={() => {
                     setSearchInput("");
                     setSearchTerm("");
+                    setGenderFilter("All");
                     setCurrentPage(1);
                   }}
                   className="rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-xs font-black text-white transition hover:bg-white/10"
@@ -7907,10 +7920,26 @@ BYWC Programme Administration`;
                 <option value="Submitted">Submitted / Unselected</option>
                 <option value="Internal Rejected">Rejected / Failed Gates (Admin)</option>
               </select>
+
+              <select
+                value={genderFilter}
+                onChange={(event) => { setGenderFilter(event.target.value); setCurrentPage(1); }}
+                className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition focus:border-orange-400 focus:bg-[#0f172a]"
+              >
+                <option value="All">All Genders</option>
+                <option value="Female">Female</option>
+                <option value="Male">Male</option>
+              </select>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#0f172a]">
+          <div className={`overflow-hidden rounded-3xl border bg-[#0f172a] ${
+            statusFilter === "Internal Batch 1"            ? "border-emerald-500/20" :
+            statusFilter === "Internal Remaining Eligible" ? "border-yellow-500/20" :
+            statusFilter === "Internal Rejected"           ? "border-red-500/20" :
+            statusFilter === "Deferred"                    ? "border-amber-500/20" :
+            "border-white/10"
+          }`}>
             {tableLoading ? (
               <div className="p-10 text-center text-sm font-semibold text-slate-400">
                 Loading page...
@@ -8012,6 +8041,11 @@ BYWC Programme Administration`;
                           <p className="mb-2 rounded-xl bg-orange-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-orange-300">
                             Admin: {getAdminSelectionLabel(application)}
                           </p>
+                          {(statusFilter === "Internal Batch 1" || statusFilter === "Internal Batch 2" || application.arrivalStatus === "Arrived") && (
+                            <p className={`mb-2 rounded-xl px-2 py-1 text-[10px] font-black ${application.arrivalStatus === "Arrived" ? "bg-emerald-500/10 text-emerald-300" : "bg-white/5 text-slate-500"}`}>
+                              {application.arrivalStatus === "Arrived" ? "✓ Arrived" : "Not Arrived"}
+                            </p>
+                          )}
                           <p className="mb-2 text-[10px] font-semibold text-slate-500">
                             Applicant sees: {application.status}
                           </p>
@@ -8099,6 +8133,819 @@ BYWC Programme Administration`;
           </div>
         </section>
         )} {/* end applications tab */}
+
+        {/* ══════════════════════════════════════════════════════════════
+            BATCH 1 DEDICATED SECTION
+        ══════════════════════════════════════════════════════════════ */}
+        {activeSection === "batch1" && (() => {
+          const b1All = acceptedApplications.filter(a => isInternalBatchOneSelection(a.selectionBucket));
+          const searchLow = searchInput.toLowerCase();
+          const visibleB1 = searchInput
+            ? b1All.filter(a => `${a.firstName} ${a.lastName} ${a.email || ""} ${a.omang || ""} ${a.phone || ""} ${a.constituency || ""}`.toLowerCase().includes(searchLow))
+            : b1All;
+          const b1Arrived = b1All.filter(a => a.arrivalStatus === "Arrived").length;
+          const b1NotArrived = b1All.length - b1Arrived;
+          const b1ConstRows = Object.entries(
+            b1All.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
+          ).sort(([, a], [, b]) => b - a);
+          return (
+            <section className="rounded-[32px] border border-emerald-500/30 bg-[#030f08] p-5 shadow-[0_20px_60px_rgba(16,185,129,0.08)]">
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">Batch 1 — Accepted</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Batch 1 — {b1All.length.toLocaleString()} participants</h2>
+                  <p className="mt-1 text-sm text-slate-400">BYWC Oil &amp; Gas Training Programme 2026 · First intake · click any name to view full profile</p>
+                </div>
+                <button type="button" onClick={() => { setActiveSection("applications"); setSearchInput(""); setSearchTerm(""); }} className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">← Back to All</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Total Selected</p>
+                  <p className="mt-2 text-3xl font-black text-emerald-300">{b1All.length.toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">Arrived</p>
+                  <p className="mt-2 text-3xl font-black text-emerald-300">{b1Arrived.toLocaleString()}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">{b1All.length > 0 ? Math.round((b1Arrived / b1All.length) * 100) : 0}% attendance</p>
+                </div>
+                <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Not Arrived</p>
+                  <p className="mt-2 text-3xl font-black text-orange-300">{b1NotArrived.toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+                  <p className="mt-2 text-3xl font-black text-white">{b1ConstRows.length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">of 61 represented</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+                  <div className="mb-3">
+                    <input
+                      type="search"
+                      value={searchInput}
+                      onChange={e => setSearchInput(e.target.value)}
+                      placeholder="Search by name, Omang, phone, email or constituency..."
+                      className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400 focus:bg-[#0f172a]"
+                    />
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    {visibleB1.length === 0 ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchInput ? "No results for this search." : "No Batch 1 data found."}</div>
+                    ) : (
+                      <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                        <table className="w-full table-fixed text-[12px]">
+                          <colgroup>
+                            <col className="w-[28%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[15%]" />
+                          </colgroup>
+                          <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                            <tr>
+                              <th className="px-3 py-3 text-left font-black">Applicant</th>
+                              <th className="px-3 py-3 text-left font-black">Omang</th>
+                              <th className="px-3 py-3 text-left font-black">Phone</th>
+                              <th className="px-3 py-3 text-left font-black">Constituency</th>
+                              <th className="px-3 py-3 text-left font-black">Gender</th>
+                              <th className="px-3 py-3 text-left font-black">Arrival</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {visibleB1.map(application => {
+                              const isMale = (application.gender || "").toLowerCase() === "male";
+                              const arrived = application.arrivalStatus === "Arrived";
+                              return (
+                                <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                  <td className="px-3 py-3">
+                                    <p className="font-black text-emerald-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                    <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
+                                  </td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                                  <td className="px-3 py-3">
+                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
+                                      {isMale ? "M" : "F"}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>
+                                      {arrived ? "✓ Arrived" : "Not Arrived"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">By Constituency</p>
+                  <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+                    {b1ConstRows.length === 0 ? (
+                      <p className="text-sm font-semibold text-slate-400">No data.</p>
+                    ) : (
+                      b1ConstRows.map(([constituency, count]) => (
+                        <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                          <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                          <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-black text-emerald-300">{count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════════
+            WAITLIST DEDICATED SECTION
+        ══════════════════════════════════════════════════════════════ */}
+        {activeSection === "waitlist" && (() => {
+          const pageConstRows = Object.entries(
+            filteredApplications.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
+          ).sort(([, a], [, b]) => b - a);
+          const pageWomen = filteredApplications.filter(a => (a.gender || "").toLowerCase() === "female").length;
+          const pageMen = filteredApplications.filter(a => (a.gender || "").toLowerCase() === "male").length;
+          return (
+            <section className="rounded-[32px] border border-yellow-500/30 bg-[#0f0e00] p-5 shadow-[0_20px_60px_rgba(234,179,8,0.08)]">
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-yellow-400">Waitlist</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Waitlist — {totalCount.toLocaleString()} applicants</h2>
+                  <p className="mt-1 text-sm text-slate-400">Remaining Eligible · not placed in this intake · may be offered a spot if one becomes available</p>
+                </div>
+                <button type="button" onClick={() => { setActiveSection("applications"); setSearchInput(""); setSearchTerm(""); }} className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">← Back to All</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
+                <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-yellow-300">Total Waitlisted</p>
+                  <p className="mt-2 text-3xl font-black text-yellow-300">{totalCount.toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+                  <p className="mt-2 text-3xl font-black text-white">{pageConstRows.length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-300">Women</p>
+                  <p className="mt-2 text-3xl font-black text-pink-300">{pageWomen}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Men</p>
+                  <p className="mt-2 text-3xl font-black text-blue-300">{pageMen}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+                  <div className="mb-3 flex gap-2">
+                    <input
+                      type="search"
+                      value={searchInput}
+                      onChange={e => setSearchInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { setSearchTerm(searchInput.trim()); setCurrentPage(1); } }}
+                      placeholder="Search by name, Omang, phone, email or constituency..."
+                      className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-yellow-400 focus:bg-[#0f172a]"
+                    />
+                    <button type="button" onClick={() => { setSearchTerm(searchInput.trim()); setCurrentPage(1); }} className="shrink-0 rounded-2xl bg-yellow-600 px-4 py-2 text-xs font-black text-white hover:bg-yellow-500">Search</button>
+                    <button type="button" onClick={() => { setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-300 hover:bg-white/10">✕</button>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    {tableLoading ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading...</div>
+                    ) : filteredApplications.length === 0 ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchTerm ? "No results for this search." : "No waitlisted applicants found."}</div>
+                    ) : (
+                      <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                        <table className="w-full table-fixed text-[12px]">
+                          <colgroup>
+                            <col className="w-[28%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[15%]" />
+                          </colgroup>
+                          <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                            <tr>
+                              <th className="px-3 py-3 text-left font-black">Applicant</th>
+                              <th className="px-3 py-3 text-left font-black">Omang</th>
+                              <th className="px-3 py-3 text-left font-black">Phone</th>
+                              <th className="px-3 py-3 text-left font-black">Constituency</th>
+                              <th className="px-3 py-3 text-left font-black">Gender</th>
+                              <th className="px-3 py-3 text-left font-black">Score</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {filteredApplications.map(application => {
+                              const isMale = (application.gender || "").toLowerCase() === "male";
+                              return (
+                                <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                  <td className="px-3 py-3">
+                                    <p className="font-black text-yellow-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                    <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
+                                  </td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                                  <td className="px-3 py-3">
+                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
+                                      {isMale ? "M" : "F"}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-[10px] font-black text-yellow-300">
+                                      {application.documentScore ?? "—"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3">
+                    <p className="text-xs text-slate-500">Page {currentPage} of {totalPages} · {totalCount.toLocaleString()} total</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1 || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Previous</button>
+                      <button type="button" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Next</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">By Constituency · this page</p>
+                  <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+                    {pageConstRows.length === 0 ? (
+                      <p className="text-sm font-semibold text-slate-400">No data on this page.</p>
+                    ) : (
+                      pageConstRows.map(([constituency, count]) => (
+                        <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                          <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                          <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-xs font-black text-yellow-300">{count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════════
+            REJECTED DEDICATED SECTION
+        ══════════════════════════════════════════════════════════════ */}
+        {activeSection === "rejected" && (() => {
+          const pageConstRows = Object.entries(
+            filteredApplications.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
+          ).sort(([, a], [, b]) => b - a);
+          const pageWomen = filteredApplications.filter(a => (a.gender || "").toLowerCase() === "female").length;
+          const pageMen = filteredApplications.filter(a => (a.gender || "").toLowerCase() === "male").length;
+          return (
+            <section className="rounded-[32px] border border-red-500/30 bg-[#0f0303] p-5 shadow-[0_20px_60px_rgba(239,68,68,0.08)]">
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">Rejected</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Rejected Applications — {totalCount.toLocaleString()}</h2>
+                  <p className="mt-1 text-sm text-slate-400">Did not pass review gates or were manually rejected · click any name to view full profile and rejection reason</p>
+                </div>
+                <button type="button" onClick={() => { setActiveSection("applications"); setSearchInput(""); setSearchTerm(""); }} className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">← Back to All</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
+                <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-red-300">Total Rejected</p>
+                  <p className="mt-2 text-3xl font-black text-red-300">{totalCount.toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+                  <p className="mt-2 text-3xl font-black text-white">{pageConstRows.length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-300">Women</p>
+                  <p className="mt-2 text-3xl font-black text-pink-300">{pageWomen}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Men</p>
+                  <p className="mt-2 text-3xl font-black text-blue-300">{pageMen}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+                  <div className="mb-3 flex gap-2">
+                    <input
+                      type="search"
+                      value={searchInput}
+                      onChange={e => setSearchInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { setSearchTerm(searchInput.trim()); setCurrentPage(1); } }}
+                      placeholder="Search by name, Omang, phone, email or constituency..."
+                      className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-red-400 focus:bg-[#0f172a]"
+                    />
+                    <button type="button" onClick={() => { setSearchTerm(searchInput.trim()); setCurrentPage(1); }} className="shrink-0 rounded-2xl bg-red-700 px-4 py-2 text-xs font-black text-white hover:bg-red-600">Search</button>
+                    <button type="button" onClick={() => { setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-300 hover:bg-white/10">✕</button>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    {tableLoading ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading...</div>
+                    ) : filteredApplications.length === 0 ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchTerm ? "No results for this search." : "No rejected applications found."}</div>
+                    ) : (
+                      <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                        <table className="w-full table-fixed text-[12px]">
+                          <colgroup>
+                            <col className="w-[28%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[15%]" />
+                          </colgroup>
+                          <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                            <tr>
+                              <th className="px-3 py-3 text-left font-black">Applicant</th>
+                              <th className="px-3 py-3 text-left font-black">Omang</th>
+                              <th className="px-3 py-3 text-left font-black">Phone</th>
+                              <th className="px-3 py-3 text-left font-black">Constituency</th>
+                              <th className="px-3 py-3 text-left font-black">Gender</th>
+                              <th className="px-3 py-3 text-left font-black">Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {filteredApplications.map(application => {
+                              const isMale = (application.gender || "").toLowerCase() === "male";
+                              return (
+                                <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                  <td className="px-3 py-3">
+                                    <p className="font-black text-red-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                    <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
+                                  </td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                                  <td className="px-3 py-3">
+                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
+                                      {isMale ? "M" : "F"}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className="line-clamp-2 text-[10px] font-semibold text-red-400/80">
+                                      {application.hardRejectReason || "—"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3">
+                    <p className="text-xs text-slate-500">Page {currentPage} of {totalPages} · {totalCount.toLocaleString()} total</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1 || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Previous</button>
+                      <button type="button" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Next</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">By Constituency · this page</p>
+                  <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+                    {pageConstRows.length === 0 ? (
+                      <p className="text-sm font-semibold text-slate-400">No data on this page.</p>
+                    ) : (
+                      pageConstRows.map(([constituency, count]) => (
+                        <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                          <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                          <span className="rounded-full bg-red-500/10 px-2 py-1 text-xs font-black text-red-300">{count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════════
+            DEFERRED DEDICATED SECTION
+        ══════════════════════════════════════════════════════════════ */}
+        {activeSection === "deferred" && (() => {
+          const pageConstRows = Object.entries(
+            filteredApplications.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
+          ).sort(([, a], [, b]) => b - a);
+          const pageWomen = filteredApplications.filter(a => (a.gender || "").toLowerCase() === "female").length;
+          const pageMen = filteredApplications.filter(a => (a.gender || "").toLowerCase() === "male").length;
+          return (
+            <section className="rounded-[32px] border border-amber-500/30 bg-[#0f0900] p-5 shadow-[0_20px_60px_rgba(245,158,11,0.08)]">
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-400">Deferred</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Deferred Applicants — {totalCount.toLocaleString()}</h2>
+                  <p className="mt-1 text-sm text-slate-400">Deferred to a future intake · will receive priority consideration · click any name to view full profile</p>
+                </div>
+                <button type="button" onClick={() => { setActiveSection("applications"); setSearchInput(""); setSearchTerm(""); }} className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">← Back to All</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-300">Total Deferred</p>
+                  <p className="mt-2 text-3xl font-black text-amber-300">{totalCount.toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+                  <p className="mt-2 text-3xl font-black text-white">{pageConstRows.length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-300">Women</p>
+                  <p className="mt-2 text-3xl font-black text-pink-300">{pageWomen}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Men</p>
+                  <p className="mt-2 text-3xl font-black text-blue-300">{pageMen}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+                  <div className="mb-3 flex gap-2">
+                    <input
+                      type="search"
+                      value={searchInput}
+                      onChange={e => setSearchInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { setSearchTerm(searchInput.trim()); setCurrentPage(1); } }}
+                      placeholder="Search by name, Omang, phone, email or constituency..."
+                      className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400 focus:bg-[#0f172a]"
+                    />
+                    <button type="button" onClick={() => { setSearchTerm(searchInput.trim()); setCurrentPage(1); }} className="shrink-0 rounded-2xl bg-amber-700 px-4 py-2 text-xs font-black text-white hover:bg-amber-600">Search</button>
+                    <button type="button" onClick={() => { setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-300 hover:bg-white/10">✕</button>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    {tableLoading ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading...</div>
+                    ) : filteredApplications.length === 0 ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchTerm ? "No results for this search." : "No deferred applicants found."}</div>
+                    ) : (
+                      <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                        <table className="w-full table-fixed text-[12px]">
+                          <colgroup>
+                            <col className="w-[28%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[15%]" />
+                          </colgroup>
+                          <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                            <tr>
+                              <th className="px-3 py-3 text-left font-black">Applicant</th>
+                              <th className="px-3 py-3 text-left font-black">Omang</th>
+                              <th className="px-3 py-3 text-left font-black">Phone</th>
+                              <th className="px-3 py-3 text-left font-black">Constituency</th>
+                              <th className="px-3 py-3 text-left font-black">Gender</th>
+                              <th className="px-3 py-3 text-left font-black">Label</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {filteredApplications.map(application => {
+                              const isMale = (application.gender || "").toLowerCase() === "male";
+                              return (
+                                <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                  <td className="px-3 py-3">
+                                    <p className="font-black text-amber-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                    <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
+                                  </td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
+                                  <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                                  <td className="px-3 py-3">
+                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
+                                      {isMale ? "M" : "F"}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-300">Deferred</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3">
+                    <p className="text-xs text-slate-500">Page {currentPage} of {totalPages} · {totalCount.toLocaleString()} total</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1 || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Previous</button>
+                      <button type="button" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Next</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">By Constituency · this page</p>
+                  <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+                    {pageConstRows.length === 0 ? (
+                      <p className="text-sm font-semibold text-slate-400">No data on this page.</p>
+                    ) : (
+                      pageConstRows.map(([constituency, count]) => (
+                        <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                          <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                          <span className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-black text-amber-300">{count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════════
+            WOMEN DEDICATED SECTION
+        ══════════════════════════════════════════════════════════════ */}
+        {activeSection === "women" && (() => {
+          const pageConstRows = Object.entries(
+            filteredApplications.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
+          ).sort(([, a], [, b]) => b - a);
+          return (
+            <section className="rounded-[32px] border border-pink-500/30 bg-[#0f0308] p-5 shadow-[0_20px_60px_rgba(236,72,153,0.08)]">
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-pink-400">Female Applicants</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Women — {totalCount.toLocaleString()} applicants</h2>
+                  <p className="mt-1 text-sm text-slate-400">All female applicants across all statuses · click any name to view full profile</p>
+                </div>
+                <button type="button" onClick={() => { setActiveSection("applications"); setGenderFilter("All"); setSearchInput(""); setSearchTerm(""); }} className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">← Back to All</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
+                <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-300">Total Women</p>
+                  <p className="mt-2 text-3xl font-black text-pink-300">{totalCount.toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+                  <p className="mt-2 text-3xl font-black text-white">{pageConstRows.length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Accepted</p>
+                  <p className="mt-2 text-3xl font-black text-orange-300">{filteredApplications.filter(a => a.status === "Accepted").length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Arrived</p>
+                  <p className="mt-2 text-3xl font-black text-emerald-300">{filteredApplications.filter(a => a.arrivalStatus === "Arrived").length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+                  <div className="mb-3 flex gap-2">
+                    <input
+                      type="search"
+                      value={searchInput}
+                      onChange={e => setSearchInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { setSearchTerm(searchInput.trim()); setCurrentPage(1); } }}
+                      placeholder="Search by name, Omang, phone, email or constituency..."
+                      className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-pink-400 focus:bg-[#0f172a]"
+                    />
+                    <button type="button" onClick={() => { setSearchTerm(searchInput.trim()); setCurrentPage(1); }} className="shrink-0 rounded-2xl bg-pink-700 px-4 py-2 text-xs font-black text-white hover:bg-pink-600">Search</button>
+                    <button type="button" onClick={() => { setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-300 hover:bg-white/10">✕</button>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    {tableLoading ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading...</div>
+                    ) : filteredApplications.length === 0 ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchTerm ? "No results for this search." : "No female applicants found."}</div>
+                    ) : (
+                      <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                        <table className="w-full table-fixed text-[12px]">
+                          <colgroup>
+                            <col className="w-[30%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[20%]" />
+                            <col className="w-[21%]" />
+                          </colgroup>
+                          <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                            <tr>
+                              <th className="px-3 py-3 text-left font-black">Applicant</th>
+                              <th className="px-3 py-3 text-left font-black">Omang</th>
+                              <th className="px-3 py-3 text-left font-black">Phone</th>
+                              <th className="px-3 py-3 text-left font-black">Constituency</th>
+                              <th className="px-3 py-3 text-left font-black">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {filteredApplications.map(application => (
+                              <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                <td className="px-3 py-3">
+                                  <p className="font-black text-pink-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                  <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
+                                </td>
+                                <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                                <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
+                                <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                                <td className="px-3 py-3">
+                                  <span className="rounded-full bg-pink-500/10 px-2 py-1 text-[10px] font-black text-pink-300">
+                                    {application.selectionBucket || application.status || "—"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3">
+                    <p className="text-xs text-slate-500">Page {currentPage} of {totalPages} · {totalCount.toLocaleString()} total</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1 || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Previous</button>
+                      <button type="button" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Next</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">By Constituency · this page</p>
+                  <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+                    {pageConstRows.length === 0 ? (
+                      <p className="text-sm font-semibold text-slate-400">No data on this page.</p>
+                    ) : (
+                      pageConstRows.map(([constituency, count]) => (
+                        <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                          <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                          <span className="rounded-full bg-pink-500/10 px-2 py-1 text-xs font-black text-pink-300">{count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════════
+            MEN DEDICATED SECTION
+        ══════════════════════════════════════════════════════════════ */}
+        {activeSection === "men" && (() => {
+          const pageConstRows = Object.entries(
+            filteredApplications.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
+          ).sort(([, a], [, b]) => b - a);
+          return (
+            <section className="rounded-[32px] border border-blue-500/30 bg-[#03080f] p-5 shadow-[0_20px_60px_rgba(59,130,246,0.08)]">
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-400">Male Applicants</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Men — {totalCount.toLocaleString()} applicants</h2>
+                  <p className="mt-1 text-sm text-slate-400">All male applicants across all statuses · click any name to view full profile</p>
+                </div>
+                <button type="button" onClick={() => { setActiveSection("applications"); setGenderFilter("All"); setSearchInput(""); setSearchTerm(""); }} className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">← Back to All</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
+                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Total Men</p>
+                  <p className="mt-2 text-3xl font-black text-blue-300">{totalCount.toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
+                  <p className="mt-2 text-3xl font-black text-white">{pageConstRows.length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Accepted</p>
+                  <p className="mt-2 text-3xl font-black text-orange-300">{filteredApplications.filter(a => a.status === "Accepted").length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Arrived</p>
+                  <p className="mt-2 text-3xl font-black text-emerald-300">{filteredApplications.filter(a => a.arrivalStatus === "Arrived").length}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">this page</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-2xl border border-white/10 bg-[#0f172a] p-3">
+                  <div className="mb-3 flex gap-2">
+                    <input
+                      type="search"
+                      value={searchInput}
+                      onChange={e => setSearchInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { setSearchTerm(searchInput.trim()); setCurrentPage(1); } }}
+                      placeholder="Search by name, Omang, phone, email or constituency..."
+                      className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-[#0f172a]"
+                    />
+                    <button type="button" onClick={() => { setSearchTerm(searchInput.trim()); setCurrentPage(1); }} className="shrink-0 rounded-2xl bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-600">Search</button>
+                    <button type="button" onClick={() => { setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }} className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-300 hover:bg-white/10">✕</button>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    {tableLoading ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading...</div>
+                    ) : filteredApplications.length === 0 ? (
+                      <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchTerm ? "No results for this search." : "No male applicants found."}</div>
+                    ) : (
+                      <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                        <table className="w-full table-fixed text-[12px]">
+                          <colgroup>
+                            <col className="w-[30%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[20%]" />
+                            <col className="w-[21%]" />
+                          </colgroup>
+                          <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                            <tr>
+                              <th className="px-3 py-3 text-left font-black">Applicant</th>
+                              <th className="px-3 py-3 text-left font-black">Omang</th>
+                              <th className="px-3 py-3 text-left font-black">Phone</th>
+                              <th className="px-3 py-3 text-left font-black">Constituency</th>
+                              <th className="px-3 py-3 text-left font-black">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {filteredApplications.map(application => (
+                              <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                <td className="px-3 py-3">
+                                  <p className="font-black text-blue-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                  <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
+                                </td>
+                                <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                                <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
+                                <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                                <td className="px-3 py-3">
+                                  <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-black text-blue-300">
+                                    {application.selectionBucket || application.status || "—"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3">
+                    <p className="text-xs text-slate-500">Page {currentPage} of {totalPages} · {totalCount.toLocaleString()} total</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1 || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Previous</button>
+                      <button type="button" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || tableLoading} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white disabled:opacity-40 hover:bg-white/10">Next</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">By Constituency · this page</p>
+                  <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+                    {pageConstRows.length === 0 ? (
+                      <p className="text-sm font-semibold text-slate-400">No data on this page.</p>
+                    ) : (
+                      pageConstRows.map(([constituency, count]) => (
+                        <div key={constituency} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-3 py-2">
+                          <span className="text-xs font-bold text-slate-300">{constituency}</span>
+                          <span className="rounded-full bg-blue-500/10 px-2 py-1 text-xs font-black text-blue-300">{count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          );
+        })()}
 
         {/* ── Compliance & Dispatch tab ── */}
         {activeSection === "compliance" && (
@@ -8998,6 +9845,26 @@ BYWC Programme Administration`;
                     "-"
                   }
                 />
+              </div>
+
+              {/* Arrival Status */}
+              <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 rounded-xl border p-4 ${selectedApplication.arrivalStatus === "Arrived" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10 bg-white/[0.02]"}`}>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Arrival Status</p>
+                  <p className={`mt-1 text-base font-black ${selectedApplication.arrivalStatus === "Arrived" ? "text-emerald-400" : "text-slate-400"}`}>
+                    {selectedApplication.arrivalStatus || "Not Arrived"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Arrived At</p>
+                  <p className="mt-1 text-sm text-white">
+                    {selectedApplication.arrivedAt ? new Date(selectedApplication.arrivedAt).toLocaleString() : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Confirmed By</p>
+                  <p className="mt-1 text-sm text-white">{selectedApplication.arrivalConfirmedBy || "—"}</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

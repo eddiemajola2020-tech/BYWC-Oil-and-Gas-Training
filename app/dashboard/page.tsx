@@ -306,7 +306,29 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
         }
       }
 
-      await doc.save(`BYWC-Acceptance-Letter-${fullName.replace(/\s+/g, "-")}.pdf`, { returnPromise: true });
+      const filename = `BYWC-Acceptance-Letter-${fullName.replace(/\s+/g, "-")}.pdf`;
+      const blob = doc.output("blob");
+      const blobUrl = URL.createObjectURL(blob);
+
+      // iOS Safari silently ignores <a download> — open PDF in new tab instead so
+      // the user can save from the browser's PDF viewer (share icon → Save to Files).
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        const tab = window.open(blobUrl, "_blank");
+        if (!tab) {
+          // Popup was blocked — fall back to navigating current page
+          window.location.href = blobUrl;
+        }
+      } else {
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = filename;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
     } catch (err) {
       console.error("Letter generation failed:", err);
       alert(`Could not generate the letter: ${err instanceof Error ? err.message : String(err)}`);
