@@ -2712,6 +2712,12 @@ export default function AdminPage() {
       ),
     );
 
+    if (newStatus === "Rejected" || newStatus === "Remaining Eligible") {
+      setBatch2Applications((prev) =>
+        prev.filter((a) => a.applicationId !== application.applicationId),
+      );
+    }
+
     if (selectedApplication?.applicationId === application.applicationId) {
       setSelectedApplication({
         ...selectedApplication,
@@ -2761,6 +2767,10 @@ export default function AdminPage() {
           ? { ...item, status: "Deferred", selectionBucket: "Deferred - Next Intake" }
           : item,
       ),
+    );
+
+    setBatch2Applications((prev) =>
+      prev.filter((a) => a.applicationId !== application.applicationId),
     );
 
     if (selectedApplication?.applicationId === application.applicationId) {
@@ -2815,6 +2825,12 @@ export default function AdminPage() {
           : item,
       ),
     );
+
+    setBatch2Applications((prev) => {
+      const already = prev.some((a) => a.applicationId === application.applicationId);
+      if (already) return prev.map((a) => a.applicationId === application.applicationId ? { ...a, selectionBucket: newBucket } : a);
+      return [...prev, { ...application, status: "Submitted" as ApplicationStatus, selectionBucket: newBucket }];
+    });
 
     if (selectedApplication?.applicationId === application.applicationId) {
       setSelectedApplication({
