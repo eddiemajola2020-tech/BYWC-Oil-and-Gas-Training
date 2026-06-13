@@ -168,11 +168,7 @@ export default function DashboardPage() {
       const numericId = String(latestApplication.id ?? "").replace(/D/g, "");
       const letterId = `BYWC/OGT/2026/B2-${numericId.padStart(6, "0")}`;
       const constituency = latestApplication.constituency ?? "";
-      const today = new Date().toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
+      const today = "12 June 2026";
 
       // Fetch template from admin_settings (falls back to built-in defaults if table missing)
       const defaultSubject = "RE: ACCEPTANCE INTO THE BYWC OIL & GAS TRAINING PROGRAMME 2026 \u2014 BATCH 2";

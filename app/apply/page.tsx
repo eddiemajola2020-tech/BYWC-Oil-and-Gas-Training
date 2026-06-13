@@ -301,23 +301,7 @@ export default function ApplyPage() {
         return;
       }
 
-      redirectTimer = setTimeout(async () => {
-        const {
-          data: { session: delayedSession },
-        } = await supabase.auth.getSession();
-
-        if (delayedSession?.user?.email) {
-          setLoggedInEmail(delayedSession.user.email);
-
-          setFormData((prev) => ({
-            ...prev,
-            email: delayedSession.user.email || "",
-          }));
-
-          setAuthChecked(true);
-          return;
-        }
-
+      redirectTimer = setTimeout(() => {
         window.location.href = "/login?redirect=/apply#application-form";
       }, 1200);
     }
