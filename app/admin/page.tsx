@@ -2677,6 +2677,8 @@ export default function AdminPage() {
     if (newStatus === "Accepted") {
       updatePayload.selection_bucket =
         "Published - Applicant Visible / Batch 2 - Priority Override / Accepted Manually";
+    } else if (newStatus === "Rejected" || newStatus === "Remaining Eligible") {
+      updatePayload.selection_bucket = null;
     }
 
     const { error } = await supabase
