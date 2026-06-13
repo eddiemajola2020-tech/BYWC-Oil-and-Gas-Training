@@ -791,6 +791,7 @@ export default function AdminPage() {
   const [masterSelecting, setMasterSelecting] = useState(false);
   const [publishingSelection, setPublishingSelection] = useState(false);
   const [publishingBatch2, setPublishingBatch2] = useState(false);
+  const [sendingBatch2Messages, setSendingBatch2Messages] = useState(false);
   const [publishingRejected, setPublishingRejected] = useState(false);
   const [markingBatch1Arrived, setMarkingBatch1Arrived] = useState(false);
 
@@ -3966,25 +3967,97 @@ export default function AdminPage() {
     await loadConstituencyDispatch();
   }
 
-  function getSuccessfulApplicantMessage(application: Application) {
+  function getSuccessfulApplicantMessage(_application: Application) {
     return `Congratulations! 🎉
 
-You have been successfully selected to participate in the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026.
+You have been successfully selected to participate in the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026 — Batch 2.
 
-Participants are expected to arrive at the University of Botswana, Gaborone Campus on 31 May 2026 before 12:00 noon to allow for accommodation allocation and settling in well on time.
+Reporting & Orientation:
 
-Participants are expected to attend the official programme launch on 01 June 2026 at BA ISAGO University, Gaborone Campus at 8:00 AM.
+Venue: University of Botswana, in front of the Student Centre. Report on Sunday between 13:00 and 15:00 (1–3 pm). Formal orientation begins Monday at 08:00. Accommodation and meals are provided for all 10 days.
 
 Important Information:
 
 • Bring your Omang/ID for registration.
 • Attendance throughout the programme is mandatory.
 • Meals will be provided during the training period.
-• Further programme information will be shared during registration.
+• Download your acceptance letter from your dashboard and bring it (printed or on your phone).
 
-We congratulate you on your successful selection and look forward to welcoming you to this exciting opportunity within Botswana's growing oil and gas sector.
+We look forward to welcoming you to this exciting opportunity within Botswana's growing oil and gas sector.
 
-Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026.`;
+BYWC Programme Administration`;
+  }
+
+  async function handleSendBatch2InboxMessages() {
+    const confirmed = window.confirm(
+      "Send inbox messages to all published Batch 2 applicants?\n\nThis will write a success notification to the portal inbox of every applicant whose selection bucket starts with 'Published - Applicant Visible / Batch 2'. Existing messages will be overwritten.\n\nNo emails or SMS will be sent."
+    );
+    if (!confirmed) return;
+
+    setSendingBatch2Messages(true);
+    setSelectionProgress({
+      active: true,
+      title: "Sending Batch 2 Inbox Messages",
+      phase: "Loading",
+      detail: "Fetching published Batch 2 applicants...",
+      current: 0,
+      total: 1,
+    });
+
+    const { data, error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .select("id, application_id, first_name, last_name, email, selection_bucket")
+      .ilike("selection_bucket", "Published - Applicant Visible / Batch 2 -%");
+
+    if (error || !data) {
+      alert("Failed to load Batch 2 applicants: " + (error?.message ?? "no data"));
+      setSendingBatch2Messages(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    if (data.length === 0) {
+      alert("No published Batch 2 applicants found.");
+      setSendingBatch2Messages(false);
+      setSelectionProgress(EMPTY_SELECTION_PROGRESS);
+      return;
+    }
+
+    setSelectionProgress({
+      active: true,
+      title: "Sending Batch 2 Inbox Messages",
+      phase: "Sending",
+      detail: `Sending to ${data.length} applicants...`,
+      current: 0,
+      total: data.length,
+    });
+
+    let completed = 0;
+    let failed = 0;
+
+    for (const row of data) {
+      try {
+        const app = formatApplication(row);
+        const message = getSuccessfulApplicantMessage(app);
+        await updateApplicationBySafeKey(app, { admin_message: message }, "batch2 inbox message");
+      } catch {
+        failed += 1;
+      } finally {
+        completed += 1;
+        setSelectionProgress({
+          active: true,
+          title: "Sending Batch 2 Inbox Messages",
+          phase: "Sending",
+          detail: `Processed ${completed} of ${data.length}. Failed: ${failed}.`,
+          current: completed,
+          total: data.length,
+        });
+      }
+    }
+
+    alert(`Batch 2 inbox messages sent.\n\nSuccessful: ${data.length - failed}\nFailed: ${failed}`);
+    setSendingBatch2Messages(false);
+    setSelectionProgress(EMPTY_SELECTION_PROGRESS);
   }
 
   function getReservePublishOrderedApplications() {
@@ -5974,12 +6047,23 @@ Welcome to the Botswana Youth, Women & Citizen Oil & Gas Training Programme 2026
                   <button
                     type="button"
                     onClick={handlePublishBatch2}
-                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2 || publishingRejected || markingBatch1Arrived}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2 || publishingRejected || markingBatch1Arrived || sendingBatch2Messages}
                     className="rounded-2xl bg-teal-500 px-5 py-3 text-xs font-black text-white transition hover:bg-teal-600 disabled:opacity-50"
                   >
                     {publishingBatch2
                       ? "Publishing Batch 2..."
                       : "Publish Batch 2"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendBatch2InboxMessages}
+                    disabled={masterSelecting || publishingSelection || nearbyReserveSelecting || publishingBatch2 || publishingRejected || markingBatch1Arrived || sendingBatch2Messages}
+                    className="rounded-2xl bg-indigo-500 px-5 py-3 text-xs font-black text-white transition hover:bg-indigo-600 disabled:opacity-50"
+                  >
+                    {sendingBatch2Messages
+                      ? "Sending Messages..."
+                      : "Send Batch 2 Inbox Messages"}
                   </button>
 
                   <button
