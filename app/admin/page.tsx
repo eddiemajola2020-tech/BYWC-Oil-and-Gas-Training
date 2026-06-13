@@ -1461,6 +1461,7 @@ export default function AdminPage() {
     await Promise.all([
       loadDashboardStats(),
       loadAcceptedApplications(),
+      loadBatch2Applications(),
       loadNearbyReserveApplications(),
       loadReportingStats(),
       loadApplications(showCurrentPageLoader, currentPage),
