@@ -7550,23 +7550,19 @@ BYWC Programme Administration`;
               <p className="mt-2 text-3xl font-black text-orange-300">{batch2Applications.length.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">of 480 seats</p>
             </div>
+            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">Arrived</p>
+              <p className="mt-2 text-3xl font-black text-emerald-300">{batch2Applications.filter(a => a.arrivalStatus === "Arrived").length.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">{batch2Applications.length > 0 ? Math.round((batch2Applications.filter(a => a.arrivalStatus === "Arrived").length / batch2Applications.length) * 100) : 0}% attendance</p>
+            </div>
+            <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Not Arrived</p>
+              <p className="mt-2 text-3xl font-black text-orange-300">{(batch2Applications.length - batch2Applications.filter(a => a.arrivalStatus === "Arrived").length).toLocaleString()}</p>
+            </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
               <p className="mt-2 text-3xl font-black text-white">{batch2ConstituencyRows.length}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">of 61 represented</p>
-            </div>
-            <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-300">Women</p>
-              <p className="mt-2 text-3xl font-black text-pink-300">
-                {batch2Applications.filter(a => (a.gender || "").toLowerCase() === "female").length.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Men</p>
-              <p className="mt-2 text-3xl font-black text-blue-300">
-                {batch2Applications.filter(a => (a.gender || "").toLowerCase() === "male").length.toLocaleString()}
-              </p>
-              <p className="mt-1 text-xs font-semibold text-slate-400">floor: 200</p>
             </div>
           </div>
 
@@ -7608,15 +7604,13 @@ BYWC Programme Administration`;
                           <th className="px-3 py-3 text-left font-black">Phone</th>
                           <th className="px-3 py-3 text-left font-black">Constituency</th>
                           <th className="px-3 py-3 text-left font-black">Gender</th>
-                          <th className="px-3 py-3 text-left font-black">Label</th>
+                          <th className="px-3 py-3 text-left font-black">Arrival</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {visibleBatch2Applications.map((application) => {
-                          const bucket = application.selectionBucket || "";
-                          const labelMatch = bucket.match(/Batch 2 - ([^/]+)/);
-                          const label = labelMatch ? labelMatch[1].trim() : "Batch 2";
                           const isMale = (application.gender || "").toLowerCase() === "male";
+                          const arrived = application.arrivalStatus === "Arrived";
                           return (
                             <tr key={application.id} className="align-top transition hover:bg-white/[0.04] cursor-pointer" onClick={() => setSelectedApplication(application)}>
                               <td className="px-3 py-3">
@@ -7636,8 +7630,8 @@ BYWC Programme Administration`;
                                 </span>
                               </td>
                               <td className="px-3 py-3">
-                                <span className="rounded-full bg-orange-500/10 px-2 py-1 text-[10px] font-black text-orange-300">
-                                  {label}
+                                <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>
+                                  {arrived ? "✓ Arrived" : "Not Arrived"}
                                 </span>
                               </td>
                             </tr>
