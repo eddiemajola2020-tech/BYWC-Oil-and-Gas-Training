@@ -7660,6 +7660,40 @@ BYWC Programme Administration`;
               </div>
             </div>
           </div>
+
+          {/* Recent Sign-ins */}
+          <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400 mb-3">Recent Sign-ins — Batch 2</p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {(() => {
+                const recentB2 = batch2Applications
+                  .filter(a => a.arrivalStatus === "Arrived")
+                  .sort((a, b) => (b.arrivedAt || "").localeCompare(a.arrivedAt || ""))
+                  .slice(0, 12);
+                if (recentB2.length === 0) return (
+                  <p className="col-span-full text-sm font-semibold text-slate-400">No Batch 2 arrivals confirmed yet.</p>
+                );
+                return recentB2.map(application => (
+                  <div
+                    key={application.id}
+                    className="rounded-xl border border-white/10 bg-[#111827] px-3 py-3 cursor-pointer hover:bg-white/[0.06] transition"
+                    onClick={() => setSelectedApplication(application)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-white truncate">{application.firstName} {application.lastName}</p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-500 truncate">{application.constituency || "Unknown"}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-black text-emerald-300">✓</span>
+                    </div>
+                    <p className="mt-2 text-[11px] font-semibold text-slate-400">
+                      {application.arrivedAt ? new Date(application.arrivedAt).toLocaleString() : "—"}
+                    </p>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
         </section>
 
         <section className="mb-5 rounded-[30px] border border-orange-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
