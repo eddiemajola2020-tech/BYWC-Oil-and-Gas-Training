@@ -867,6 +867,7 @@ export default function AdminPage() {
   const [batch2SearchInput, setBatch2SearchInput] = useState("");
   const [batch2Applications, setBatch2Applications] = useState<Application[]>([]);
   const [batch2Loading, setBatch2Loading] = useState(false);
+  const [batch2ExportMenuOpen, setBatch2ExportMenuOpen] = useState(false);
   const [nearbyReserveApplications, setNearbyReserveApplications] = useState<Application[]>(
     [],
   );
@@ -5429,6 +5430,35 @@ BYWC Programme Administration`;
     URL.revokeObjectURL(url);
   }
 
+  function handleExportBatch2Csv(mode: "combined" | "actual" | "special") {
+    const all = batch2Applications;
+    const people =
+      mode === "combined" ? all :
+      mode === "actual"   ? all.filter(a => !isBotetiSpecial(a)) :
+                            all.filter(isBotetiSpecial);
+    if (people.length === 0) { alert("No records for this selection."); return; }
+    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : "BotetiSpecial";
+    const headers = ["First Name","Last Name","Omang","Phone","Email","Constituency","Gender","Arrival","Group"];
+    const rows = people.map(a => {
+      const bucket = a.selectionBucket || "";
+      const groupMatch = bucket.match(/Batch 2 - ([^/]+)/);
+      return [a.firstName, a.lastName, a.omang, a.phone, a.email, a.constituency, a.gender,
+        a.arrivalStatus || "Not Arrived",
+        groupMatch ? groupMatch[1].trim() : "Batch 2"];
+    });
+    const csv = [headers.map(escapeCsvValue).join(","), ...rows.map(r => r.map(escapeCsvValue).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `BYWC-Batch2-${label}-${new Date().toISOString().replace(/[:.]/g,"-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setBatch2ExportMenuOpen(false);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/admin-login");
@@ -7711,6 +7741,31 @@ BYWC Programme Administration`;
               >
                 Export Not Arrived
               </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setBatch2ExportMenuOpen(o => !o)}
+                  className="rounded-2xl border border-teal-500/30 bg-teal-500/10 px-4 py-2.5 text-xs font-black text-teal-300 transition hover:bg-teal-500/20"
+                >
+                  Export ▾
+                </button>
+                {batch2ExportMenuOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl border border-white/10 bg-[#111827] py-1 shadow-xl">
+                    <button type="button" onClick={() => handleExportBatch2Csv("combined")}
+                      className="block w-full px-4 py-2.5 text-left text-xs font-black text-white hover:bg-white/10">
+                      Combined (incl. Boteti)
+                    </button>
+                    <button type="button" onClick={() => handleExportBatch2Csv("actual")}
+                      className="block w-full px-4 py-2.5 text-left text-xs font-black text-teal-300 hover:bg-white/10">
+                      Actual (excl. Boteti)
+                    </button>
+                    <button type="button" onClick={() => handleExportBatch2Csv("special")}
+                      className="block w-full px-4 py-2.5 text-left text-xs font-black text-purple-300 hover:bg-white/10">
+                      Boteti Special only
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -7718,7 +7773,8 @@ BYWC Programme Administration`;
             <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Total Selected</p>
               <p className="mt-2 text-3xl font-black text-orange-300">{batch2Applications.length.toLocaleString()}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-400">of 480 seats</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">incl. Boteti Special · of 480 seats</p>
+              <p className="mt-1 text-xs font-black text-slate-300">{batch2Applications.filter(a => !isBotetiSpecial(a)).length.toLocaleString()} <span className="font-semibold text-slate-500">excl. Boteti</span></p>
             </div>
             <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">Arrived</p>
