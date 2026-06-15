@@ -5278,6 +5278,27 @@ BYWC Programme Administration`;
     URL.revokeObjectURL(url);
   }
 
+  function handleExportBatch2NotArrivedCsv() {
+    const notArrived = batch2Applications.filter(a => a.arrivalStatus !== "Arrived");
+    if (notArrived.length === 0) { alert("All Batch 2 participants have arrived!"); return; }
+    const headers = ["First Name","Last Name","Omang","Phone","Email","Constituency","Gender","Label"];
+    const rows = notArrived.map(a => {
+      const bucket = a.selectionBucket || "";
+      const labelMatch = bucket.match(/Batch 2 - ([^/]+)/);
+      return [a.firstName, a.lastName, a.omang, a.phone, a.email, a.constituency, a.gender, labelMatch ? labelMatch[1].trim() : "Batch 2"];
+    });
+    const csvContent = [headers.map(escapeCsvValue).join(","), ...rows.map(r => r.map(escapeCsvValue).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `BYWC-Batch2-NotArrived-${new Date().toISOString().replace(/[:.]/g,"-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/admin-login");
@@ -5476,9 +5497,12 @@ BYWC Programme Administration`;
     });
   }, [batch2Applications, batch2SearchTerm]);
 
+  const isBotetiSpecial = (a: Application) => (a.selectionBucket || "").includes("Boteti Special");
+
   const batch2ConstituencyRows = useMemo(() => {
     const breakdown = batch2Applications.reduce(
       (acc, application) => {
+        if (isBotetiSpecial(application)) return acc; // exclude from constituency count
         const constituency = application.constituency || "Unknown";
         acc[constituency] = (acc[constituency] || 0) + 1;
         return acc;
@@ -7541,6 +7565,13 @@ BYWC Programme Administration`;
               >
                 {batch2Loading ? "Loading..." : "Refresh Batch 2"}
               </button>
+              <button
+                type="button"
+                onClick={handleExportBatch2NotArrivedCsv}
+                className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5 text-xs font-black text-orange-300 transition hover:bg-orange-500/20"
+              >
+                Export Not Arrived
+              </button>
             </div>
           </div>
 
@@ -7661,6 +7692,64 @@ BYWC Programme Administration`;
             </div>
           </div>
 
+          {/* Boteti Special List */}
+          {(() => {
+            const boteti = batch2Applications.filter(isBotetiSpecial);
+            const botetiWomen = boteti.filter(a => (a.gender || "").toLowerCase() === "female").length;
+            const botetiMen = boteti.filter(a => (a.gender || "").toLowerCase() === "male").length;
+            const botetiArrived = boteti.filter(a => a.arrivalStatus === "Arrived").length;
+            return (
+              <div className="mt-4 rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-400">Boteti Special List</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Counts toward Women/Men totals · excluded from constituency quota</p>
+                  </div>
+                  <div className="flex gap-3 text-xs font-black">
+                    <span className="rounded-full bg-pink-500/10 px-3 py-1 text-pink-300">{botetiWomen} Women</span>
+                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-blue-300">{botetiMen} Men</span>
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-300">{botetiArrived} Arrived</span>
+                  </div>
+                </div>
+                {boteti.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">No Boteti Special entries yet.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup><col className="w-[30%]"/><col className="w-[18%]"/><col className="w-[16%]"/><col className="w-[12%]"/><col className="w-[12%]"/><col className="w-[12%]"/></colgroup>
+                      <thead className="bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Gender</th>
+                          <th className="px-3 py-3 text-left font-black">Arrival</th>
+                          <th className="px-3 py-3 text-left font-black">Label</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {boteti.map(a => {
+                          const isMale = (a.gender || "").toLowerCase() === "male";
+                          const arrived = a.arrivalStatus === "Arrived";
+                          return (
+                            <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
+                              <td className="px-3 py-3"><p className="font-black text-violet-300">{a.firstName} {a.lastName}</p></td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.omang || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.phone || "—"}</td>
+                              <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>{isMale ? "M" : "F"}</span></td>
+                              <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
+                              <td className="px-3 py-3"><span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-black text-violet-300">Boteti</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Recent Sign-ins */}
           <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400 mb-3">Recent Sign-ins — Batch 2</p>
@@ -7695,6 +7784,66 @@ BYWC Programme Administration`;
             </div>
           </div>
         </section>
+
+        {/* ── Combined B1 + B2 Constituency Arrival Tally ── */}
+        {(() => {
+          const b1All = acceptedApplications.filter(a => isInternalBatchOneSelection(a.selectionBucket));
+          const b2All = batch2Applications.filter(a => !isBotetiSpecial(a));
+          const allSelected = [...b1All, ...b2All];
+          const constituencies = Array.from(new Set(allSelected.map(a => a.constituency || "Unknown"))).sort();
+          return (
+            <section className="mb-5 rounded-[30px] border border-sky-500/20 bg-[#030b0f] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
+              <div className="mb-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">Live Constituency Tally</p>
+                <h2 className="mt-1 text-xl font-black text-white">Batch 1 + Batch 2 — Arrived vs Not Arrived by Constituency</h2>
+                <p className="mt-1 text-sm text-slate-400">Monitor replacements — find constituencies with absences and pull from the waitlist</p>
+              </div>
+              <div className="overflow-auto rounded-2xl border border-white/10">
+                <table className="w-full text-[12px]">
+                  <thead className="bg-[#111827] text-slate-300">
+                    <tr>
+                      <th className="px-3 py-3 text-left font-black">Constituency</th>
+                      <th className="px-3 py-3 text-center font-black text-emerald-400">B1 Arrived</th>
+                      <th className="px-3 py-3 text-center font-black text-orange-400">B1 Not Arrived</th>
+                      <th className="px-3 py-3 text-center font-black text-emerald-400">B2 Arrived</th>
+                      <th className="px-3 py-3 text-center font-black text-orange-400">B2 Not Arrived</th>
+                      <th className="px-3 py-3 text-center font-black text-white">Total</th>
+                      <th className="px-3 py-3 text-center font-black text-emerald-300">Total Arrived</th>
+                      <th className="px-3 py-3 text-center font-black text-orange-300">Total Absent</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {constituencies.map(c => {
+                      const b1c = b1All.filter(a => (a.constituency || "Unknown") === c);
+                      const b2c = b2All.filter(a => (a.constituency || "Unknown") === c);
+                      const b1Arr = b1c.filter(a => a.arrivalStatus === "Arrived").length;
+                      const b2Arr = b2c.filter(a => a.arrivalStatus === "Arrived").length;
+                      const total = b1c.length + b2c.length;
+                      const totalArr = b1Arr + b2Arr;
+                      const totalAbs = total - totalArr;
+                      return (
+                        <tr key={c} className={`hover:bg-white/[0.03] ${totalAbs > 0 ? "bg-orange-500/[0.02]" : ""}`}>
+                          <td className="px-3 py-2 font-bold text-slate-200">{c}</td>
+                          <td className="px-3 py-2 text-center font-black text-emerald-300">{b1Arr}</td>
+                          <td className="px-3 py-2 text-center font-black text-orange-300">{b1c.length - b1Arr}</td>
+                          <td className="px-3 py-2 text-center font-black text-emerald-300">{b2Arr}</td>
+                          <td className="px-3 py-2 text-center font-black text-orange-300">{b2c.length - b2Arr}</td>
+                          <td className="px-3 py-2 text-center font-black text-white">{total}</td>
+                          <td className="px-3 py-2 text-center font-black text-emerald-300">{totalArr}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${totalAbs > 0 ? "bg-orange-500/15 text-orange-300" : "bg-emerald-500/10 text-emerald-400"}`}>
+                              {totalAbs > 0 ? `${totalAbs} absent` : "All present"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          );
+        })()}
 
         <section className="mb-5 rounded-[30px] border border-orange-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
