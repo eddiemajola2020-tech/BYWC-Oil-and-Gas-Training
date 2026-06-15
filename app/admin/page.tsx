@@ -10215,6 +10215,22 @@ BYWC Programme Administration`;
                 />
               </div>
 
+              {/* Next of Kin */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Next of Kin</p>
+                  <p className="mt-1 text-sm text-white font-semibold">{selectedApplication.emergencyContactName || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Phone</p>
+                  <p className="mt-1 text-sm text-white">{selectedApplication.emergencyContactNumber || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Relationship</p>
+                  <p className="mt-1 text-sm text-white">{selectedApplication.emergencyContactRelationship || "—"}</p>
+                </div>
+              </div>
+
               {/* Arrival Status */}
               <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 rounded-xl border p-4 ${selectedApplication.arrivalStatus === "Arrived" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10 bg-white/[0.02]"}`}>
                 <div>
