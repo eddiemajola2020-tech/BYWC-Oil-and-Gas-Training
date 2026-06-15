@@ -855,6 +855,7 @@ export default function AdminPage() {
   >({});
   const [fullBackupExporting, setFullBackupExporting] = useState(false);
   const [batchOneExporting, setBatchOneExporting] = useState(false);
+  const [batchOneStatsExporting, setBatchOneStatsExporting] = useState(false);
   const [batchTwoExporting, setBatchTwoExporting] = useState(false);
   const [acceptedApplications, setAcceptedApplications] = useState<Application[]>(
     [],
@@ -5007,6 +5008,88 @@ BYWC Programme Administration`;
     }
   }
 
+  function handleExportBatch1Stats() {
+    setBatchOneStatsExporting(true);
+    try {
+      const b1 = acceptedApplications.filter(
+        a => isInternalBatchOneSelection(a.selectionBucket)
+          && !(a.selectionBucket || "").includes("Phikwe Special")
+          && !(a.selectionBucket || "").includes("Gamalete-GoodHope Special")
+      );
+
+      if (b1.length === 0) { alert("No Batch 1 data loaded."); return; }
+
+      const isF = (a: Application) => (a.gender || "").toLowerCase().startsWith("f");
+      const isM = (a: Application) => (a.gender || "").toLowerCase().startsWith("m");
+      const isYouth = (a: Application) => { const age = Number(a.age); return !Number.isNaN(age) && age <= 35; };
+
+      // Group by constituency
+      const map: Record<string, Application[]> = {};
+      for (const a of b1) {
+        const c = a.constituency || "Unknown";
+        if (!map[c]) map[c] = [];
+        map[c].push(a);
+      }
+
+      const headers = [
+        "Constituency",
+        "Total",
+        "Women",
+        "Men",
+        "Youth (≤35)",
+        "Youth Women",
+        "Youth Men",
+        "Non-Youth (>35)",
+        "Non-Youth Women",
+        "Non-Youth Men",
+      ];
+
+      const rows = Object.entries(map)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([constituency, people]) => {
+          const women = people.filter(isF).length;
+          const men = people.filter(isM).length;
+          const youth = people.filter(isYouth).length;
+          const youthW = people.filter(a => isF(a) && isYouth(a)).length;
+          const youthM = people.filter(a => isM(a) && isYouth(a)).length;
+          const nonYouth = people.length - youth;
+          const nonYouthW = people.filter(a => isF(a) && !isYouth(a)).length;
+          const nonYouthM = people.filter(a => isM(a) && !isYouth(a)).length;
+          return [constituency, people.length, women, men, youth, youthW, youthM, nonYouth, nonYouthW, nonYouthM];
+        });
+
+      // Totals row
+      const totals = ["TOTAL", b1.length,
+        b1.filter(isF).length,
+        b1.filter(isM).length,
+        b1.filter(isYouth).length,
+        b1.filter(a => isF(a) && isYouth(a)).length,
+        b1.filter(a => isM(a) && isYouth(a)).length,
+        b1.filter(a => !isYouth(a)).length,
+        b1.filter(a => isF(a) && !isYouth(a)).length,
+        b1.filter(a => isM(a) && !isYouth(a)).length,
+      ];
+
+      const csv = [
+        headers.map(escapeCsvValue).join(","),
+        ...rows.map(r => r.map(escapeCsvValue).join(",")),
+        totals.map(escapeCsvValue).join(","),
+      ].join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `BYWC-batch1-constituency-stats-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } finally {
+      setBatchOneStatsExporting(false);
+    }
+  }
+
   async function handleExportBatchTwoSelectedCsv() {
     setBatchTwoExporting(true);
     try {
@@ -6062,6 +6145,15 @@ BYWC Programme Administration`;
                     className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-emerald-300 transition hover:bg-white/10 disabled:opacity-50"
                   >
                     {batchOneExporting ? "Exporting..." : "Export Batch 1"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportBatch1Stats}
+                    disabled={batchOneStatsExporting}
+                    className="block w-full rounded-xl px-4 py-3 text-left text-xs font-black text-sky-300 transition hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {batchOneStatsExporting ? "Exporting..." : "Batch 1 — Constituency Stats"}
                   </button>
 
                   <button
