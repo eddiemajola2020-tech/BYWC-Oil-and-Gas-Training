@@ -15,10 +15,15 @@ type Application = {
   firstName?: string;
   lastName?: string;
   email?: string;
+  phone?: string;
+  omang?: string;
   constituency?: string;
   omangFile?: string;
   cvFile?: string;
   certificateFile?: string;
+  emergencyContactName?: string | null;
+  emergencyContactNumber?: string | null;
+  emergencyContactRelationship?: string | null;
 };
 
 type AdminMessage = {
@@ -102,10 +107,15 @@ export default function DashboardPage() {
         firstName: data.first_name,
         lastName: data.last_name,
         email: data.email,
+        phone: data.phone,
+        omang: data.omang,
         constituency: data.constituency,
         omangFile: data.omang_file,
         cvFile: data.cv_file,
         certificateFile: data.certificate_file,
+        emergencyContactName: data.emergency_contact_name,
+        emergencyContactNumber: data.emergency_contact_number,
+        emergencyContactRelationship: data.emergency_contact_relationship,
       };
 
       setLatestApplication(latest);
@@ -743,6 +753,61 @@ We look forward to welcoming you. For enquiries call 355 2838 or WhatsApp 747816
                         ).toLocaleDateString()
                       : "-"}
                   </span>
+                </div>
+
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-sm text-slate-500">Email</span>
+                  <span className="text-sm font-bold text-blue-950">
+                    {latestApplication?.email || "-"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-sm text-slate-500">Phone</span>
+                  <span className="text-sm font-bold text-blue-950">
+                    {latestApplication?.phone || "-"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-sm text-slate-500">Omang / ID</span>
+                  <span className="text-sm font-bold text-blue-950">
+                    {latestApplication?.omang || "-"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-sm text-slate-500">Constituency</span>
+                  <span className="text-sm font-bold text-blue-950">
+                    {latestApplication?.constituency || "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Next of Kin */}
+              <div className="mt-5 rounded-[20px] border border-blue-100 bg-blue-50 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">
+                  Next of Kin
+                </p>
+                <div className="mt-3 grid gap-2">
+                  <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
+                    <span className="text-sm text-slate-500">Full Name</span>
+                    <span className="text-sm font-bold text-blue-950">
+                      {latestApplication?.emergencyContactName || "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
+                    <span className="text-sm text-slate-500">Phone</span>
+                    <span className="text-sm font-bold text-blue-950">
+                      {latestApplication?.emergencyContactNumber || "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
+                    <span className="text-sm text-slate-500">Relationship</span>
+                    <span className="text-sm font-bold text-blue-950">
+                      {latestApplication?.emergencyContactRelationship || "-"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
