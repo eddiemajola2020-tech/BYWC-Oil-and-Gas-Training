@@ -7834,7 +7834,7 @@ BYWC Programme Administration`;
 
         {/* ── Combined B1 + B2 Constituency Arrival Tally ── */}
         {(() => {
-          const b1All = acceptedApplications.filter(a => isInternalBatchOneSelection(a.selectionBucket));
+          const b1All = acceptedApplications.filter(a => isInternalBatchOneSelection(a.selectionBucket) && !(a.selectionBucket || "").includes("Phikwe Special") && !(a.selectionBucket || "").includes("Gamalete-GoodHope Special"));
           const b2All = batch2Applications.filter(a => !isBotetiSpecial(a));
           const allSelected = [...b1All, ...b2All];
           const constituencies = Array.from(new Set(allSelected.map(a => a.constituency || "Unknown"))).sort();
@@ -8439,14 +8439,20 @@ BYWC Programme Administration`;
         ══════════════════════════════════════════════════════════════ */}
         {activeSection === "batch1" && (() => {
           const b1All = acceptedApplications.filter(a => isInternalBatchOneSelection(a.selectionBucket));
+          const isB1PhikweSpecial = (a: Application) => (a.selectionBucket || "").includes("Phikwe Special");
+          const isB1GoodhopeSpecial = (a: Application) => (a.selectionBucket || "").includes("Gamalete-GoodHope Special");
+          const isB1Special = (a: Application) => isB1PhikweSpecial(a) || isB1GoodhopeSpecial(a);
+          const b1Core = b1All.filter(a => !isB1Special(a));
+          const b1Phikwe = b1All.filter(isB1PhikweSpecial);
+          const b1Goodhope = b1All.filter(isB1GoodhopeSpecial);
           const searchLow = searchInput.toLowerCase();
           const visibleB1 = searchInput
-            ? b1All.filter(a => `${a.firstName} ${a.lastName} ${a.email || ""} ${a.omang || ""} ${a.phone || ""} ${a.constituency || ""}`.toLowerCase().includes(searchLow))
-            : b1All;
+            ? b1Core.filter(a => `${a.firstName} ${a.lastName} ${a.email || ""} ${a.omang || ""} ${a.phone || ""} ${a.constituency || ""}`.toLowerCase().includes(searchLow))
+            : b1Core;
           const b1Arrived = b1All.filter(a => a.arrivalStatus === "Arrived").length;
           const b1NotArrived = b1All.length - b1Arrived;
           const b1ConstRows = Object.entries(
-            b1All.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
+            b1Core.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
           ).sort(([, a], [, b]) => b - a);
           return (
             <section className="rounded-[32px] border border-emerald-500/30 bg-[#030f08] p-5 shadow-[0_20px_60px_rgba(16,185,129,0.08)]">
@@ -8564,6 +8570,100 @@ BYWC Programme Administration`;
                   </div>
                 </div>
               </div>
+
+              {/* ── Phikwe Special Group ── */}
+              {b1Phikwe.length > 0 && (
+                <div className="mt-6 rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="rounded-full bg-purple-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-purple-300">Phikwe Special Group</span>
+                    <span className="text-[11px] font-semibold text-slate-400">{b1Phikwe.filter(a => a.arrivalStatus === "Arrived").length} arrived / {b1Phikwe.length} total</span>
+                    <span className="text-[11px] font-semibold text-pink-300">{b1Phikwe.filter(a => (a.gender || "").toLowerCase().includes("female")).length}F</span>
+                    <span className="text-[11px] font-semibold text-blue-300">{b1Phikwe.filter(a => (a.gender || "").toLowerCase().includes("male") && !(a.gender || "").toLowerCase().includes("female")).length}M</span>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border border-white/10">
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <table className="w-full table-fixed text-[12px]">
+                        <colgroup><col className="w-[30%]" /><col className="w-[18%]" /><col className="w-[16%]" /><col className="w-[12%]" /><col className="w-[14%]" /></colgroup>
+                        <thead className="sticky top-0 z-10 bg-[#1a0a2e] text-slate-300">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-black">Applicant</th>
+                            <th className="px-3 py-2 text-left font-black">Omang</th>
+                            <th className="px-3 py-2 text-left font-black">Phone</th>
+                            <th className="px-3 py-2 text-left font-black">Gender</th>
+                            <th className="px-3 py-2 text-left font-black">Arrival</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {b1Phikwe.map(a => {
+                            const arrived = a.arrivalStatus === "Arrived";
+                            const isMale = (a.gender || "").toLowerCase().includes("male") && !(a.gender || "").toLowerCase().includes("female");
+                            return (
+                              <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
+                                <td className="px-3 py-2 font-black text-purple-300">{a.firstName} {a.lastName}</td>
+                                <td className="px-3 py-2 text-slate-300">{a.omang || "—"}</td>
+                                <td className="px-3 py-2 text-slate-300">{a.phone || "—"}</td>
+                                <td className="px-3 py-2">
+                                  {a.gender ? <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>{isMale ? "M" : "F"}</span> : <span className="text-slate-500">—</span>}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Gamalete-GoodHope Special Group ── */}
+              {b1Goodhope.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="rounded-full bg-purple-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-purple-300">Gamalete-GoodHope Special Group</span>
+                    <span className="text-[11px] font-semibold text-slate-400">{b1Goodhope.filter(a => a.arrivalStatus === "Arrived").length} arrived / {b1Goodhope.length} total</span>
+                    <span className="text-[11px] font-semibold text-pink-300">{b1Goodhope.filter(a => (a.gender || "").toLowerCase().includes("female")).length}F</span>
+                    <span className="text-[11px] font-semibold text-blue-300">{b1Goodhope.filter(a => (a.gender || "").toLowerCase().includes("male") && !(a.gender || "").toLowerCase().includes("female")).length}M</span>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border border-white/10">
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <table className="w-full table-fixed text-[12px]">
+                        <colgroup><col className="w-[30%]" /><col className="w-[18%]" /><col className="w-[16%]" /><col className="w-[12%]" /><col className="w-[14%]" /></colgroup>
+                        <thead className="sticky top-0 z-10 bg-[#1a0a2e] text-slate-300">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-black">Applicant</th>
+                            <th className="px-3 py-2 text-left font-black">Omang</th>
+                            <th className="px-3 py-2 text-left font-black">Phone</th>
+                            <th className="px-3 py-2 text-left font-black">Gender</th>
+                            <th className="px-3 py-2 text-left font-black">Arrival</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {b1Goodhope.map(a => {
+                            const arrived = a.arrivalStatus === "Arrived";
+                            const isMale = (a.gender || "").toLowerCase().includes("male") && !(a.gender || "").toLowerCase().includes("female");
+                            return (
+                              <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
+                                <td className="px-3 py-2 font-black text-purple-300">{a.firstName} {a.lastName}</td>
+                                <td className="px-3 py-2 text-slate-300">{a.omang || "—"}</td>
+                                <td className="px-3 py-2 text-slate-300">{a.phone || "—"}</td>
+                                <td className="px-3 py-2">
+                                  {a.gender ? <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>{isMale ? "M" : "F"}</span> : <span className="text-slate-500">—</span>}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           );
         })()}
