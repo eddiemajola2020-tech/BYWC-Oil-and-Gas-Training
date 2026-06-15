@@ -1355,7 +1355,7 @@ export default function AdminPage() {
         const { data, error } = await supabase
           .from(APPLICATIONS_TABLE)
           .select("*")
-          .eq("status", "Accepted")
+          .in("status", ["Accepted", "Completed"])
           .order("constituency", { ascending: true })
           .order("first_name", { ascending: true })
           .order("last_name", { ascending: true })
