@@ -93,7 +93,8 @@ type AuditAction =
   | "selection_publish"
   | "nearby_reserve_selection"
   | "message_saved"
-  | "data_request_update";
+  | "data_request_update"
+  | "profile_edit";
 
 type AuditLog = {
   id: string | number;
@@ -834,6 +835,9 @@ export default function AdminPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedApplication, setSelectedApplication] =
     useState<Application | null>(null);
+  const [profileEditMode, setProfileEditMode] = useState(false);
+  const [profileEditDraft, setProfileEditDraft] = useState<Partial<Application>>({});
+  const [profileEditSaving, setProfileEditSaving] = useState(false);
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>(
     {},
   );
@@ -2665,6 +2669,49 @@ export default function AdminPage() {
       await handleToolsLoadDiagnostics();
     }
     setToolsFixingAnomalies(false);
+  }
+
+  async function handleSaveProfileEdit() {
+    if (!selectedApplication?.databaseId) return;
+    setProfileEditSaving(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      if (profileEditDraft.phone !== undefined) payload.phone = profileEditDraft.phone;
+      if (profileEditDraft.email !== undefined) payload.email = profileEditDraft.email;
+      if (profileEditDraft.omang !== undefined) payload.omang = profileEditDraft.omang;
+      if (profileEditDraft.constituency !== undefined) payload.constituency = profileEditDraft.constituency;
+      if (profileEditDraft.district !== undefined) payload.district = profileEditDraft.district;
+      if (profileEditDraft.townVillage !== undefined) payload.town_village = profileEditDraft.townVillage;
+      if (profileEditDraft.firstName !== undefined) payload.first_name = profileEditDraft.firstName;
+      if (profileEditDraft.lastName !== undefined) payload.last_name = profileEditDraft.lastName;
+
+      const { error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .update(payload)
+        .eq("id", selectedApplication.databaseId);
+
+      if (error) { alert("Failed to save: " + error.message); return; }
+
+      const updated = { ...selectedApplication, ...profileEditDraft };
+      setSelectedApplication(updated);
+      setApplications((prev) => prev.map((a) => a.id === updated.id ? updated : a));
+      setAcceptedApplications((prev) => prev.map((a) => a.id === updated.id ? updated : a));
+      setBatch2Applications((prev) => prev.map((a) => a.id === updated.id ? updated : a));
+
+      await logAdminAction({
+        action: "profile_edit",
+        applicationId: selectedApplication.applicationId,
+        details: {
+          fieldsUpdated: Object.keys(profileEditDraft),
+          applicantName: `${updated.firstName} ${updated.lastName}`,
+        },
+      });
+
+      setProfileEditMode(false);
+      setProfileEditDraft({});
+    } finally {
+      setProfileEditSaving(false);
+    }
   }
 
   async function handleStatusChange(
@@ -9980,41 +10027,109 @@ BYWC Programme Administration`;
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div>
                   <h2 className="text-2xl font-bold">
-                    {selectedApplication.firstName}{" "}
-                    {selectedApplication.lastName}
+                    {profileEditMode ? (
+                      <span className="flex gap-2">
+                        <input
+                          className="bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-xl font-bold w-36"
+                          value={profileEditDraft.firstName ?? selectedApplication.firstName}
+                          onChange={(e) => setProfileEditDraft((d) => ({ ...d, firstName: e.target.value }))}
+                        />
+                        <input
+                          className="bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-xl font-bold w-36"
+                          value={profileEditDraft.lastName ?? selectedApplication.lastName}
+                          onChange={(e) => setProfileEditDraft((d) => ({ ...d, lastName: e.target.value }))}
+                        />
+                      </span>
+                    ) : (
+                      <>{selectedApplication.firstName}{" "}{selectedApplication.lastName}</>
+                    )}
                   </h2>
                   <p className="text-slate-400">
                     {selectedApplication.applicationId}
                   </p>
                 </div>
 
-                <button
-                  onClick={() => setSelectedApplication(null)}
-                  className="border border-white/10 bg-[#111827] text-white px-4 py-2 rounded-lg font-semibold hover:bg-white/10"
-                >
-                  Close
-                </button>
+                <div className="flex gap-2">
+                  {profileEditMode ? (
+                    <>
+                      <button
+                        onClick={() => { setProfileEditMode(false); setProfileEditDraft({}); }}
+                        className="border border-white/10 bg-[#111827] text-white px-4 py-2 rounded-lg font-semibold hover:bg-white/10"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveProfileEdit}
+                        disabled={profileEditSaving}
+                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-semibold"
+                      >
+                        {profileEditSaving ? "Saving…" : "Save"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => { setProfileEditMode(true); setProfileEditDraft({}); }}
+                        className="border border-amber-500/40 bg-amber-500/10 text-amber-300 px-4 py-2 rounded-lg font-semibold hover:bg-amber-500/20"
+                      >
+                        Edit Profile
+                      </button>
+                      <button
+                        onClick={() => { setSelectedApplication(null); setProfileEditMode(false); setProfileEditDraft({}); }}
+                        className="border border-white/10 bg-[#111827] text-white px-4 py-2 rounded-lg font-semibold hover:bg-white/10"
+                      >
+                        Close
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <Detail label="Email" value={selectedApplication.email} />
-                <Detail label="Phone" value={selectedApplication.phone} />
-                <Detail label="Omang" value={selectedApplication.omang} />
+                {profileEditMode ? (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Email</p>
+                    <input className="mt-1 w-full bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-sm" value={profileEditDraft.email ?? selectedApplication.email} onChange={(e) => setProfileEditDraft((d) => ({ ...d, email: e.target.value }))} />
+                  </div>
+                ) : <Detail label="Email" value={selectedApplication.email} />}
+                {profileEditMode ? (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Phone</p>
+                    <input className="mt-1 w-full bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-sm" value={profileEditDraft.phone ?? selectedApplication.phone} onChange={(e) => setProfileEditDraft((d) => ({ ...d, phone: e.target.value }))} />
+                  </div>
+                ) : <Detail label="Phone" value={selectedApplication.phone} />}
+                {profileEditMode ? (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Omang</p>
+                    <input className="mt-1 w-full bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-sm" value={profileEditDraft.omang ?? selectedApplication.omang} onChange={(e) => setProfileEditDraft((d) => ({ ...d, omang: e.target.value }))} />
+                  </div>
+                ) : <Detail label="Omang" value={selectedApplication.omang} />}
                 <Detail label="Gender" value={selectedApplication.gender} />
                 <Detail label="Age" value={selectedApplication.age} />
                 <Detail
                   label="Citizenship"
                   value={selectedApplication.citizenship}
                 />
-                <Detail label="District" value={selectedApplication.district} />
-                <Detail
-                  label="Constituency"
-                  value={selectedApplication.constituency}
-                />
-                <Detail
-                  label="Town / Village"
-                  value={selectedApplication.townVillage}
-                />
+                {profileEditMode ? (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">District</p>
+                    <input className="mt-1 w-full bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-sm" value={profileEditDraft.district ?? (selectedApplication.district || "")} onChange={(e) => setProfileEditDraft((d) => ({ ...d, district: e.target.value }))} />
+                  </div>
+                ) : <Detail label="District" value={selectedApplication.district} />}
+                {profileEditMode ? (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Constituency</p>
+                    <select className="mt-1 w-full bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-sm" value={profileEditDraft.constituency ?? selectedApplication.constituency} onChange={(e) => setProfileEditDraft((d) => ({ ...d, constituency: e.target.value }))}>
+                      {constituencies.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                ) : <Detail label="Constituency" value={selectedApplication.constituency} />}
+                {profileEditMode ? (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Town / Village</p>
+                    <input className="mt-1 w-full bg-[#111827] border border-white/20 rounded px-2 py-1 text-white text-sm" value={profileEditDraft.townVillage ?? (selectedApplication.townVillage || "")} onChange={(e) => setProfileEditDraft((d) => ({ ...d, townVillage: e.target.value }))} />
+                  </div>
+                ) : <Detail label="Town / Village" value={selectedApplication.townVillage} />}
                 <Detail
                   label="Employment Status"
                   value={selectedApplication.employmentStatus}
