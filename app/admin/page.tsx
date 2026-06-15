@@ -7837,58 +7837,107 @@ BYWC Programme Administration`;
           const b1All = acceptedApplications.filter(a => isInternalBatchOneSelection(a.selectionBucket) && !(a.selectionBucket || "").includes("Phikwe Special") && !(a.selectionBucket || "").includes("Gamalete-GoodHope Special"));
           const b2All = batch2Applications.filter(a => !isBotetiSpecial(a));
           const allSelected = [...b1All, ...b2All];
-          const constituencies = Array.from(new Set(allSelected.map(a => a.constituency || "Unknown"))).sort();
+          const constituencyList = Array.from(new Set(allSelected.map(a => a.constituency || "Unknown"))).sort();
+          const isF = (a: Application) => (a.gender || "").toLowerCase().startsWith("f");
+          const isM = (a: Application) => (a.gender || "").toLowerCase().startsWith("m");
+          const totalWomen = allSelected.filter(isF).length;
+          const totalMen = allSelected.filter(isM).length;
+          const totalAll = allSelected.length;
+          const totalArrived = allSelected.filter(a => a.arrivalStatus === "Arrived").length;
           return (
+            <>
             <section className="mb-5 rounded-[30px] border border-sky-500/20 bg-[#030b0f] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
-              <div className="mb-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">Live Constituency Tally</p>
-                <h2 className="mt-1 text-xl font-black text-white">Batch 1 + Batch 2 — Arrived vs Not Arrived by Constituency</h2>
-                <p className="mt-1 text-sm text-slate-400">Monitor replacements — find constituencies with absences and pull from the waitlist</p>
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-400">Live Constituency Tally</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Batch 1 + Batch 2 — Arrived vs Not Arrived by Constituency</h2>
+                  <p className="mt-1 text-sm text-slate-400">Excludes all special groups. Monitor replacements — find constituencies with absences and pull from the waitlist.</p>
+                </div>
+                <div className="flex shrink-0 gap-3">
+                  <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 px-4 py-2 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-pink-300">Women</p>
+                    <p className="text-xl font-black text-pink-200">{totalWomen}</p>
+                  </div>
+                  <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 px-4 py-2 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-300">Men</p>
+                    <p className="text-xl font-black text-blue-200">{totalMen}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Total</p>
+                    <p className="text-xl font-black text-white">{totalAll}</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300">Arrived</p>
+                    <p className="text-xl font-black text-emerald-200">{totalArrived}</p>
+                  </div>
+                </div>
               </div>
               <div className="overflow-auto rounded-2xl border border-white/10">
                 <table className="w-full text-[12px]">
                   <thead className="bg-[#111827] text-slate-300">
                     <tr>
                       <th className="px-3 py-3 text-left font-black">Constituency</th>
-                      <th className="px-3 py-3 text-center font-black text-emerald-400">B1 Arrived</th>
-                      <th className="px-3 py-3 text-center font-black text-orange-400">B1 Not Arrived</th>
-                      <th className="px-3 py-3 text-center font-black text-emerald-400">B2 Arrived</th>
-                      <th className="px-3 py-3 text-center font-black text-orange-400">B2 Not Arrived</th>
+                      <th className="px-3 py-3 text-center font-black text-pink-300">Women</th>
+                      <th className="px-3 py-3 text-center font-black text-blue-300">Men</th>
                       <th className="px-3 py-3 text-center font-black text-white">Total</th>
-                      <th className="px-3 py-3 text-center font-black text-emerald-300">Total Arrived</th>
-                      <th className="px-3 py-3 text-center font-black text-orange-300">Total Absent</th>
+                      <th className="px-3 py-3 text-center font-black text-emerald-400">B1 Arr</th>
+                      <th className="px-3 py-3 text-center font-black text-orange-400">B1 Absent</th>
+                      <th className="px-3 py-3 text-center font-black text-emerald-400">B2 Arr</th>
+                      <th className="px-3 py-3 text-center font-black text-orange-400">B2 Absent</th>
+                      <th className="px-3 py-3 text-center font-black text-emerald-300">Arrived</th>
+                      <th className="px-3 py-3 text-center font-black text-orange-300">Absent</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {constituencies.map(c => {
+                    {constituencyList.map(c => {
                       const b1c = b1All.filter(a => (a.constituency || "Unknown") === c);
                       const b2c = b2All.filter(a => (a.constituency || "Unknown") === c);
+                      const all = [...b1c, ...b2c];
                       const b1Arr = b1c.filter(a => a.arrivalStatus === "Arrived").length;
                       const b2Arr = b2c.filter(a => a.arrivalStatus === "Arrived").length;
-                      const total = b1c.length + b2c.length;
+                      const women = all.filter(isF).length;
+                      const men = all.filter(isM).length;
+                      const total = all.length;
                       const totalArr = b1Arr + b2Arr;
                       const totalAbs = total - totalArr;
                       return (
                         <tr key={c} className={`hover:bg-white/[0.03] ${totalAbs > 0 ? "bg-orange-500/[0.02]" : ""}`}>
                           <td className="px-3 py-2 font-bold text-slate-200">{c}</td>
+                          <td className="px-3 py-2 text-center font-black text-pink-300">{women}</td>
+                          <td className="px-3 py-2 text-center font-black text-blue-300">{men}</td>
+                          <td className="px-3 py-2 text-center font-black text-white">{total}</td>
                           <td className="px-3 py-2 text-center font-black text-emerald-300">{b1Arr}</td>
                           <td className="px-3 py-2 text-center font-black text-orange-300">{b1c.length - b1Arr}</td>
                           <td className="px-3 py-2 text-center font-black text-emerald-300">{b2Arr}</td>
                           <td className="px-3 py-2 text-center font-black text-orange-300">{b2c.length - b2Arr}</td>
-                          <td className="px-3 py-2 text-center font-black text-white">{total}</td>
                           <td className="px-3 py-2 text-center font-black text-emerald-300">{totalArr}</td>
                           <td className="px-3 py-2 text-center">
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${totalAbs > 0 ? "bg-orange-500/15 text-orange-300" : "bg-emerald-500/10 text-emerald-400"}`}>
-                              {totalAbs > 0 ? `${totalAbs} absent` : "All present"}
+                              {totalAbs > 0 ? `${totalAbs} absent` : "✓ All"}
                             </span>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
+                  <tfoot className="bg-[#0f172a] text-slate-200">
+                    <tr>
+                      <td className="px-3 py-3 font-black text-sky-300">TOTALS</td>
+                      <td className="px-3 py-3 text-center font-black text-pink-300">{totalWomen}</td>
+                      <td className="px-3 py-3 text-center font-black text-blue-300">{totalMen}</td>
+                      <td className="px-3 py-3 text-center font-black text-white">{totalAll}</td>
+                      <td className="px-3 py-3 text-center font-black text-emerald-300">{b1All.filter(a => a.arrivalStatus === "Arrived").length}</td>
+                      <td className="px-3 py-3 text-center font-black text-orange-300">{b1All.filter(a => a.arrivalStatus !== "Arrived").length}</td>
+                      <td className="px-3 py-3 text-center font-black text-emerald-300">{b2All.filter(a => a.arrivalStatus === "Arrived").length}</td>
+                      <td className="px-3 py-3 text-center font-black text-orange-300">{b2All.filter(a => a.arrivalStatus !== "Arrived").length}</td>
+                      <td className="px-3 py-3 text-center font-black text-emerald-300">{totalArrived}</td>
+                      <td className="px-3 py-3 text-center font-black text-orange-300">{totalAll - totalArrived}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </section>
+            </>
           );
         })()}
 
