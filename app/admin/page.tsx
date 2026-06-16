@@ -5430,14 +5430,15 @@ BYWC Programme Administration`;
     URL.revokeObjectURL(url);
   }
 
-  function handleExportBatch2Csv(mode: "combined" | "actual" | "special") {
+  function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng") {
     const all = batch2Applications;
     const people =
-      mode === "combined" ? all :
-      mode === "actual"   ? all.filter(a => !isBotetiSpecial(a)) :
-                            all.filter(isBotetiSpecial);
+      mode === "combined"  ? all :
+      mode === "actual"    ? all.filter(a => !isBatch2Special(a)) :
+      mode === "chomeleng" ? all.filter(isChomelenSpecial) :
+                             all.filter(isBotetiSpecial);
     if (people.length === 0) { alert("No records for this selection."); return; }
-    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : "BotetiSpecial";
+    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : mode === "chomeleng" ? "ChomelenSpecial" : "BotetiSpecial";
     const headers = ["First Name","Last Name","Omang","Phone","Email","Constituency","Gender","Arrival","Group"];
     const rows = people.map(a => {
       const bucket = a.selectionBucket || "";
@@ -5658,11 +5659,13 @@ BYWC Programme Administration`;
   }, [batch2Applications, batch2SearchTerm]);
 
   const isBotetiSpecial = (a: Application) => (a.selectionBucket || "").includes("Boteti Special");
+  const isChomelenSpecial = (a: Application) => (a.selectionBucket || "").includes("Chomeleng Special");
+  const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a);
 
   const batch2ConstituencyRows = useMemo(() => {
     const breakdown = batch2Applications.reduce(
       (acc, application) => {
-        if (isBotetiSpecial(application)) return acc; // exclude from constituency count
+        if (isBatch2Special(application)) return acc; // exclude special groups from constituency count
         const constituency = application.constituency || "Unknown";
         acc[constituency] = (acc[constituency] || 0) + 1;
         return acc;
@@ -7753,15 +7756,19 @@ BYWC Programme Administration`;
                   <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl border border-white/10 bg-[#111827] py-1 shadow-xl">
                     <button type="button" onClick={() => handleExportBatch2Csv("combined")}
                       className="block w-full px-4 py-2.5 text-left text-xs font-black text-white hover:bg-white/10">
-                      Combined (incl. Boteti)
+                      Combined (incl. all special)
                     </button>
                     <button type="button" onClick={() => handleExportBatch2Csv("actual")}
                       className="block w-full px-4 py-2.5 text-left text-xs font-black text-teal-300 hover:bg-white/10">
-                      Actual (excl. Boteti)
+                      Actual (excl. special)
                     </button>
                     <button type="button" onClick={() => handleExportBatch2Csv("special")}
                       className="block w-full px-4 py-2.5 text-left text-xs font-black text-purple-300 hover:bg-white/10">
                       Boteti Special only
+                    </button>
+                    <button type="button" onClick={() => handleExportBatch2Csv("chomeleng")}
+                      className="block w-full px-4 py-2.5 text-left text-xs font-black text-violet-300 hover:bg-white/10">
+                      Chomeleng Special only
                     </button>
                   </div>
                 )}
@@ -7773,8 +7780,8 @@ BYWC Programme Administration`;
             <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Total Selected</p>
               <p className="mt-2 text-3xl font-black text-orange-300">{batch2Applications.length.toLocaleString()}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-400">incl. Boteti Special · of 480 seats</p>
-              <p className="mt-1 text-xs font-black text-slate-300">{batch2Applications.filter(a => !isBotetiSpecial(a)).length.toLocaleString()} <span className="font-semibold text-slate-500">excl. Boteti</span></p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">incl. special groups · of 480 seats</p>
+              <p className="mt-1 text-xs font-black text-slate-300">{batch2Applications.filter(a => !isBatch2Special(a)).length.toLocaleString()} <span className="font-semibold text-slate-500">excl. special</span></p>
             </div>
             <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">Arrived</p>
@@ -7945,6 +7952,63 @@ BYWC Programme Administration`;
             );
           })()}
 
+          {/* Chomeleng Special List */}
+          {(() => {
+            const chomeleng = batch2Applications.filter(isChomelenSpecial);
+            const chomelengWomen = chomeleng.filter(a => (a.gender || "").toLowerCase() === "female").length;
+            const chomelengMen = chomeleng.filter(a => (a.gender || "").toLowerCase() === "male").length;
+            const chomelengArrived = chomeleng.filter(a => a.arrivalStatus === "Arrived").length;
+            return (
+              <div className="mt-4 rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-400">Chomeleng Multi-Purpose Special List</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Counts toward Women/Men totals · excluded from constituency quota</p>
+                  </div>
+                  <div className="flex gap-3 text-xs font-black">
+                    <span className="rounded-full bg-pink-500/10 px-3 py-1 text-pink-300">{chomelengWomen} Women</span>
+                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-blue-300">{chomelengMen} Men</span>
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-300">{chomelengArrived} Arrived</span>
+                  </div>
+                </div>
+                {chomeleng.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">No Chomeleng Special entries yet.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup><col className="w-[30%]"/><col className="w-[18%]"/><col className="w-[16%]"/><col className="w-[16%]"/><col className="w-[12%]"/><col className="w-[8%]"/></colgroup>
+                      <thead className="bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Constituency</th>
+                          <th className="px-3 py-3 text-left font-black">Arrival</th>
+                          <th className="px-3 py-3 text-left font-black">Label</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {chomeleng.map(a => {
+                          const arrived = a.arrivalStatus === "Arrived";
+                          return (
+                            <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
+                              <td className="px-3 py-3"><p className="font-black text-violet-300">{a.firstName} {a.lastName}</p></td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.omang || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.phone || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.constituency || "Unknown"}</td>
+                              <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
+                              <td className="px-3 py-3"><span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-black text-violet-300">Chomeleng</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Recent Sign-ins */}
           <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400 mb-3">Recent Sign-ins — Batch 2</p>
@@ -7983,7 +8047,7 @@ BYWC Programme Administration`;
         {/* ── Combined B1 + B2 Constituency Arrival Tally ── */}
         {(() => {
           const b1All = acceptedApplications.filter(a => isInternalBatchOneSelection(a.selectionBucket) && !(a.selectionBucket || "").includes("Phikwe Special") && !(a.selectionBucket || "").includes("Gamalete-GoodHope Special"));
-          const b2All = batch2Applications.filter(a => !isBotetiSpecial(a));
+          const b2All = batch2Applications.filter(a => !isBatch2Special(a));
           const allSelected = [...b1All, ...b2All];
           const constituencyList = Array.from(new Set(allSelected.map(a => a.constituency || "Unknown"))).sort();
           const isF = (a: Application) => (a.gender || "").toLowerCase().startsWith("f");
