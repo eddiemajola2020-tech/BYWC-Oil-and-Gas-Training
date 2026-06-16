@@ -838,6 +838,12 @@ export default function AdminPage() {
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [profileEditDraft, setProfileEditDraft] = useState<Partial<Application>>({});
   const [profileEditSaving, setProfileEditSaving] = useState(false);
+  const [addSpecialOpen, setAddSpecialOpen] = useState(false);
+  const [addSpecialSaving, setAddSpecialSaving] = useState(false);
+  const [addSpecialDraft, setAddSpecialDraft] = useState({
+    firstName: "", lastName: "", email: "", phone: "", omang: "",
+    gender: "", age: "", constituency: "", group: "Boteti",
+  });
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>(
     {},
   );
@@ -5430,6 +5436,53 @@ BYWC Programme Administration`;
     URL.revokeObjectURL(url);
   }
 
+  async function handleAddSpecialMember() {
+    const d = addSpecialDraft;
+    if (!d.firstName.trim() || !d.lastName.trim()) { alert("First and last name are required."); return; }
+    setAddSpecialSaving(true);
+    const bucketMap: Record<string, string> = {
+      "Boteti":    "Published - Applicant Visible / Batch 2 - Boteti Special",
+      "Chomeleng": "Published - Applicant Visible / Batch 2 - Chomeleng Special",
+    };
+    const bucket = bucketMap[d.group] || bucketMap["Boteti"];
+    const slug = `${d.firstName.toLowerCase().replace(/\s+/g,"")}.${d.lastName.toLowerCase().replace(/\s+/g,"")}`;
+    const appId = `BYWC-2026-${d.group.toUpperCase()}-MANUAL-${Date.now()}`;
+    const record = {
+      application_id: appId,
+      first_name: d.firstName.trim(),
+      last_name: d.lastName.trim(),
+      email: d.email.trim() || `noemail.${slug}.manual@bywc.internal`,
+      phone: d.phone.trim() || null,
+      omang: d.omang.trim() || null,
+      gender: d.gender || null,
+      age: d.age ? parseInt(d.age) : null,
+      constituency: d.constituency.trim() || null,
+      town_village: null,
+      disability_status: "No",
+      citizenship: "Citizen",
+      employment_status: "",
+      interest_area: "",
+      highest_qualification: "",
+      bgcse_points: null,
+      preferred_language: "",
+      status: "Accepted",
+      selection_bucket: bucket,
+      arrival_status: "Arrived",
+      arrived_at: new Date().toISOString(),
+      arrival_confirmed_by: currentAdminEmail || "admin",
+      submitted_at: new Date().toISOString(),
+    };
+    try {
+      const { error } = await supabase.from(APPLICATIONS_TABLE).insert(record);
+      if (error) { alert("Failed to add: " + error.message); return; }
+      await loadBatch2Applications();
+      setAddSpecialOpen(false);
+      setAddSpecialDraft({ firstName: "", lastName: "", email: "", phone: "", omang: "", gender: "", age: "", constituency: "", group: "Boteti" });
+    } finally {
+      setAddSpecialSaving(false);
+    }
+  }
+
   function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng") {
     const all = batch2Applications;
     const people =
@@ -7739,6 +7792,13 @@ BYWC Programme Administration`;
               </button>
               <button
                 type="button"
+                onClick={() => setAddSpecialOpen(true)}
+                className="rounded-2xl border border-violet-500/40 bg-violet-500/10 px-4 py-2.5 text-xs font-black text-violet-300 transition hover:bg-violet-500/20"
+              >
+                + Add to Special Group
+              </button>
+              <button
+                type="button"
                 onClick={handleExportBatch2NotArrivedCsv}
                 className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5 text-xs font-black text-orange-300 transition hover:bg-orange-500/20"
               >
@@ -8389,6 +8449,100 @@ BYWC Programme Administration`;
           </div>
         </section>
         </> )} {/* end selection tab */}
+
+        {/* ── Add to Special Group modal ── */}
+        {addSpecialOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg rounded-[28px] border border-violet-500/30 bg-[#0f172a] p-6 shadow-2xl">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-violet-400">Special Group</p>
+                  <h3 className="mt-0.5 text-lg font-black text-white">Add Member Manually</h3>
+                </div>
+                <button type="button" onClick={() => setAddSpecialOpen(false)} className="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white">✕</button>
+              </div>
+
+              <div className="mb-4">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Group</label>
+                <select
+                  value={addSpecialDraft.group}
+                  onChange={e => setAddSpecialDraft(d => ({ ...d, group: e.target.value }))}
+                  className="w-full rounded-2xl border border-violet-500/30 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400"
+                >
+                  <option value="Boteti">Batch 2 — Boteti Special</option>
+                  <option value="Chomeleng">Batch 2 — Chomeleng Special</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">First Name *</label>
+                  <input value={addSpecialDraft.firstName} onChange={e => setAddSpecialDraft(d => ({ ...d, firstName: e.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400" placeholder="First name" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Last Name *</label>
+                  <input value={addSpecialDraft.lastName} onChange={e => setAddSpecialDraft(d => ({ ...d, lastName: e.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400" placeholder="Last name" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Phone</label>
+                  <input value={addSpecialDraft.phone} onChange={e => setAddSpecialDraft(d => ({ ...d, phone: e.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400" placeholder="7xxxxxxx" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Omang / ID</label>
+                  <input value={addSpecialDraft.omang} onChange={e => setAddSpecialDraft(d => ({ ...d, omang: e.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400" placeholder="ID number" />
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Email</label>
+                <input value={addSpecialDraft.email} onChange={e => setAddSpecialDraft(d => ({ ...d, email: e.target.value }))}
+                  className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400" placeholder="email@example.com (leave blank for placeholder)" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Gender</label>
+                  <select value={addSpecialDraft.gender} onChange={e => setAddSpecialDraft(d => ({ ...d, gender: e.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400">
+                    <option value="">—</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Age</label>
+                  <input type="number" value={addSpecialDraft.age} onChange={e => setAddSpecialDraft(d => ({ ...d, age: e.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400" placeholder="Age" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Constituency</label>
+                  <input value={addSpecialDraft.constituency} onChange={e => setAddSpecialDraft(d => ({ ...d, constituency: e.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#111827] px-4 py-2.5 text-sm text-white outline-none focus:border-violet-400" placeholder="Optional" />
+                </div>
+              </div>
+
+              <p className="mb-4 text-[11px] text-slate-500">Member will be added as <span className="text-emerald-400 font-black">Arrived</span> automatically.</p>
+
+              <div className="flex gap-3">
+                <button type="button" onClick={handleAddSpecialMember} disabled={addSpecialSaving}
+                  className="flex-1 rounded-2xl bg-violet-600 py-3 text-sm font-black text-white transition hover:bg-violet-700 disabled:opacity-50">
+                  {addSpecialSaving ? "Saving..." : "Add Member"}
+                </button>
+                <button type="button" onClick={() => setAddSpecialOpen(false)}
+                  className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-black text-slate-400 hover:text-white">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Pending data-protection banner — always visible so it's never missed */}
         {pendingRequestsCount > 0 && (
