@@ -924,6 +924,7 @@ export default function AdminPage() {
     "batch1" | "waitlist" | "rejected" | "deferred" | "women" | "men" | "lucky-ones"
   >("applications");
   const [luckyOnesApplications, setLuckyOnesApplications] = useState<Application[]>([]);
+  const [luckyOnesGraduated, setLuckyOnesGraduated] = useState<Application[]>([]);
   const [luckyOnesLoading, setLuckyOnesLoading] = useState(false);
   const [luckyOnesSaving, setLuckyOnesSaving] = useState(false);
 
@@ -1428,12 +1429,12 @@ export default function AdminPage() {
   async function loadLuckyOnes() {
     setLuckyOnesLoading(true);
     try {
-      const { data, error } = await supabase
-        .from(APPLICATIONS_TABLE)
-        .select("*")
-        .eq("selection_bucket", "Lucky Ones")
-        .order("first_name", { ascending: true });
-      if (!error) setLuckyOnesApplications((data || []).map(formatApplication));
+      const [activeRes, graduatedRes] = await Promise.all([
+        supabase.from(APPLICATIONS_TABLE).select("*").eq("selection_bucket", "Lucky Ones").order("first_name", { ascending: true }),
+        supabase.from(APPLICATIONS_TABLE).select("*").ilike("selection_bucket", "%Lucky Ones Promoted%").order("first_name", { ascending: true }),
+      ]);
+      if (!activeRes.error) setLuckyOnesApplications((activeRes.data || []).map(formatApplication));
+      if (!graduatedRes.error) setLuckyOnesGraduated((graduatedRes.data || []).map(formatApplication));
     } finally {
       setLuckyOnesLoading(false);
     }
@@ -1443,7 +1444,7 @@ export default function AdminPage() {
     setLuckyOnesSaving(true);
     try {
       const isAlready = (application.selectionBucket || "") === "Lucky Ones";
-      const newBucket = isAlready ? "Remaining Eligible" : "Lucky Ones";
+      const newBucket = isAlready ? "Remaining Eligible - Reviewed" : "Lucky Ones";
       const { error } = await supabase
         .from(APPLICATIONS_TABLE)
         .update({ selection_bucket: newBucket })
@@ -5777,6 +5778,7 @@ BYWC Programme Administration`;
   const isChomelenSpecial = (a: Application) => (a.selectionBucket || "").includes("Chomeleng Special");
   const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a);
   const isLuckyOnesPromoted = (a: Application) => (a.selectionBucket || "").includes("Lucky Ones Promoted");
+  const isLuckyOnesReviewed = (a: Application) => (a.selectionBucket || "").includes("Remaining Eligible - Reviewed");
 
   const batch2ConstituencyRows = useMemo(() => {
     const breakdown = batch2Applications.reduce(
@@ -8764,19 +8766,26 @@ BYWC Programme Administration`;
                   </thead>
 
                   <tbody>
-                    {filteredApplications.map((application) => (
+                    {filteredApplications.map((application) => {
+                      const isReviewedRow = isLuckyOnesReviewed(application);
+                      return (
                       <tr
                         key={
                           application.applicationId ||
                           application.id ||
                           application.email
                         }
-                        className="border-t border-white/10 transition hover:bg-white/[0.03]"
+                        className={`border-t border-white/10 transition ${isReviewedRow ? "bg-slate-500/[0.05] opacity-60 hover:bg-slate-500/[0.09]" : "hover:bg-white/[0.03]"}`}
                       >
                         <td className="px-3 py-3 align-top">
-                          <p className="truncate font-black text-white">
-                            {application.firstName} {application.lastName}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <p className={`truncate font-black ${isReviewedRow ? "text-slate-400" : "text-white"}`}>
+                              {application.firstName} {application.lastName}
+                            </p>
+                            {isReviewedRow && (
+                              <span className="shrink-0 rounded-full bg-slate-500/20 px-1.5 py-0.5 text-[9px] font-black text-slate-400">Reviewed</span>
+                            )}
+                          </div>
                           <p className="mt-1 break-words text-[10px] font-semibold leading-4 text-slate-400">
                             {application.applicationId}
                           </p>
@@ -8873,7 +8882,8 @@ BYWC Programme Administration`;
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -9236,13 +9246,18 @@ BYWC Programme Administration`;
                           <tbody className="divide-y divide-white/5">
                             {filteredApplications.map(application => {
                               const isMale = (application.gender || "").toLowerCase() === "male";
+                              const isReviewed = isLuckyOnesReviewed(application);
+                              const isLucky = (application.selectionBucket || "") === "Lucky Ones";
                               return (
-                                <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                <tr key={application.id} className={`align-top cursor-pointer transition ${isReviewed ? "bg-slate-500/[0.06] hover:bg-slate-500/[0.10] opacity-70" : "hover:bg-white/[0.04]"}`} onClick={() => setSelectedApplication(application)}>
                                   <td className="px-3 py-3">
                                     <div className="flex items-center gap-1.5">
-                                      <p className="font-black text-yellow-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
-                                      {(application.selectionBucket || "") === "Lucky Ones" && (
+                                      <p className={`font-black underline-offset-2 hover:underline ${isReviewed ? "text-slate-400" : "text-yellow-300"}`}>{application.firstName} {application.lastName}</p>
+                                      {isLucky && (
                                         <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-black text-yellow-300">⭐</span>
+                                      )}
+                                      {isReviewed && (
+                                        <span className="rounded-full bg-slate-500/20 px-1.5 py-0.5 text-[9px] font-black text-slate-400">Reviewed</span>
                                       )}
                                     </div>
                                     <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
@@ -9320,9 +9335,9 @@ BYWC Programme Administration`;
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 mb-5">
+            <div className="grid gap-3 sm:grid-cols-4 mb-5">
               <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-yellow-300">Total Flagged</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-yellow-300">Flagged</p>
                 <p className="mt-2 text-3xl font-black text-yellow-300">{luckyOnesApplications.length}</p>
               </div>
               <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
@@ -9333,6 +9348,14 @@ BYWC Programme Administration`;
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Men</p>
                 <p className="mt-2 text-3xl font-black text-blue-300">{luckyOnesApplications.filter(a => (a.gender || "").toLowerCase() === "male").length}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => { const el = document.getElementById("lucky-ones-graduated"); if (el) el.scrollIntoView({ behavior: "smooth" }); }}
+                className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-left hover:bg-emerald-500/10 transition"
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Accepted → B2</p>
+                <p className="mt-2 text-3xl font-black text-emerald-300">{luckyOnesGraduated.length}</p>
+              </button>
             </div>
 
             {luckyOnesLoading ? (
@@ -9409,6 +9432,82 @@ BYWC Programme Administration`;
                 </table>
               </div>
             )}
+
+            {/* Graduated / Promoted list */}
+            <div id="lucky-ones-graduated" className="mt-6">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-black text-emerald-300 uppercase tracking-[0.12em]">✅ Accepted → Batch 2 ({luckyOnesGraduated.length})</h3>
+                {luckyOnesGraduated.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const headers = ["First Name", "Last Name", "Phone", "Omang", "Email", "Gender", "Age", "Constituency", "Score"];
+                      const rows = luckyOnesGraduated.map(a => [
+                        a.firstName, a.lastName, a.phone, a.omang, a.email,
+                        a.gender, a.age, a.constituency, a.autoReviewScore ?? "",
+                      ]);
+                      const csv = [headers, ...rows].map(r => r.map(v => `"${(v ?? "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url; link.download = "lucky-ones-promoted.csv"; link.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-black text-emerald-300 hover:bg-emerald-500/20 transition"
+                  >
+                    Export CSV
+                  </button>
+                )}
+              </div>
+              {luckyOnesGraduated.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
+                  <p className="text-xs text-slate-500">No one has been promoted yet. Use "Accept → B2" above.</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-emerald-500/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-emerald-500/20 bg-emerald-500/5">
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] text-emerald-400">Applicant</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] text-emerald-400">📞 Phone</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] text-emerald-400">Omang</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] text-emerald-400">Constituency</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] text-emerald-400">Gender</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] text-emerald-400">Score</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-emerald-500/10">
+                      {luckyOnesGraduated.map((application) => {
+                        const isMale = (application.gender || "").toLowerCase() === "male";
+                        return (
+                          <tr key={application.id} className="align-top transition cursor-pointer hover:bg-emerald-500/[0.04]" onClick={() => setSelectedApplication(application)}>
+                            <td className="px-3 py-3">
+                              <p className="font-black text-emerald-300 underline-offset-2 hover:underline">
+                                {application.firstName} {application.lastName}
+                              </p>
+                              <p className="text-[10px] text-slate-500">{application.email}</p>
+                            </td>
+                            <td className="px-3 py-3 font-mono text-xs text-slate-300">{application.phone || "—"}</td>
+                            <td className="px-3 py-3 font-mono text-xs text-slate-400">{application.omang || "—"}</td>
+                            <td className="px-3 py-3 text-xs text-slate-300">{application.constituency || "—"}</td>
+                            <td className="px-3 py-3">
+                              <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
+                                {isMale ? "M" : "F"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-300">
+                                {application.autoReviewScore ?? "—"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
