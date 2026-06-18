@@ -1462,6 +1462,25 @@ export default function AdminPage() {
     }
   }
 
+  async function handlePromoteLuckyOne(application: Application) {
+    setLuckyOnesSaving(true);
+    try {
+      const newBucket = "Internal Hold - Do Not Notify / Batch 2 - Lucky Ones Promoted";
+      const { error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .update({ selection_bucket: newBucket })
+        .eq("id", application.databaseId);
+      if (error) { alert("Failed: " + error.message); return; }
+      const updated = { ...application, selectionBucket: newBucket };
+      setLuckyOnesApplications(prev => prev.filter(a => a.id !== updated.id));
+      setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
+      setBatch2Applications(prev => [...prev.filter(a => a.id !== updated.id), updated]);
+      if (selectedApplication?.id === updated.id) setSelectedApplication(updated);
+    } finally {
+      setLuckyOnesSaving(false);
+    }
+  }
+
   async function loadNearbyReserveApplications() {
     setNearbyReserveApplicationsLoading(true);
 
@@ -5757,6 +5776,7 @@ BYWC Programme Administration`;
   const isBotetiSpecial = (a: Application) => (a.selectionBucket || "").includes("Boteti Special");
   const isChomelenSpecial = (a: Application) => (a.selectionBucket || "").includes("Chomeleng Special");
   const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a);
+  const isLuckyOnesPromoted = (a: Application) => (a.selectionBucket || "").includes("Lucky Ones Promoted");
 
   const batch2ConstituencyRows = useMemo(() => {
     const breakdown = batch2Applications.reduce(
@@ -7948,12 +7968,16 @@ BYWC Programme Administration`;
                         {visibleBatch2Applications.map((application) => {
                           const isMale = (application.gender || "").toLowerCase() === "male";
                           const arrived = application.arrivalStatus === "Arrived";
+                          const fromLucky = isLuckyOnesPromoted(application);
                           return (
-                            <tr key={application.id} className="align-top transition hover:bg-white/[0.04] cursor-pointer" onClick={() => setSelectedApplication(application)}>
+                            <tr key={application.id} className={`align-top transition cursor-pointer ${fromLucky ? "bg-yellow-500/[0.07] hover:bg-yellow-500/[0.12]" : "hover:bg-white/[0.04]"}`} onClick={() => setSelectedApplication(application)}>
                               <td className="px-3 py-3">
-                                <p className="font-black text-orange-300 underline-offset-2 hover:underline">
-                                  {application.firstName} {application.lastName}
-                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className={`font-black underline-offset-2 hover:underline ${fromLucky ? "text-yellow-300" : "text-orange-300"}`}>
+                                    {application.firstName} {application.lastName}
+                                  </p>
+                                  {fromLucky && <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-black text-yellow-300">⭐ Lucky</span>}
+                                </div>
                                 <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
                                   {application.email || "No email"}
                                 </p>
@@ -9367,10 +9391,16 @@ BYWC Programme Administration`;
                             </span>
                           </td>
                           <td className="px-3 py-3">
-                            <button type="button" onClick={() => handleMarkLuckyOne(application)} disabled={luckyOnesSaving}
-                              className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-black text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition">
-                              Remove
-                            </button>
+                            <div className="flex flex-col gap-1">
+                              <button type="button" onClick={() => handlePromoteLuckyOne(application)} disabled={luckyOnesSaving}
+                                className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50 transition">
+                                Accept → B2
+                              </button>
+                              <button type="button" onClick={() => handleMarkLuckyOne(application)} disabled={luckyOnesSaving}
+                                className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-black text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition">
+                                Remove
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
