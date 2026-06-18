@@ -1465,13 +1465,13 @@ export default function AdminPage() {
   async function handlePromoteLuckyOne(application: Application) {
     setLuckyOnesSaving(true);
     try {
-      const newBucket = "Internal Hold - Do Not Notify / Batch 2 - Lucky Ones Promoted";
+      const newBucket = "Published - Applicant Visible / Batch 2 - Lucky Ones Promoted";
       const { error } = await supabase
         .from(APPLICATIONS_TABLE)
-        .update({ selection_bucket: newBucket })
+        .update({ selection_bucket: newBucket, status: "Accepted" })
         .eq("id", application.databaseId);
       if (error) { alert("Failed: " + error.message); return; }
-      const updated = { ...application, selectionBucket: newBucket };
+      const updated = { ...application, selectionBucket: newBucket, status: "Accepted" as const };
       setLuckyOnesApplications(prev => prev.filter(a => a.id !== updated.id));
       setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
       setBatch2Applications(prev => [...prev.filter(a => a.id !== updated.id), updated]);
