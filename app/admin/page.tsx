@@ -921,8 +921,11 @@ export default function AdminPage() {
 
   const [activeSection, setActiveSection] = useState<
     "applications" | "programme" | "selection" | "compliance" | "tools" |
-    "batch1" | "waitlist" | "rejected" | "deferred" | "women" | "men"
+    "batch1" | "waitlist" | "rejected" | "deferred" | "women" | "men" | "lucky-ones"
   >("applications");
+  const [luckyOnesApplications, setLuckyOnesApplications] = useState<Application[]>([]);
+  const [luckyOnesLoading, setLuckyOnesLoading] = useState(false);
+  const [luckyOnesSaving, setLuckyOnesSaving] = useState(false);
 
   const [selectedArrivalIds, setSelectedArrivalIds] = useState<Set<string>>(new Set());
   const [bulkDeferring, setBulkDeferring] = useState(false);
@@ -1058,7 +1061,7 @@ export default function AdminPage() {
           query.or("selection_bucket.ilike.Internal Hold - Do Not Notify / Batch 2 -%,selection_bucket.ilike.Published - Applicant Visible / Batch 2 -%"),
         ),
         getApplicationCount((query) =>
-          query.ilike("selection_bucket", "%Remaining Eligible%"),
+          query.or("selection_bucket.ilike.%Remaining Eligible%,selection_bucket.eq.Lucky Ones"),
         ),
         getApplicationCount((query) => query.eq("status", "Accepted")),
         getApplicationCount((query) =>
@@ -1277,7 +1280,7 @@ export default function AdminPage() {
     } else if (statusFilter === "Internal Batch 2") {
       query = query.or("selection_bucket.ilike.Internal Hold - Do Not Notify / Batch 2 -%,selection_bucket.ilike.Published - Applicant Visible / Batch 2 -%");
     } else if (statusFilter === "Internal Remaining Eligible") {
-      query = query.ilike("selection_bucket", "%Remaining Eligible%");
+      query = query.or("selection_bucket.ilike.%Remaining Eligible%,selection_bucket.eq.Lucky Ones");
     } else if (statusFilter === "Internal Rejected") {
       query = query.ilike("selection_bucket", "%Rejected -%");
     } else if (statusFilter === "Submitted") {
@@ -1419,6 +1422,43 @@ export default function AdminPage() {
       setBatch2Applications(all);
     } finally {
       setBatch2Loading(false);
+    }
+  }
+
+  async function loadLuckyOnes() {
+    setLuckyOnesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .select("*")
+        .eq("selection_bucket", "Lucky Ones")
+        .order("first_name", { ascending: true });
+      if (!error) setLuckyOnesApplications((data || []).map(formatApplication));
+    } finally {
+      setLuckyOnesLoading(false);
+    }
+  }
+
+  async function handleMarkLuckyOne(application: Application) {
+    setLuckyOnesSaving(true);
+    try {
+      const isAlready = (application.selectionBucket || "") === "Lucky Ones";
+      const newBucket = isAlready ? "Remaining Eligible" : "Lucky Ones";
+      const { error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .update({ selection_bucket: newBucket })
+        .eq("id", application.databaseId);
+      if (error) { alert("Failed: " + error.message); return; }
+      const updated = { ...application, selectionBucket: newBucket };
+      setSelectedApplication(updated);
+      setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
+      if (!isAlready) {
+        setLuckyOnesApplications(prev => [...prev.filter(a => a.id !== updated.id), updated].sort((a, b) => (a.firstName || "").localeCompare(b.firstName || "")));
+      } else {
+        setLuckyOnesApplications(prev => prev.filter(a => a.id !== updated.id));
+      }
+    } finally {
+      setLuckyOnesSaving(false);
     }
   }
 
@@ -1580,6 +1620,9 @@ export default function AdminPage() {
     }
     if (activeSection === "selection") {
       loadBatch2Applications();
+    }
+    if (activeSection === "lucky-ones") {
+      loadLuckyOnes();
     }
   }, [activeSection]);
 
@@ -6487,6 +6530,7 @@ BYWC Programme Administration`;
           <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("batch1"); setStatusFilter("Internal Batch 1"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("selection"); }} />
           <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("waitlist"); setStatusFilter("Internal Remaining Eligible"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
+          <StatCard title="Lucky Ones" value={luckyOnesApplications.length} accent="yellow" onClick={() => { setActiveSection("lucky-ones"); loadLuckyOnes(); }} />
           <StatCard title="B2 Deferred" value={batch2DeferredCount} accent="amber" onClick={() => { setActiveSection("selection"); }} />
           <StatCard title="Rejected" value={rejectedCount} accent="red" onClick={() => { setActiveSection("rejected"); setStatusFilter("Internal Rejected"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Deferred" value={deferredCount} accent="amber" onClick={() => { setActiveSection("deferred"); setStatusFilter("Deferred"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
@@ -9171,7 +9215,12 @@ BYWC Programme Administration`;
                               return (
                                 <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
                                   <td className="px-3 py-3">
-                                    <p className="font-black text-yellow-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="font-black text-yellow-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
+                                      {(application.selectionBucket || "") === "Lucky Ones" && (
+                                        <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-black text-yellow-300">⭐</span>
+                                      )}
+                                    </div>
                                     <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
                                   </td>
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
@@ -9223,6 +9272,115 @@ BYWC Programme Administration`;
             </section>
           );
         })()}
+
+        {/* ══════════════════════════════════════════════════════════════
+            LUCKY ONES SECTION
+        ══════════════════════════════════════════════════════════════ */}
+        {activeSection === "lucky-ones" && (
+          <section className="rounded-[32px] border border-yellow-500/40 bg-[#0f0c00] p-5 shadow-[0_20px_60px_rgba(234,179,8,0.12)]">
+            <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-yellow-400">Internal — Admin Only</p>
+                <h2 className="mt-1 text-xl font-black text-white">⭐ Lucky Ones — {luckyOnesApplications.length} people</h2>
+                <p className="mt-1 text-sm text-slate-400">Waitlisted applicants flagged for a call · status unchanged · not notified</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={loadLuckyOnes} disabled={luckyOnesLoading}
+                  className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-50">
+                  {luckyOnesLoading ? "Loading…" : "Refresh"}
+                </button>
+                <button type="button" onClick={() => { setActiveSection("waitlist"); setStatusFilter("Internal Remaining Eligible"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }}
+                  className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">
+                  ← Waitlist
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 mb-5">
+              <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-yellow-300">Total Flagged</p>
+                <p className="mt-2 text-3xl font-black text-yellow-300">{luckyOnesApplications.length}</p>
+              </div>
+              <div className="rounded-2xl border border-pink-500/20 bg-pink-500/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-300">Women</p>
+                <p className="mt-2 text-3xl font-black text-pink-300">{luckyOnesApplications.filter(a => (a.gender || "").toLowerCase() === "female").length}</p>
+              </div>
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Men</p>
+                <p className="mt-2 text-3xl font-black text-blue-300">{luckyOnesApplications.filter(a => (a.gender || "").toLowerCase() === "male").length}</p>
+              </div>
+            </div>
+
+            {luckyOnesLoading ? (
+              <div className="p-10 text-center text-sm font-semibold text-slate-400">Loading…</div>
+            ) : luckyOnesApplications.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-10 text-center">
+                <p className="text-2xl mb-2">⭐</p>
+                <p className="text-sm font-semibold text-slate-400">No Lucky Ones yet.</p>
+                <p className="mt-1 text-xs text-slate-600">Open any waitlisted applicant and click "⭐ Lucky One" to flag them.</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-white/10">
+                <table className="w-full table-fixed text-[12px]">
+                  <colgroup>
+                    <col className="w-[24%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                  </colgroup>
+                  <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
+                    <tr>
+                      <th className="px-3 py-3 text-left font-black">Applicant</th>
+                      <th className="px-3 py-3 text-left font-black text-yellow-400">📞 Phone</th>
+                      <th className="px-3 py-3 text-left font-black">Omang</th>
+                      <th className="px-3 py-3 text-left font-black">Constituency</th>
+                      <th className="px-3 py-3 text-left font-black">Gender</th>
+                      <th className="px-3 py-3 text-left font-black">Score</th>
+                      <th className="px-3 py-3 text-left font-black">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {luckyOnesApplications.map(application => {
+                      const isMale = (application.gender || "").toLowerCase() === "male";
+                      return (
+                        <tr key={application.id} className="align-top transition hover:bg-yellow-500/[0.04]">
+                          <td className="px-3 py-3 cursor-pointer" onClick={() => setSelectedApplication(application)}>
+                            <p className="font-black text-yellow-300 hover:underline">{application.firstName} {application.lastName}</p>
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="font-black text-white">{application.phone || "—"}</span>
+                          </td>
+                          <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
+                          <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
+                          <td className="px-3 py-3">
+                            <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
+                              {isMale ? "M" : "F"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-[10px] font-black text-yellow-300">
+                              {application.autoReviewScore ?? "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <button type="button" onClick={() => handleMarkLuckyOne(application)} disabled={luckyOnesSaving}
+                              className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-black text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition">
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════
             REJECTED DEDICATED SECTION
@@ -10589,6 +10747,18 @@ BYWC Programme Administration`;
                       >
                         Edit Profile
                       </button>
+                      {(() => {
+                        const isLucky = (selectedApplication.selectionBucket || "") === "Lucky Ones";
+                        return (
+                          <button
+                            onClick={() => handleMarkLuckyOne(selectedApplication)}
+                            disabled={luckyOnesSaving}
+                            className={`px-4 py-2 rounded-lg font-semibold disabled:opacity-50 transition ${isLucky ? "border border-yellow-500/40 bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30" : "border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20"}`}
+                          >
+                            {luckyOnesSaving ? "…" : isLucky ? "⭐ Lucky One ✓" : "⭐ Lucky One"}
+                          </button>
+                        );
+                      })()}
                       <button
                         onClick={() => { setSelectedApplication(null); setProfileEditMode(false); setProfileEditDraft({}); }}
                         className="border border-white/10 bg-[#111827] text-white px-4 py-2 rounded-lg font-semibold hover:bg-white/10"
