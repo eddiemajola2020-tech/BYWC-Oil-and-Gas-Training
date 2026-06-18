@@ -1474,8 +1474,8 @@ export default function AdminPage() {
       const updated = { ...application, selectionBucket: newBucket, status: "Accepted" as const };
       setLuckyOnesApplications(prev => prev.filter(a => a.id !== updated.id));
       setApplications(prev => prev.map(a => a.id === updated.id ? updated : a));
-      setBatch2Applications(prev => [...prev.filter(a => a.id !== updated.id), updated]);
       if (selectedApplication?.id === updated.id) setSelectedApplication(updated);
+      await loadBatch2Applications();
     } finally {
       setLuckyOnesSaving(false);
     }
