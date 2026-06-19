@@ -5506,6 +5506,7 @@ BYWC Programme Administration`;
     const bucketMap: Record<string, string> = {
       "Boteti":    "Published - Applicant Visible / Batch 2 - Boteti Special",
       "Chomeleng": "Published - Applicant Visible / Batch 2 - Chomeleng Special",
+      "BERA":      "Published - Applicant Visible / Batch 2 - BERA Special",
     };
     const bucket = bucketMap[d.group] || bucketMap["Boteti"];
     const slug = `${d.firstName.toLowerCase().replace(/\s+/g,"")}.${d.lastName.toLowerCase().replace(/\s+/g,"")}`;
@@ -5546,15 +5547,16 @@ BYWC Programme Administration`;
     }
   }
 
-  function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng") {
+  function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng" | "bera") {
     const all = batch2Applications;
     const people =
       mode === "combined"  ? all :
       mode === "actual"    ? all.filter(a => !isBatch2Special(a)) :
       mode === "chomeleng" ? all.filter(isChomelenSpecial) :
+      mode === "bera"      ? all.filter(isBeraSpecial) :
                              all.filter(isBotetiSpecial);
     if (people.length === 0) { alert("No records for this selection."); return; }
-    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : mode === "chomeleng" ? "ChomelenSpecial" : "BotetiSpecial";
+    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : mode === "chomeleng" ? "ChomelenSpecial" : mode === "bera" ? "BERASpecial" : "BotetiSpecial";
     const headers = ["First Name","Last Name","Omang","Phone","Email","Constituency","Gender","Arrival","Group"];
     const rows = people.map(a => {
       const bucket = a.selectionBucket || "";
@@ -5776,7 +5778,8 @@ BYWC Programme Administration`;
 
   const isBotetiSpecial = (a: Application) => (a.selectionBucket || "").includes("Boteti Special");
   const isChomelenSpecial = (a: Application) => (a.selectionBucket || "").includes("Chomeleng Special");
-  const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a);
+  const isBeraSpecial = (a: Application) => (a.selectionBucket || "").includes("BERA Special");
+  const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a) || isBeraSpecial(a);
   const isLuckyOnesPromoted = (a: Application) => (a.selectionBucket || "").includes("Lucky Ones Promoted");
   const isLuckyOnesReviewed = (a: Application) => (a.selectionBucket || "").includes("Remaining Eligible - Reviewed");
 
@@ -7896,6 +7899,10 @@ BYWC Programme Administration`;
                       className="block w-full px-4 py-2.5 text-left text-xs font-black text-violet-300 hover:bg-white/10">
                       Chomeleng Special only
                     </button>
+                    <button type="button" onClick={() => handleExportBatch2Csv("bera")}
+                      className="block w-full px-4 py-2.5 text-left text-xs font-black text-cyan-300 hover:bg-white/10">
+                      BERA Special only
+                    </button>
                   </div>
                 )}
               </div>
@@ -8128,6 +8135,63 @@ BYWC Programme Administration`;
                               <td className="px-3 py-3 font-semibold text-slate-300">{a.constituency || "Unknown"}</td>
                               <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
                               <td className="px-3 py-3"><span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-black text-violet-300">Chomeleng</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* BERA Special List */}
+          {(() => {
+            const bera = batch2Applications.filter(isBeraSpecial);
+            const beraWomen = bera.filter(a => (a.gender || "").toLowerCase() === "female").length;
+            const beraMen = bera.filter(a => (a.gender || "").toLowerCase() === "male").length;
+            const beraArrived = bera.filter(a => a.arrivalStatus === "Arrived").length;
+            return (
+              <div className="mt-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-400">BERA Special List</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Counts toward Women/Men totals · excluded from constituency quota</p>
+                  </div>
+                  <div className="flex gap-3 text-xs font-black">
+                    <span className="rounded-full bg-pink-500/10 px-3 py-1 text-pink-300">{beraWomen} Women</span>
+                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-blue-300">{beraMen} Men</span>
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-300">{beraArrived} Arrived</span>
+                  </div>
+                </div>
+                {bera.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">No BERA Special entries yet.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup><col className="w-[30%]"/><col className="w-[18%]"/><col className="w-[16%]"/><col className="w-[16%]"/><col className="w-[12%]"/><col className="w-[8%]"/></colgroup>
+                      <thead className="bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Constituency</th>
+                          <th className="px-3 py-3 text-left font-black">Arrival</th>
+                          <th className="px-3 py-3 text-left font-black">Label</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {bera.map(a => {
+                          const arrived = a.arrivalStatus === "Arrived";
+                          return (
+                            <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
+                              <td className="px-3 py-3"><p className="font-black text-cyan-300">{a.firstName} {a.lastName}</p></td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.omang || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.phone || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.constituency || "Unknown"}</td>
+                              <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
+                              <td className="px-3 py-3"><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-black text-cyan-300">BERA</span></td>
                             </tr>
                           );
                         })}
@@ -8541,6 +8605,7 @@ BYWC Programme Administration`;
                 >
                   <option value="Boteti">Batch 2 — Boteti Special</option>
                   <option value="Chomeleng">Batch 2 — Chomeleng Special</option>
+                  <option value="BERA">Batch 2 — BERA Special</option>
                 </select>
               </div>
 
