@@ -1,14 +1,5 @@
 "use client";
 
-// Capture URL state at module-load time — before Supabase's PKCE auto-exchange
-// removes ?code= from the URL asynchronously.
-const _pageLoadCode =
-  typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search).get("code")
-    : null;
-const _pageLoadHash =
-  typeof window !== "undefined" ? window.location.hash : "";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../src/lib/supabaseClient";
@@ -25,26 +16,20 @@ export default function CreateNewPasswordPage() {
   useEffect(() => {
     let resolved = false;
 
-    // Read URL params — Supabase may have already removed ?code= by now,
-    // so fall back to the module-level captures.
-    const code =
-      new URLSearchParams(window.location.search).get("code") || _pageLoadCode;
-    const hashAtMount = window.location.hash || _pageLoadHash;
+    const code = new URLSearchParams(window.location.search).get("code");
+    const hashAtMount = window.location.hash;
     const hasRecoveryHash =
       hashAtMount.includes("access_token") && hashAtMount.includes("type=recovery");
-    const cameFromLink = !!(code || hasRecoveryHash);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (resolved) return;
-
         if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
-        } else if (event === "INITIAL_SESSION" && session && cameFromLink) {
-          // Supabase auto-exchanged the PKCE code before our effect ran —
-          // INITIAL_SESSION fires with the already-established session.
+        } else if (event === "INITIAL_SESSION" && session && (code || hasRecoveryHash)) {
+          // Supabase auto-exchanged the PKCE code — INITIAL_SESSION fires with the session.
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
@@ -53,25 +38,19 @@ export default function CreateNewPasswordPage() {
     );
 
     async function exchangeCode() {
-      // If Supabase already has a valid session (auto PKCE exchange completed),
-      // accept it if we know the user came here via a recovery link.
-      if (cameFromLink) {
-        const { data: { session: existing } } = await supabase.auth.getSession();
-        if (!resolved && existing) {
-          resolved = true;
-          setHasResetSession(true);
-          setIsCheckingLink(false);
-          return;
-        }
-      }
-
       if (code) {
-        // PKCE flow: exchange code for session (if not already done by Supabase)
+        // PKCE flow: try to exchange. If Supabase already did it, getSession() catches it below.
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         window.history.replaceState({}, document.title, "/create-new-password");
 
         if (error) {
-          if (!resolved) {
+          // Exchange failed — Supabase may have auto-exchanged already, check for existing session.
+          const { data: { session: existing } } = await supabase.auth.getSession();
+          if (!resolved && existing) {
+            resolved = true;
+            setHasResetSession(true);
+            setIsCheckingLink(false);
+          } else if (!resolved) {
             resolved = true;
             setErrorMessage(
               "This reset link is invalid or has already been used. Please request a new one.",
@@ -85,7 +64,7 @@ export default function CreateNewPasswordPage() {
           setIsCheckingLink(false);
         }
       } else if (hasRecoveryHash) {
-        // Implicit flow: manually extract tokens from hash and set session.
+        // Implicit flow: extract tokens from hash.
         const params = new URLSearchParams(hashAtMount.substring(1));
         const accessToken = params.get("access_token");
         const refreshToken = params.get("refresh_token") ?? "";
@@ -109,12 +88,20 @@ export default function CreateNewPasswordPage() {
           }
         }
       } else {
-        resolved = true;
-        setErrorMessage(
-          "No reset link found. Please request a new password reset email.",
-        );
-        setHasResetSession(false);
-        setIsCheckingLink(false);
+        // No code or hash — Supabase may have auto-exchanged the code before this ran.
+        const { data: { session: existing } } = await supabase.auth.getSession();
+        if (!resolved && existing) {
+          resolved = true;
+          setHasResetSession(true);
+          setIsCheckingLink(false);
+        } else if (!resolved) {
+          resolved = true;
+          setErrorMessage(
+            "No reset link found. Please request a new password reset email.",
+          );
+          setHasResetSession(false);
+          setIsCheckingLink(false);
+        }
       }
     }
 
@@ -123,9 +110,7 @@ export default function CreateNewPasswordPage() {
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        setErrorMessage(
-          "Reset session timed out. Please request a new reset link.",
-        );
+        setErrorMessage("Reset session timed out. Please request a new reset link.");
         setHasResetSession(false);
         setIsCheckingLink(false);
       }
@@ -139,7 +124,6 @@ export default function CreateNewPasswordPage() {
 
   async function handleUpdatePassword(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
     setMessage("");
     setErrorMessage("");
 
@@ -147,30 +131,24 @@ export default function CreateNewPasswordPage() {
       setErrorMessage("Please request a new reset link first.");
       return;
     }
-
     if (password.length < 6) {
       setErrorMessage("Password must be at least 6 characters.");
       return;
     }
-
     if (password !== confirmPassword) {
       setErrorMessage("Passwords do not match.");
       return;
     }
 
     setIsLoading(true);
-
     const { error } = await supabase.auth.updateUser({ password });
-
     if (error) {
       setIsLoading(false);
       setErrorMessage(error.message);
       return;
     }
 
-    // Sign out the recovery session so the user is prompted to log in fresh.
     await supabase.auth.signOut();
-
     setIsLoading(false);
     setPassword("");
     setConfirmPassword("");
@@ -180,10 +158,7 @@ export default function CreateNewPasswordPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-6">
       <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-3xl font-bold text-blue-950">
-          Create New Password
-        </h1>
-
+        <h1 className="text-3xl font-bold text-blue-950">Create New Password</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
           Enter and confirm your new password below.
         </p>
@@ -199,7 +174,6 @@ export default function CreateNewPasswordPage() {
                 <span className="mb-2 block text-sm font-semibold text-slate-700">
                   New Password
                 </span>
-
                 <input
                   type="password"
                   required
@@ -215,7 +189,6 @@ export default function CreateNewPasswordPage() {
                 <span className="mb-2 block text-sm font-semibold text-slate-700">
                   Confirm New Password
                 </span>
-
                 <input
                   type="password"
                   required
@@ -232,7 +205,6 @@ export default function CreateNewPasswordPage() {
                   {message}
                 </div>
               )}
-
               {errorMessage && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {errorMessage}
@@ -256,7 +228,6 @@ export default function CreateNewPasswordPage() {
                 Go to Login
               </Link>
             )}
-
             {!hasResetSession && !message && (
               <Link
                 href="/forgot-password"
