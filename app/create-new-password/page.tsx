@@ -1,5 +1,14 @@
 "use client";
 
+// Capture URL state at module-load time — before Supabase's PKCE auto-exchange
+// removes ?code= from the URL asynchronously.
+const _pageLoadCode =
+  typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("code")
+    : null;
+const _pageLoadHash =
+  typeof window !== "undefined" ? window.location.hash : "";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../src/lib/supabaseClient";
@@ -16,24 +25,26 @@ export default function CreateNewPasswordPage() {
   useEffect(() => {
     let resolved = false;
 
-    // Capture URL details before replaceState cleans them.
-    const code = new URLSearchParams(window.location.search).get("code");
-    const hashAtMount = window.location.hash;
+    // Read URL params — Supabase may have already removed ?code= by now,
+    // so fall back to the module-level captures.
+    const code =
+      new URLSearchParams(window.location.search).get("code") || _pageLoadCode;
+    const hashAtMount = window.location.hash || _pageLoadHash;
     const hasRecoveryHash =
       hashAtMount.includes("access_token") && hashAtMount.includes("type=recovery");
+    const cameFromLink = !!(code || hasRecoveryHash);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (resolved) return;
 
-        // Accept PASSWORD_RECOVERY or SIGNED_IN — newer Supabase versions fire
-        // SIGNED_IN after a successful code exchange instead of PASSWORD_RECOVERY.
         if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
-        } else if (event === "INITIAL_SESSION" && session && hasRecoveryHash) {
-          // PASSWORD_RECOVERY fired before our listener was ready (timing race).
+        } else if (event === "INITIAL_SESSION" && session && cameFromLink) {
+          // Supabase auto-exchanged the PKCE code before our effect ran —
+          // INITIAL_SESSION fires with the already-established session.
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
@@ -42,8 +53,20 @@ export default function CreateNewPasswordPage() {
     );
 
     async function exchangeCode() {
+      // If Supabase already has a valid session (auto PKCE exchange completed),
+      // accept it if we know the user came here via a recovery link.
+      if (cameFromLink) {
+        const { data: { session: existing } } = await supabase.auth.getSession();
+        if (!resolved && existing) {
+          resolved = true;
+          setHasResetSession(true);
+          setIsCheckingLink(false);
+          return;
+        }
+      }
+
       if (code) {
-        // PKCE flow: exchange code for session
+        // PKCE flow: exchange code for session (if not already done by Supabase)
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         window.history.replaceState({}, document.title, "/create-new-password");
 
@@ -57,28 +80,30 @@ export default function CreateNewPasswordPage() {
             setIsCheckingLink(false);
           }
         } else if (!resolved) {
-          // Code exchange succeeded — session is valid regardless of which auth
-          // event fires next (PASSWORD_RECOVERY or SIGNED_IN).
           resolved = true;
           setHasResetSession(true);
           setIsCheckingLink(false);
         }
       } else if (hasRecoveryHash) {
         // Implicit flow: manually extract tokens from hash and set session.
-        // Waiting for onAuthStateChange is unreliable when client is in PKCE mode.
         const params = new URLSearchParams(hashAtMount.substring(1));
         const accessToken = params.get("access_token");
         const refreshToken = params.get("refresh_token") ?? "";
         window.history.replaceState({}, document.title, "/create-new-password");
         if (accessToken && !resolved) {
-          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
           if (!error && !resolved) {
             resolved = true;
             setHasResetSession(true);
             setIsCheckingLink(false);
           } else if (error && !resolved) {
             resolved = true;
-            setErrorMessage("This reset link is invalid or has already been used. Please request a new one.");
+            setErrorMessage(
+              "This reset link is invalid or has already been used. Please request a new one.",
+            );
             setHasResetSession(false);
             setIsCheckingLink(false);
           }
