@@ -21,100 +21,84 @@ export default function CreateNewPasswordPage() {
     const hasRecoveryHash =
       hashAtMount.includes("access_token") && hashAtMount.includes("type=recovery");
 
+    function accept() {
+      if (resolved) return;
+      resolved = true;
+      setHasResetSession(true);
+      setIsCheckingLink(false);
+    }
+
+    function reject(msg: string) {
+      if (resolved) return;
+      resolved = true;
+      setHasResetSession(false);
+      setIsCheckingLink(false);
+      setErrorMessage(msg);
+    }
+
+    // Listen for auth events. This catches:
+    // - PASSWORD_RECOVERY / SIGNED_IN fired after our manual exchange below
+    // - SIGNED_IN fired by Supabase's own auto-exchange (when it beats our useEffect)
+    // - INITIAL_SESSION if a session was already established before the listener registered
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (resolved) return;
-        if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
-          resolved = true;
-          setHasResetSession(true);
-          setIsCheckingLink(false);
-        } else if (event === "INITIAL_SESSION" && session && (code || hasRecoveryHash)) {
-          // Supabase auto-exchanged the PKCE code — INITIAL_SESSION fires with the session.
-          resolved = true;
-          setHasResetSession(true);
-          setIsCheckingLink(false);
+        if (
+          (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN" || event === "INITIAL_SESSION")
+          && session
+        ) {
+          accept();
         }
       },
     );
 
-    async function exchangeCode() {
+    async function init() {
       if (code) {
-        // PKCE flow: try to exchange. If Supabase already did it, getSession() catches it below.
+        // PKCE flow: exchange the code ourselves.
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         window.history.replaceState({}, document.title, "/create-new-password");
 
         if (error) {
-          // Exchange failed — Supabase may have auto-exchanged already, check for existing session.
-          const { data: { session: existing } } = await supabase.auth.getSession();
-          if (!resolved && existing) {
-            resolved = true;
-            setHasResetSession(true);
-            setIsCheckingLink(false);
-          } else if (!resolved) {
-            resolved = true;
-            setErrorMessage(
-              "This reset link is invalid or has already been used. Please request a new one.",
-            );
-            setHasResetSession(false);
-            setIsCheckingLink(false);
-          }
-        } else if (!resolved) {
-          resolved = true;
-          setHasResetSession(true);
-          setIsCheckingLink(false);
+          // Our exchange failed — Supabase's auto-exchange may have already used the code.
+          // Check if we have a session from that.
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) { accept(); }
+          else { reject("This reset link is invalid or has already been used. Please request a new one."); }
         }
+        // If no error, onAuthStateChange SIGNED_IN will fire and call accept().
+
       } else if (hasRecoveryHash) {
-        // Implicit flow: extract tokens from hash.
+        // Implicit (hash) flow.
         const params = new URLSearchParams(hashAtMount.substring(1));
         const accessToken = params.get("access_token");
         const refreshToken = params.get("refresh_token") ?? "";
         window.history.replaceState({}, document.title, "/create-new-password");
-        if (accessToken && !resolved) {
+        if (accessToken) {
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
-          if (!error && !resolved) {
-            resolved = true;
-            setHasResetSession(true);
-            setIsCheckingLink(false);
-          } else if (error && !resolved) {
-            resolved = true;
-            setErrorMessage(
-              "This reset link is invalid or has already been used. Please request a new one.",
-            );
-            setHasResetSession(false);
-            setIsCheckingLink(false);
-          }
+          if (error) { reject("This reset link is invalid or has already been used. Please request a new one."); }
+          // else: onAuthStateChange SIGNED_IN fires → accept()
         }
+
       } else {
-        // No code or hash — Supabase may have auto-exchanged the code before this ran.
-        const { data: { session: existing } } = await supabase.auth.getSession();
-        if (!resolved && existing) {
-          resolved = true;
-          setHasResetSession(true);
-          setIsCheckingLink(false);
-        } else if (!resolved) {
-          resolved = true;
-          setErrorMessage(
-            "No reset link found. Please request a new password reset email.",
-          );
-          setHasResetSession(false);
-          setIsCheckingLink(false);
-        }
+        // No code or hash in URL — Supabase's auto-exchange removed the code before
+        // our useEffect ran (it cleans the URL synchronously then exchanges async).
+        // The onAuthStateChange SIGNED_IN listener above will catch the session
+        // once the exchange completes. Do a quick check in case it already finished.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) { accept(); }
+        // Otherwise wait — SIGNED_IN fires shortly, or the 10s timeout below handles it.
       }
     }
 
-    exchangeCode();
+    init();
 
+    // 10 second hard timeout — only reached if the link is genuinely missing or expired.
     const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        setErrorMessage("Reset session timed out. Please request a new reset link.");
-        setHasResetSession(false);
-        setIsCheckingLink(false);
-      }
-    }, 15000);
+      reject("Reset link not found or expired. Please request a new one.");
+    }, 10000);
 
     return () => {
       subscription.unsubscribe();
@@ -127,26 +111,13 @@ export default function CreateNewPasswordPage() {
     setMessage("");
     setErrorMessage("");
 
-    if (!hasResetSession) {
-      setErrorMessage("Please request a new reset link first.");
-      return;
-    }
-    if (password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.");
-      return;
-    }
+    if (!hasResetSession) { setErrorMessage("Please request a new reset link first."); return; }
+    if (password.length < 6) { setErrorMessage("Password must be at least 6 characters."); return; }
+    if (password !== confirmPassword) { setErrorMessage("Passwords do not match."); return; }
 
     setIsLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      setIsLoading(false);
-      setErrorMessage(error.message);
-      return;
-    }
+    if (error) { setIsLoading(false); setErrorMessage(error.message); return; }
 
     await supabase.auth.signOut();
     setIsLoading(false);
@@ -165,15 +136,13 @@ export default function CreateNewPasswordPage() {
 
         {isCheckingLink ? (
           <div className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Checking your reset link...
+            Checking your reset link…
           </div>
         ) : (
           <>
             <form onSubmit={handleUpdatePassword} className="mt-8 space-y-5">
               <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">
-                  New Password
-                </span>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">New Password</span>
                 <input
                   type="password"
                   required
@@ -186,9 +155,7 @@ export default function CreateNewPasswordPage() {
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">
-                  Confirm New Password
-                </span>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">Confirm New Password</span>
                 <input
                   type="password"
                   required
@@ -216,23 +183,17 @@ export default function CreateNewPasswordPage() {
                 disabled={isLoading || !hasResetSession || !!message}
                 className="w-full rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
               >
-                {isLoading ? "Updating..." : "Update Password"}
+                {isLoading ? "Updating…" : "Update Password"}
               </button>
             </form>
 
             {message && (
-              <Link
-                href="/login"
-                className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline"
-              >
+              <Link href="/login" className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline">
                 Go to Login
               </Link>
             )}
             {!hasResetSession && !message && (
-              <Link
-                href="/forgot-password"
-                className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline"
-              >
+              <Link href="/forgot-password" className="mt-6 block text-center text-sm font-semibold text-blue-900 hover:underline">
                 Request New Reset Link
               </Link>
             )}
