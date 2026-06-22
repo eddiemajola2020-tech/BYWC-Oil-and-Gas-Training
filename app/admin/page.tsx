@@ -6358,38 +6358,6 @@ BYWC Programme Administration`;
           </div>
         </nav>
 
-        {/* ── Applicant filter sub-nav — only visible when Applicants section is active ── */}
-        {activeSection === "applications" && (
-          <div className="mb-5 flex flex-wrap items-center gap-1 rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-1.5">
-            {statusNavItems.map((item) => {
-              const isActive = statusFilter === item.value;
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter(item.value);
-                    setCurrentPage(1);
-                  }}
-                  className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold transition ${
-                    isActive
-                      ? "bg-orange-500 text-white shadow shadow-orange-500/30"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {item.label}
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                      isActive ? "bg-white/20" : "bg-white/[0.07] text-slate-500"
-                    }`}
-                  >
-                    {item.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         <header className="mb-5 rounded-[26px] border border-white/[0.07] bg-[#0b1028] p-5 lg:p-6">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
