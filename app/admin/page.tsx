@@ -11110,6 +11110,38 @@ BYWC Programme Administration`;
                 </div>
               </div>
 
+              {/* Medical / Dietary */}
+              {(selectedApplication.knownMedicalConditions || selectedApplication.currentMedication || selectedApplication.hasDietaryRestrictions || selectedApplication.dietaryRestrictionsDetails) ? (
+                <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.15em] text-red-400">⚕ Medical &amp; Dietary</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Conditions / Allergies</p>
+                      <p className="mt-1 text-sm text-white font-semibold">{selectedApplication.knownMedicalConditions || "None declared"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Current Medication</p>
+                      <p className="mt-1 text-sm text-white font-semibold">{selectedApplication.currentMedication || "None declared"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Dietary Restrictions</p>
+                      <p className="mt-1 text-sm text-white font-semibold">{selectedApplication.hasDietaryRestrictions ? "Yes" : "No"}</p>
+                    </div>
+                    {selectedApplication.hasDietaryRestrictions && (
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">Dietary Details</p>
+                        <p className="mt-1 text-sm text-white font-semibold">{selectedApplication.dietaryRestrictionsDetails || "—"}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-6 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">⚕ Medical &amp; Dietary</p>
+                  <p className="mt-1 text-sm text-slate-500">No conditions, allergies or dietary restrictions declared.</p>
+                </div>
+              )}
+
               {/* Arrival Status */}
               <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 rounded-xl border p-4 ${selectedApplication.arrivalStatus === "Arrived" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10 bg-white/[0.02]"}`}>
                 <div>
