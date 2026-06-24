@@ -800,6 +800,8 @@ export default function AdminPage() {
   type ConstituencyRow = { total: number; women: number; men: number; other: number };
   const [constituencyBreakdown, setConstituencyBreakdown] = useState<[string, ConstituencyRow][]>([]);
   const [constituencyBreakdownLoading, setConstituencyBreakdownLoading] = useState(false);
+  const [constituencyBatch1Count, setConstituencyBatch1Count] = useState(0);
+  const [constituencyBatch2Count, setConstituencyBatch2Count] = useState(0);
 
   async function loadConstituencyBreakdown() {
     setConstituencyBreakdownLoading(true);
@@ -826,8 +828,8 @@ export default function AdminPage() {
       };
 
       const [batch1, batch2Arrived] = await Promise.all([
-        fetchAll((q) => q.ilike("selection_bucket", "%Batch 1 -%").in("status", ["Accepted", "Completed"])),
-        fetchAll((q) => q.ilike("selection_bucket", "%Batch 2 -%").eq("status", "Accepted").eq("arrival_status", "Arrived")),
+        fetchAll((q) => q.ilike("selection_bucket", "%Batch 1 -%")),
+        fetchAll((q) => q.ilike("selection_bucket", "%Batch 2 -%").eq("arrival_status", "Arrived")),
       ]);
 
       const map: Record<string, ConstituencyRow> = {};
@@ -842,6 +844,8 @@ export default function AdminPage() {
       };
       [...batch1, ...batch2Arrived].forEach(add);
 
+      setConstituencyBatch1Count(batch1.length);
+      setConstituencyBatch2Count(batch2Arrived.length);
       const sorted = Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
       setConstituencyBreakdown(sorted);
     } finally {
@@ -10142,6 +10146,8 @@ BYWC Programme Administration`;
 
         {/* ── Constituency Breakdown tab ── */}
         {activeSection === "constituency-breakdown" && (() => {
+          const batch1Count = constituencyBatch1Count;
+          const batch2Count = constituencyBatch2Count;
           const totals = constituencyBreakdown.reduce(
             (acc, [, s]) => { acc.total += s.total; acc.women += s.women; acc.men += s.men; acc.other += s.other; return acc; },
             { total: 0, women: 0, men: 0, other: 0 }
@@ -10181,17 +10187,26 @@ BYWC Programme Administration`;
                 <>
                   {/* Summary cards */}
                   <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {[
-                      { label: "Total Accepted", value: totals.total, color: "blue" },
-                      { label: "Women", value: totals.women, color: "pink" },
-                      { label: "Men", value: totals.men, color: "sky" },
-                      { label: "Constituencies", value: constituencyBreakdown.length, color: "violet" },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className={`rounded-2xl border border-${color}-500/20 bg-${color}-500/5 p-4`}>
-                        <p className={`text-[10px] font-black uppercase tracking-[0.14em] text-${color}-300`}>{label}</p>
-                        <p className={`mt-2 text-3xl font-black text-${color}-300`}>{value}</p>
-                      </div>
-                    ))}
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Batch 1</p>
+                      <p className="mt-2 text-3xl font-black text-emerald-300">{batch1Count}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">all accepted</p>
+                    </div>
+                    <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Batch 2</p>
+                      <p className="mt-2 text-3xl font-black text-orange-300">{batch2Count}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">arrived only</p>
+                    </div>
+                    <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-300">Combined</p>
+                      <p className="mt-2 text-3xl font-black text-blue-300">{totals.total}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">in programme</p>
+                    </div>
+                    <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-300">Constituencies</p>
+                      <p className="mt-2 text-3xl font-black text-violet-300">{constituencyBreakdown.length}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">represented</p>
+                    </div>
                   </div>
 
                   {/* Table */}
