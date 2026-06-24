@@ -796,6 +796,45 @@ export default function AdminPage() {
   const [publishingRejected, setPublishingRejected] = useState(false);
   const [markingBatch1Arrived, setMarkingBatch1Arrived] = useState(false);
 
+  // ── Constituency Breakdown state ─────────────────────────────────────────
+  type ConstituencyRow = { total: number; women: number; men: number; other: number };
+  const [constituencyBreakdown, setConstituencyBreakdown] = useState<[string, ConstituencyRow][]>([]);
+  const [constituencyBreakdownLoading, setConstituencyBreakdownLoading] = useState(false);
+
+  async function loadConstituencyBreakdown() {
+    setConstituencyBreakdownLoading(true);
+    try {
+      let all: any[] = [];
+      let from = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from(APPLICATIONS_TABLE)
+          .select("constituency,gender,status,selection_bucket")
+          .eq("status", "Accepted")
+          .range(from, from + batchSize - 1);
+        if (error || !data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < batchSize) break;
+        from += batchSize;
+      }
+      const map: Record<string, ConstituencyRow> = {};
+      for (const a of all) {
+        const c = (a.constituency || "(No Constituency)").trim();
+        if (!map[c]) map[c] = { total: 0, women: 0, men: 0, other: 0 };
+        map[c].total++;
+        const g = (a.gender || "").toLowerCase();
+        if (g === "female") map[c].women++;
+        else if (g === "male") map[c].men++;
+        else map[c].other++;
+      }
+      const sorted = Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
+      setConstituencyBreakdown(sorted);
+    } finally {
+      setConstituencyBreakdownLoading(false);
+    }
+  }
+
   // ── Tools section state ──────────────────────────────────────────────────
   const [toolsPersonQuery, setToolsPersonQuery] = useState("");
   const [toolsPersonResults, setToolsPersonResults] = useState<Application[]>([]);
@@ -921,7 +960,8 @@ export default function AdminPage() {
 
   const [activeSection, setActiveSection] = useState<
     "applications" | "programme" | "selection" | "compliance" | "tools" |
-    "batch1" | "waitlist" | "rejected" | "deferred" | "women" | "men" | "lucky-ones"
+    "batch1" | "waitlist" | "rejected" | "deferred" | "women" | "men" | "lucky-ones" |
+    "constituency-breakdown"
   >("applications");
   const [luckyOnesApplications, setLuckyOnesApplications] = useState<Application[]>([]);
   const [luckyOnesGraduated, setLuckyOnesGraduated] = useState<Application[]>([]);
@@ -1643,6 +1683,9 @@ export default function AdminPage() {
     }
     if (activeSection === "lucky-ones") {
       loadLuckyOnes();
+    }
+    if (activeSection === "constituency-breakdown" && constituencyBreakdown.length === 0) {
+      loadConstituencyBreakdown();
     }
   }, [activeSection]);
 
@@ -6231,6 +6274,7 @@ BYWC Programme Administration`;
                   { id: "applications", label: "Applicants" },
                   { id: "programme", label: "Programme" },
                   { id: "selection", label: "Selection" },
+                  { id: "constituency-breakdown", label: "Constituencies" },
                   { id: "compliance", label: "Compliance" },
                   { id: "tools", label: "Tools" },
                 ] as const
@@ -10078,6 +10122,114 @@ BYWC Programme Administration`;
                   </div>
                 </div>
               </div>
+            </section>
+          );
+        })()}
+
+        {/* ── Constituency Breakdown tab ── */}
+        {activeSection === "constituency-breakdown" && (() => {
+          const totals = constituencyBreakdown.reduce(
+            (acc, [, s]) => { acc.total += s.total; acc.women += s.women; acc.men += s.men; acc.other += s.other; return acc; },
+            { total: 0, women: 0, men: 0, other: 0 }
+          );
+          return (
+            <section className="rounded-[32px] border border-blue-500/20 bg-[#0b1028] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+              <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-400">Accepted Applicants</p>
+                  <h2 className="mt-1 text-xl font-black text-white">Constituency Breakdown</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {constituencyBreakdown.length > 0
+                      ? `${totals.total} accepted · ${constituencyBreakdown.length} constituencies`
+                      : "All accepted applicants grouped by constituency"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={loadConstituencyBreakdown}
+                  disabled={constituencyBreakdownLoading}
+                  className="shrink-0 rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-black text-white transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {constituencyBreakdownLoading ? "Loading…" : "Refresh"}
+                </button>
+              </div>
+
+              {constituencyBreakdownLoading ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center text-sm font-semibold text-slate-400">
+                  Loading constituency data…
+                </div>
+              ) : constituencyBreakdown.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center text-sm font-semibold text-slate-400">
+                  No data yet. Click Refresh.
+                </div>
+              ) : (
+                <>
+                  {/* Summary cards */}
+                  <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {[
+                      { label: "Total Accepted", value: totals.total, color: "blue" },
+                      { label: "Women", value: totals.women, color: "pink" },
+                      { label: "Men", value: totals.men, color: "sky" },
+                      { label: "Constituencies", value: constituencyBreakdown.length, color: "violet" },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className={`rounded-2xl border border-${color}-500/20 bg-${color}-500/5 p-4`}>
+                        <p className={`text-[10px] font-black uppercase tracking-[0.14em] text-${color}-300`}>{label}</p>
+                        <p className={`mt-2 text-3xl font-black text-${color}-300`}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Table */}
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-[#111827]">
+                        <tr>
+                          <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituency</th>
+                          <th className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Total</th>
+                          <th className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-[0.14em] text-pink-400">Women</th>
+                          <th className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-[0.14em] text-sky-400">Men</th>
+                          <th className="hidden px-4 py-3 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 sm:table-cell">Other</th>
+                          <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Gender split</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.05]">
+                        {constituencyBreakdown.map(([name, s]) => {
+                          const womenPct = s.total > 0 ? Math.round((s.women / s.total) * 100) : 0;
+                          return (
+                            <tr key={name} className="transition hover:bg-white/[0.03]">
+                              <td className="px-4 py-3 font-semibold text-white">{name}</td>
+                              <td className="px-4 py-3 text-right font-black text-white">{s.total}</td>
+                              <td className="px-4 py-3 text-right font-semibold text-pink-300">{s.women}</td>
+                              <td className="px-4 py-3 text-right font-semibold text-sky-300">{s.men}</td>
+                              <td className="hidden px-4 py-3 text-right text-slate-500 sm:table-cell">{s.other > 0 ? s.other : "—"}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
+                                    <div className="h-full rounded-full bg-pink-500" style={{ width: `${womenPct}%` }} />
+                                  </div>
+                                  <span className="text-[11px] text-slate-500">{womenPct}% F</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="border-t border-white/10 bg-[#111827]">
+                        <tr>
+                          <td className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Total</td>
+                          <td className="px-4 py-3 text-right font-black text-white">{totals.total}</td>
+                          <td className="px-4 py-3 text-right font-black text-pink-300">{totals.women}</td>
+                          <td className="px-4 py-3 text-right font-black text-sky-300">{totals.men}</td>
+                          <td className="hidden px-4 py-3 text-right font-semibold text-slate-500 sm:table-cell">{totals.other > 0 ? totals.other : "—"}</td>
+                          <td className="px-4 py-3 text-[11px] text-slate-500">
+                            {totals.total > 0 ? `${Math.round((totals.women / totals.total) * 100)}% women` : ""}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </>
+              )}
             </section>
           );
         })()}
