@@ -804,22 +804,34 @@ export default function AdminPage() {
   async function loadConstituencyBreakdown() {
     setConstituencyBreakdownLoading(true);
     try {
-      let all: any[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from(APPLICATIONS_TABLE)
-          .select("constituency,gender,status,selection_bucket")
-          .eq("status", "Accepted")
-          .range(from, from + batchSize - 1);
-        if (error || !data || data.length === 0) break;
-        all = all.concat(data);
-        if (data.length < batchSize) break;
-        from += batchSize;
-      }
+      // Batch 1: all accepted (arrived or not)
+      // Batch 2: accepted + arrived only
+      const fetchAll = async (buildQuery: (q: any) => any) => {
+        let rows: any[] = [];
+        let from = 0;
+        const batchSize = 1000;
+        while (true) {
+          let q = supabase
+            .from(APPLICATIONS_TABLE)
+            .select("constituency,gender,arrival_status,selection_bucket")
+            .range(from, from + batchSize - 1);
+          q = buildQuery(q);
+          const { data, error } = await q;
+          if (error || !data || data.length === 0) break;
+          rows = rows.concat(data);
+          if (data.length < batchSize) break;
+          from += batchSize;
+        }
+        return rows;
+      };
+
+      const [batch1, batch2Arrived] = await Promise.all([
+        fetchAll((q) => q.ilike("selection_bucket", "%Batch 1 -%").in("status", ["Accepted", "Completed"])),
+        fetchAll((q) => q.ilike("selection_bucket", "%Batch 2 -%").eq("status", "Accepted").eq("arrival_status", "Arrived")),
+      ]);
+
       const map: Record<string, ConstituencyRow> = {};
-      for (const a of all) {
+      const add = (a: any) => {
         const c = (a.constituency || "(No Constituency)").trim();
         if (!map[c]) map[c] = { total: 0, women: 0, men: 0, other: 0 };
         map[c].total++;
@@ -827,7 +839,9 @@ export default function AdminPage() {
         if (g === "female") map[c].women++;
         else if (g === "male") map[c].men++;
         else map[c].other++;
-      }
+      };
+      [...batch1, ...batch2Arrived].forEach(add);
+
       const sorted = Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
       setConstituencyBreakdown(sorted);
     } finally {
@@ -10140,9 +10154,10 @@ BYWC Programme Administration`;
                   <h2 className="mt-1 text-xl font-black text-white">Constituency Breakdown</h2>
                   <p className="mt-1 text-sm text-slate-400">
                     {constituencyBreakdown.length > 0
-                      ? `${totals.total} accepted · ${constituencyBreakdown.length} constituencies`
-                      : "All accepted applicants grouped by constituency"}
+                      ? `${totals.total} total · ${constituencyBreakdown.length} constituencies`
+                      : "Batch 1 all accepted · Batch 2 arrived only"}
                   </p>
+                  <p className="mt-1 text-xs text-slate-500">Batch 1: all accepted &nbsp;·&nbsp; Batch 2: arrived only</p>
                 </div>
                 <button
                   type="button"
