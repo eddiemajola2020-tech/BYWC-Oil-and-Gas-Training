@@ -1313,47 +1313,6 @@ export default function AdminPage() {
     return allApplications;
   }
 
-  async function repairManualBatchOneAcceptances() {
-    try {
-      const { data, error } = await supabase
-        .from(APPLICATIONS_TABLE)
-        .select("id, application_id, selection_bucket")
-        .eq("status", "Accepted")
-        .or("selection_bucket.ilike.%Accepted Manually%,selection_bucket.ilike.%Priority Override%")
-        .limit(1000);
-
-      if (error) {
-        console.error("Failed to repair manual Batch 1 acceptances:", error);
-        return;
-      }
-
-      const rowsToFix = (data || []).filter((row) => {
-        const bucket = String(row.selection_bucket || "");
-        return !bucket.includes("Batch 1 -") && bucket.includes("Accepted Manually");
-      });
-
-      if (rowsToFix.length === 0) return;
-
-      const chunkSize = 50;
-      for (let index = 0; index < rowsToFix.length; index += chunkSize) {
-        const chunk = rowsToFix.slice(index, index + chunkSize);
-        const { error: updateError } = await supabase
-          .from(APPLICATIONS_TABLE)
-          .update({ selection_bucket: "Published - Applicant Visible / Batch 1 - Accepted Manually" })
-          .in(
-            "id",
-            chunk.map((row) => row.id),
-          );
-
-        if (updateError) {
-          console.error("Failed to update manual Batch 1 acceptance row(s):", updateError);
-        }
-      }
-    } catch (error) {
-      console.error("Manual Batch 1 acceptance repair failed:", error);
-    }
-  }
-
   async function loadApplications(showFullLoader = false, page = currentPage) {
     const { data: sessionData } = await supabase.auth.getSession();
 
@@ -1380,8 +1339,6 @@ export default function AdminPage() {
     } else {
       setTableLoading(true);
     }
-
-    await repairManualBatchOneAcceptances();
 
     const from = (page - 1) * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
