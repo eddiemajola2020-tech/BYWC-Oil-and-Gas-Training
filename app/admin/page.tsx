@@ -1003,7 +1003,9 @@ export default function AdminPage() {
   const [luckyOnesSaving, setLuckyOnesSaving] = useState(false);
 
   const [selectedArrivalIds, setSelectedArrivalIds] = useState<Set<string>>(new Set());
+  const [selectedProfileIds, setSelectedProfileIds] = useState<Set<string>>(new Set());
   const [bulkDeferring, setBulkDeferring] = useState(false);
+  const [bulkProfileSaving, setBulkProfileSaving] = useState(false);
 
   const [currentAdminEmail, setCurrentAdminEmail] = useState("");
   const [syncAuthEmail, setSyncAuthEmail] = useState("");
@@ -3140,6 +3142,80 @@ export default function AdminPage() {
     await refreshAdminNumbers(false);
     await loadAcceptedApplications();
     setBulkDeferring(false);
+  }
+
+  async function handleBulkProfileStatusChange(
+    applications: Application[],
+    newStatus: ApplicationStatus,
+    acceptedBatch?: AcceptanceBatch,
+  ) {
+    const targets = applications.filter((application) =>
+      selectedProfileIds.has(application.id),
+    );
+
+    if (targets.length === 0) return;
+
+    const actionLabel =
+      newStatus === "Accepted"
+        ? `accept into ${acceptedBatch}`
+        : newStatus === "Deferred"
+          ? "defer to Next Intake"
+          : newStatus.toLowerCase();
+    const confirmed = window.confirm(
+      `${actionLabel.charAt(0).toUpperCase()}${actionLabel.slice(1)} ${targets.length} selected candidate${targets.length === 1 ? "" : "s"}?`,
+    );
+
+    if (!confirmed) return;
+
+    setBulkProfileSaving(true);
+
+    for (const application of targets) {
+      const updatePayload: Record<string, unknown> = { status: newStatus };
+      let nextSelectionBucket = application.selectionBucket ?? null;
+
+      if (newStatus === "Accepted") {
+        nextSelectionBucket = getManualAcceptanceBucket(acceptedBatch || "Batch 1");
+        updatePayload.selection_bucket = nextSelectionBucket;
+      } else if (newStatus === "Deferred") {
+        nextSelectionBucket = "Deferred - Next Intake";
+        updatePayload.selection_bucket = nextSelectionBucket;
+      } else if (newStatus === "Rejected" || newStatus === "Remaining Eligible") {
+        nextSelectionBucket = null;
+        updatePayload.selection_bucket = null;
+      }
+
+      const { error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .update(updatePayload)
+        .eq("application_id", application.applicationId);
+
+      if (error) {
+        console.error("Bulk profile update failed:", error);
+        alert(
+          `Failed to update ${application.firstName} ${application.lastName}: ${error.message}`,
+        );
+        continue;
+      }
+
+      await logAdminAction({
+        action: "status_change",
+        applicationId: application.applicationId,
+        details: {
+          previousStatus: application.status,
+          newStatus,
+          acceptedBatch: newStatus === "Accepted" ? acceptedBatch : undefined,
+          selectionBucket: nextSelectionBucket,
+          applicantEmail: application.email,
+          applicantName: `${application.firstName} ${application.lastName}`,
+          bulkAction: true,
+        },
+      });
+    }
+
+    setSelectedProfileIds(new Set());
+    await refreshAdminNumbers(false);
+    await loadAcceptedApplications();
+    setBulkProfileSaving(false);
   }
 
   async function handleAutoReview(application: Application) {
@@ -8898,17 +8974,53 @@ BYWC Programme Administration`;
               </div>
             ) : (
               <div className="max-h-[62vh] overflow-y-auto overflow-x-hidden">
+                {selectedProfileIds.size > 0 && (
+                  <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-emerald-500/20 bg-emerald-950/90 px-4 py-3 backdrop-blur md:flex-row md:items-center md:justify-between">
+                    <p className="text-sm font-black text-emerald-200">
+                      {selectedProfileIds.size} selected
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Accepted", "Batch 1")} disabled={bulkProfileSaving} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:opacity-50">Accept B1</button>
+                      <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Accepted", "Batch 2")} disabled={bulkProfileSaving} className="rounded-xl bg-teal-600 px-3 py-2 text-xs font-black text-white transition hover:bg-teal-700 disabled:opacity-50">Accept B2</button>
+                      <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Rejected")} disabled={bulkProfileSaving} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white transition hover:bg-red-700 disabled:opacity-50">Reject</button>
+                      <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Deferred")} disabled={bulkProfileSaving} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:opacity-50">Defer</button>
+                      <button type="button" onClick={() => setSelectedProfileIds(new Set())} disabled={bulkProfileSaving} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200 transition hover:bg-white/10 disabled:opacity-50">Clear</button>
+                    </div>
+                  </div>
+                )}
                 <table className="w-full table-fixed text-[12px]">
                   <colgroup>
+                    <col className="w-[4%]" />
                     <col className="w-[17%]" />
-                    <col className="w-[22%]" />
+                    <col className="w-[21%]" />
                     <col className="w-[17%]" />
                     <col className="w-[17%]" />
                     <col className="w-[14%]" />
-                    <col className="w-[13%]" />
+                    <col className="w-[10%]" />
                   </colgroup>
                   <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
                     <tr>
+                      <th className="px-3 py-3 text-left font-black">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded"
+                          checked={
+                            filteredApplications.length > 0 &&
+                            filteredApplications.every((application) =>
+                              selectedProfileIds.has(application.id),
+                            )
+                          }
+                          onChange={(event) => {
+                            if (event.target.checked) {
+                              setSelectedProfileIds(
+                                new Set(filteredApplications.map((application) => application.id)),
+                              );
+                            } else {
+                              setSelectedProfileIds(new Set());
+                            }
+                          }}
+                        />
+                      </th>
                       <th className="px-3 py-3 text-left font-black">
                         Applicant
                       </th>
@@ -8940,6 +9052,21 @@ BYWC Programme Administration`;
                         }
                         className={`border-t border-white/10 transition ${isReviewedRow ? "bg-slate-500/[0.05] opacity-60 hover:bg-slate-500/[0.09]" : "hover:bg-white/[0.03]"}`}
                       >
+                        <td className="px-3 py-3 align-top">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded"
+                            checked={selectedProfileIds.has(application.id)}
+                            onChange={(event) => {
+                              setSelectedProfileIds((prev) => {
+                                const next = new Set(prev);
+                                if (event.target.checked) next.add(application.id);
+                                else next.delete(application.id);
+                                return next;
+                              });
+                            }}
+                          />
+                        </td>
                         <td className="px-3 py-3 align-top">
                           <div className="flex items-center gap-1.5">
                             <p className={`truncate font-black ${isReviewedRow ? "text-slate-400" : "text-white"}`}>
@@ -9212,13 +9339,28 @@ BYWC Programme Administration`;
                         Click any person to open their full profile.
                       </p>
                     </div>
+                    {selectedProfileIds.size > 0 && (
+                      <div className="flex flex-col gap-3 border-b border-emerald-500/20 bg-emerald-950/70 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-black text-emerald-200">
+                          {selectedProfileIds.size} selected
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Accepted", "Batch 1")} disabled={bulkProfileSaving} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:opacity-50">Accept B1</button>
+                          <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Accepted", "Batch 2")} disabled={bulkProfileSaving} className="rounded-xl bg-teal-600 px-3 py-2 text-xs font-black text-white transition hover:bg-teal-700 disabled:opacity-50">Accept B2</button>
+                          <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Rejected")} disabled={bulkProfileSaving} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white transition hover:bg-red-700 disabled:opacity-50">Reject</button>
+                          <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Deferred")} disabled={bulkProfileSaving} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:opacity-50">Defer</button>
+                          <button type="button" onClick={() => setSelectedProfileIds(new Set())} disabled={bulkProfileSaving} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200 transition hover:bg-white/10 disabled:opacity-50">Clear</button>
+                        </div>
+                      </div>
+                    )}
                     {visibleB1.length === 0 ? (
                       <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchInput ? "No results for this search." : "No Batch 1 data found."}</div>
                     ) : (
                       <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
                         <table className="w-full table-fixed text-[12px]">
                           <colgroup>
-                            <col className="w-[28%]" />
+                            <col className="w-[5%]" />
+                            <col className="w-[25%]" />
                             <col className="w-[15%]" />
                             <col className="w-[14%]" />
                             <col className="w-[18%]" />
@@ -9227,6 +9369,27 @@ BYWC Programme Administration`;
                           </colgroup>
                           <thead className="sticky top-0 z-10 bg-[#111827] text-slate-300">
                             <tr>
+                              <th className="px-3 py-3 text-left font-black">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded"
+                                  checked={
+                                    visibleB1.length > 0 &&
+                                    visibleB1.every((application) =>
+                                      selectedProfileIds.has(application.id),
+                                    )
+                                  }
+                                  onChange={(event) => {
+                                    if (event.target.checked) {
+                                      setSelectedProfileIds(
+                                        new Set(visibleB1.map((application) => application.id)),
+                                      );
+                                    } else {
+                                      setSelectedProfileIds(new Set());
+                                    }
+                                  }}
+                                />
+                              </th>
                               <th className="px-3 py-3 text-left font-black">Applicant</th>
                               <th className="px-3 py-3 text-left font-black">Omang</th>
                               <th className="px-3 py-3 text-left font-black">Phone</th>
@@ -9241,6 +9404,21 @@ BYWC Programme Administration`;
                               const arrived = application.arrivalStatus === "Arrived";
                               return (
                                 <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
+                                  <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded"
+                                      checked={selectedProfileIds.has(application.id)}
+                                      onChange={(event) => {
+                                        setSelectedProfileIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (event.target.checked) next.add(application.id);
+                                          else next.delete(application.id);
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                  </td>
                                   <td className="px-3 py-3">
                                     <p className="font-black text-emerald-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
                                     <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{application.email || "No email"}</p>
