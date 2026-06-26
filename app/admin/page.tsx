@@ -86,6 +86,19 @@ function isInternalBatchTwoSelection(selectionBucket?: string | null) {
   return b.includes("Batch 2 -");
 }
 
+function isBatchOneSelection(selectionBucket?: string | null, status?: ApplicationStatus | null) {
+  const bucket = (selectionBucket || "").trim();
+  if (bucket.includes("Batch 1 -")) return true;
+  if (status === "Accepted" && bucket.includes("Accepted Manually")) return true;
+  return false;
+}
+
+type AcceptanceBatch = "Batch 1" | "Batch 2";
+
+function getManualAcceptanceBucket(batch: AcceptanceBatch) {
+  return `Published - Applicant Visible / ${batch} - Accepted Manually`;
+}
+
 type AuditAction =
   | "status_change"
   | "auto_review"
@@ -1297,6 +1310,47 @@ export default function AdminPage() {
     return allApplications;
   }
 
+  async function repairManualBatchOneAcceptances() {
+    try {
+      const { data, error } = await supabase
+        .from(APPLICATIONS_TABLE)
+        .select("id, application_id, selection_bucket")
+        .eq("status", "Accepted")
+        .or("selection_bucket.ilike.%Accepted Manually%,selection_bucket.ilike.%Priority Override%")
+        .limit(1000);
+
+      if (error) {
+        console.error("Failed to repair manual Batch 1 acceptances:", error);
+        return;
+      }
+
+      const rowsToFix = (data || []).filter((row) => {
+        const bucket = String(row.selection_bucket || "");
+        return !bucket.includes("Batch 1 -") && bucket.includes("Accepted Manually");
+      });
+
+      if (rowsToFix.length === 0) return;
+
+      const chunkSize = 50;
+      for (let index = 0; index < rowsToFix.length; index += chunkSize) {
+        const chunk = rowsToFix.slice(index, index + chunkSize);
+        const { error: updateError } = await supabase
+          .from(APPLICATIONS_TABLE)
+          .update({ selection_bucket: "Published - Applicant Visible / Batch 1 - Accepted Manually" })
+          .in(
+            "id",
+            chunk.map((row) => row.id),
+          );
+
+        if (updateError) {
+          console.error("Failed to update manual Batch 1 acceptance row(s):", updateError);
+        }
+      }
+    } catch (error) {
+      console.error("Manual Batch 1 acceptance repair failed:", error);
+    }
+  }
+
   async function loadApplications(showFullLoader = false, page = currentPage) {
     const { data: sessionData } = await supabase.auth.getSession();
 
@@ -1323,6 +1377,8 @@ export default function AdminPage() {
     } else {
       setTableLoading(true);
     }
+
+    await repairManualBatchOneAcceptances();
 
     const from = (page - 1) * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
@@ -1409,8 +1465,19 @@ export default function AdminPage() {
       formatApplication,
     );
 
-    setApplications(formattedApplications);
-    setTotalCount(count || 0);
+    const filteredApplications =
+      statusFilter === "Internal Batch 1"
+        ? formattedApplications.filter((application) =>
+            isBatchOneSelection(application.selectionBucket, application.status),
+          )
+        : formattedApplications;
+
+    setApplications(filteredApplications);
+    setTotalCount(
+      statusFilter === "Internal Batch 1"
+        ? filteredApplications.length
+        : count || 0,
+    );
     setLastUpdated(new Date());
     setLoading(false);
     setTableLoading(false);
@@ -2849,14 +2916,18 @@ export default function AdminPage() {
   async function handleStatusChange(
     application: Application,
     newStatus: ApplicationStatus,
+    acceptedBatch: AcceptanceBatch = "Batch 1",
   ) {
     setSavingId(application.id);
 
     const updatePayload: Record<string, unknown> = { status: newStatus };
+    let nextSelectionBucket = application.selectionBucket ?? null;
+
     if (newStatus === "Accepted") {
-      updatePayload.selection_bucket =
-        "Published - Applicant Visible / Batch 2 - Priority Override / Accepted Manually";
+      nextSelectionBucket = getManualAcceptanceBucket(acceptedBatch);
+      updatePayload.selection_bucket = nextSelectionBucket;
     } else if (newStatus === "Rejected" || newStatus === "Remaining Eligible") {
+      nextSelectionBucket = null;
       updatePayload.selection_bucket = null;
     }
 
@@ -2878,6 +2949,8 @@ export default function AdminPage() {
       details: {
         previousStatus: application.status,
         newStatus,
+        acceptedBatch: newStatus === "Accepted" ? acceptedBatch : undefined,
+        selectionBucket: nextSelectionBucket,
         applicantEmail: application.email,
         applicantName: `${application.firstName} ${application.lastName}`,
       },
@@ -2886,12 +2959,37 @@ export default function AdminPage() {
     setApplications((prev) =>
       prev.map((item) =>
         item.applicationId === application.applicationId
-          ? { ...item, status: newStatus }
+          ? { ...item, status: newStatus, selectionBucket: nextSelectionBucket }
           : item,
       ),
     );
 
-    if (newStatus === "Rejected" || newStatus === "Remaining Eligible") {
+    if (newStatus === "Accepted" && acceptedBatch === "Batch 2") {
+      const updatedApplication = {
+        ...application,
+        status: newStatus,
+        selectionBucket: nextSelectionBucket,
+      };
+      setBatch2Applications((prev) => {
+        const already = prev.some(
+          (a) => a.applicationId === application.applicationId,
+        );
+
+        if (already) {
+          return prev.map((a) =>
+            a.applicationId === application.applicationId
+              ? updatedApplication
+              : a,
+          );
+        }
+
+        return [...prev, updatedApplication];
+      });
+    } else if (newStatus === "Accepted" && acceptedBatch === "Batch 1") {
+      setBatch2Applications((prev) =>
+        prev.filter((a) => a.applicationId !== application.applicationId),
+      );
+    } else if (newStatus === "Rejected" || newStatus === "Remaining Eligible") {
       setBatch2Applications((prev) =>
         prev.filter((a) => a.applicationId !== application.applicationId),
       );
@@ -2901,6 +2999,7 @@ export default function AdminPage() {
       setSelectedApplication({
         ...selectedApplication,
         status: newStatus,
+        selectionBucket: nextSelectionBucket,
       });
     }
 
@@ -11399,12 +11498,30 @@ BYWC Programme Administration`;
 
                 <button
                   onClick={() =>
-                    handleStatusChange(selectedApplication, "Accepted")
+                    handleStatusChange(
+                      selectedApplication,
+                      "Accepted",
+                      "Batch 1",
+                    )
                   }
                   disabled={savingId === selectedApplication.id}
                   className="bg-emerald-500 text-white px-5 py-3 rounded-xl font-semibold hover:bg-emerald-600 transition disabled:opacity-50"
                 >
-                  Accept
+                  Accept Batch 1
+                </button>
+
+                <button
+                  onClick={() =>
+                    handleStatusChange(
+                      selectedApplication,
+                      "Accepted",
+                      "Batch 2",
+                    )
+                  }
+                  disabled={savingId === selectedApplication.id}
+                  className="bg-teal-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-teal-700 transition disabled:opacity-50"
+                >
+                  Accept Batch 2
                 </button>
 
                 <button
