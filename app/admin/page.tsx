@@ -94,7 +94,7 @@ function isBatchOneSelection(selectionBucket?: string | null, status?: Applicati
 }
 
 type AcceptanceBatch = "Batch 1" | "Batch 2";
-type Batch1ParticipantFilter = "all" | "arrived" | "not_arrived";
+type BatchParticipantFilter = "all" | "arrived" | "not_arrived";
 
 function getManualAcceptanceBucket(batch: AcceptanceBatch) {
   return `Published - Applicant Visible / ${batch} - Accepted Manually`;
@@ -901,7 +901,9 @@ export default function AdminPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [batch1ParticipantFilter, setBatch1ParticipantFilter] =
-    useState<Batch1ParticipantFilter>("all");
+    useState<BatchParticipantFilter>("all");
+  const [batch2ParticipantFilter, setBatch2ParticipantFilter] =
+    useState<BatchParticipantFilter>("all");
   const [statusFilter, setStatusFilter] = useState("All");
   const [genderFilter, setGenderFilter] = useState("All");
   const [profileApp, setProfileApp] = useState<Application | null>(null);
@@ -5961,16 +5963,39 @@ BYWC Programme Administration`;
   ).length;
 
   const batch2SearchTerm = normalize(batch2SearchInput);
+  const batch2ArrivedCount = batch2Applications.filter(
+    (application) => application.arrivalStatus === "Arrived",
+  ).length;
+  const batch2NotArrivedCount = Math.max(
+    batch2Applications.length - batch2ArrivedCount,
+    0,
+  );
+  const batch2AttendanceRate = batch2Applications.length
+    ? Math.round((batch2ArrivedCount / batch2Applications.length) * 100)
+    : 0;
   const visibleBatch2Applications = useMemo(() => {
-    if (!batch2SearchTerm) return batch2Applications;
-    return batch2Applications.filter((application) => {
+    const base =
+      batch2ParticipantFilter === "arrived"
+        ? batch2Applications.filter((application) => application.arrivalStatus === "Arrived")
+        : batch2ParticipantFilter === "not_arrived"
+          ? batch2Applications.filter((application) => application.arrivalStatus !== "Arrived")
+          : batch2Applications;
+
+    if (!batch2SearchTerm) return base;
+    return base.filter((application) => {
       const text = [
         application.firstName, application.lastName, application.email,
         application.omang, application.phone, application.constituency,
       ].filter(Boolean).join(" ").toLowerCase();
       return text.includes(batch2SearchTerm);
     });
-  }, [batch2Applications, batch2SearchTerm]);
+  }, [batch2Applications, batch2ParticipantFilter, batch2SearchTerm]);
+  const batch2FilterLabel =
+    batch2ParticipantFilter === "arrived"
+      ? "Arrived"
+      : batch2ParticipantFilter === "not_arrived"
+        ? "Not Arrived"
+        : "Total Selected";
 
   const isBotetiSpecial = (a: Application) => (a.selectionBucket || "").includes("Boteti Special");
   const isChomelenSpecial = (a: Application) => (a.selectionBucket || "").includes("Chomeleng Special");
@@ -6718,7 +6743,7 @@ BYWC Programme Administration`;
         <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <StatCard title="Total" value={totalApplications} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("batch1"); setBatch1ParticipantFilter("all"); setStatusFilter("Internal Batch 1"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
-          <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("selection"); }} />
+          <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("selection"); setBatch2ParticipantFilter("all"); setBatch2SearchInput(""); }} />
           <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("waitlist"); setStatusFilter("Internal Remaining Eligible"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Lucky Ones" value={luckyOnesApplications.length} accent="yellow" onClick={() => { setActiveSection("lucky-ones"); loadLuckyOnes(); }} />
           <StatCard title="B2 Deferred" value={batch2DeferredCount} accent="amber" onClick={() => { setActiveSection("selection"); }} />
@@ -7112,27 +7137,59 @@ BYWC Programme Administration`;
           </div>
 
           <div className="grid gap-3 md:grid-cols-4 mb-4">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <button
+              type="button"
+              onClick={() => {
+                setBatch2ParticipantFilter("all");
+                setBatch2SearchInput("");
+              }}
+              className={`rounded-2xl border p-4 text-left transition hover:bg-orange-500/10 ${
+                batch2ParticipantFilter === "all"
+                  ? "border-orange-500/50 bg-orange-500/10"
+                  : "border-white/10 bg-white/[0.03]"
+              }`}
+            >
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Total Batch 2</p>
               <p className="mt-2 text-2xl font-black text-orange-300">{acceptedBatch2Count.toLocaleString()}</p>
-            </div>
+              <p className="mt-1 text-xs font-semibold text-slate-400">View all profiles</p>
+            </button>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
               <p className="mt-2 text-2xl font-black text-white">{batch2ConstituencyRows.length}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">out of 61</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Women</p>
-              <p className="mt-2 text-2xl font-black text-pink-300">
-                {acceptedBatch2Applications.filter(a => (a.gender || "").toLowerCase() === "female").length.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Men</p>
-              <p className="mt-2 text-2xl font-black text-blue-300">
-                {acceptedBatch2Applications.filter(a => (a.gender || "").toLowerCase() === "male").length.toLocaleString()}
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setBatch2ParticipantFilter("arrived");
+                setBatch2SearchInput("");
+              }}
+              className={`rounded-2xl border p-4 text-left transition hover:bg-emerald-500/10 ${
+                batch2ParticipantFilter === "arrived"
+                  ? "border-emerald-500/60 bg-emerald-500/15"
+                  : "border-emerald-500/40 bg-emerald-500/10"
+              }`}
+            >
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">Arrived</p>
+              <p className="mt-2 text-2xl font-black text-emerald-300">{batch2ArrivedCount.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">{batch2AttendanceRate}% attendance</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBatch2ParticipantFilter("not_arrived");
+                setBatch2SearchInput("");
+              }}
+              className={`rounded-2xl border p-4 text-left transition hover:bg-orange-500/10 ${
+                batch2ParticipantFilter === "not_arrived"
+                  ? "border-orange-500/60 bg-orange-500/15"
+                  : "border-orange-500/30 bg-orange-500/10"
+              }`}
+            >
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Not Arrived</p>
+              <p className="mt-2 text-2xl font-black text-orange-300">{batch2NotArrivedCount.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">View pending profiles</p>
+            </button>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -7147,6 +7204,14 @@ BYWC Programme Administration`;
                 />
               </div>
               <div className="overflow-hidden rounded-2xl border border-white/10">
+                <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-300">
+                    Batch 2 {batch2FilterLabel} Profiles ({visibleBatch2Applications.length.toLocaleString()})
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                    Click any person to open their full profile.
+                  </p>
+                </div>
                 {acceptedApplicationsLoading ? (
                   <div className="p-6 text-center text-sm font-semibold text-slate-400">Loading...</div>
                 ) : visibleBatch2Applications.length === 0 ? (
@@ -8084,21 +8149,55 @@ BYWC Programme Administration`;
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
-            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+            <button
+              type="button"
+              onClick={() => {
+                setBatch2ParticipantFilter("all");
+                setBatch2SearchInput("");
+              }}
+              className={`rounded-2xl border p-4 text-left transition hover:bg-orange-500/10 ${
+                batch2ParticipantFilter === "all"
+                  ? "border-orange-500/50 bg-orange-500/10"
+                  : "border-orange-500/20 bg-orange-500/5"
+              }`}
+            >
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Total Selected</p>
               <p className="mt-2 text-3xl font-black text-orange-300">{batch2Applications.length.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">incl. special groups · of 480 seats</p>
               <p className="mt-1 text-xs font-black text-slate-300">{batch2Applications.filter(a => !isBatch2Special(a)).length.toLocaleString()} <span className="font-semibold text-slate-500">excl. special</span></p>
-            </div>
-            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBatch2ParticipantFilter("arrived");
+                setBatch2SearchInput("");
+              }}
+              className={`rounded-2xl border p-4 text-left transition hover:bg-emerald-500/10 ${
+                batch2ParticipantFilter === "arrived"
+                  ? "border-emerald-500/60 bg-emerald-500/15"
+                  : "border-emerald-500/40 bg-emerald-500/10"
+              }`}
+            >
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">Arrived</p>
-              <p className="mt-2 text-3xl font-black text-emerald-300">{batch2Applications.filter(a => a.arrivalStatus === "Arrived").length.toLocaleString()}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-400">{batch2Applications.length > 0 ? Math.round((batch2Applications.filter(a => a.arrivalStatus === "Arrived").length / batch2Applications.length) * 100) : 0}% attendance</p>
-            </div>
-            <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4">
+              <p className="mt-2 text-3xl font-black text-emerald-300">{batch2ArrivedCount.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">{batch2AttendanceRate}% attendance</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBatch2ParticipantFilter("not_arrived");
+                setBatch2SearchInput("");
+              }}
+              className={`rounded-2xl border p-4 text-left transition hover:bg-orange-500/10 ${
+                batch2ParticipantFilter === "not_arrived"
+                  ? "border-orange-500/60 bg-orange-500/15"
+                  : "border-orange-500/30 bg-orange-500/10"
+              }`}
+            >
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Not Arrived</p>
-              <p className="mt-2 text-3xl font-black text-orange-300">{(batch2Applications.length - batch2Applications.filter(a => a.arrivalStatus === "Arrived").length).toLocaleString()}</p>
-            </div>
+              <p className="mt-2 text-3xl font-black text-orange-300">{batch2NotArrivedCount.toLocaleString()}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">View pending profiles</p>
+            </button>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
               <p className="mt-2 text-3xl font-black text-white">{batch2ConstituencyRows.length}</p>
@@ -8118,6 +8217,14 @@ BYWC Programme Administration`;
                 />
               </div>
               <div className="overflow-hidden rounded-2xl border border-white/10">
+                <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-300">
+                    Batch 2 {batch2FilterLabel} Profiles ({visibleBatch2Applications.length.toLocaleString()})
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                    Click any person to open their full profile.
+                  </p>
+                </div>
                 {batch2Loading ? (
                   <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading Batch 2...</div>
                 ) : visibleBatch2Applications.length === 0 ? (
