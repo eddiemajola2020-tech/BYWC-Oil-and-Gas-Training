@@ -94,6 +94,7 @@ function isBatchOneSelection(selectionBucket?: string | null, status?: Applicati
 }
 
 type AcceptanceBatch = "Batch 1" | "Batch 2";
+type Batch1ParticipantFilter = "all" | "arrived" | "not_arrived";
 
 function getManualAcceptanceBucket(batch: AcceptanceBatch) {
   return `Published - Applicant Visible / ${batch} - Accepted Manually`;
@@ -899,6 +900,8 @@ export default function AdminPage() {
   );
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [batch1ParticipantFilter, setBatch1ParticipantFilter] =
+    useState<Batch1ParticipantFilter>("all");
   const [statusFilter, setStatusFilter] = useState("All");
   const [genderFilter, setGenderFilter] = useState("All");
   const [profileApp, setProfileApp] = useState<Application | null>(null);
@@ -6681,7 +6684,7 @@ BYWC Programme Administration`;
         {/* Stats bar — always visible regardless of active tab */}
         <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <StatCard title="Total" value={totalApplications} accent="slate" onClick={() => { setActiveSection("applications"); setStatusFilter("All"); setCurrentPage(1); }} />
-          <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("batch1"); setStatusFilter("Internal Batch 1"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
+          <StatCard title="Batch 1" value={internalBatchOneCount} accent="orange" onClick={() => { setActiveSection("batch1"); setBatch1ParticipantFilter("all"); setStatusFilter("Internal Batch 1"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Batch 2" value={batch2Count} accent="orange" onClick={() => { setActiveSection("selection"); }} />
           <StatCard title="Waitlist" value={remainingEligibleCount} accent="yellow" onClick={() => { setActiveSection("waitlist"); setStatusFilter("Internal Remaining Eligible"); setSearchInput(""); setSearchTerm(""); setGenderFilter("All"); setCurrentPage(1); }} />
           <StatCard title="Lucky Ones" value={luckyOnesApplications.length} accent="yellow" onClick={() => { setActiveSection("lucky-ones"); loadLuckyOnes(); }} />
@@ -6917,11 +6920,20 @@ BYWC Programme Administration`;
               <p className="mt-2 text-2xl font-black text-emerald-300">{acceptedApplications.length.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">All status = Accepted records</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSection("batch1");
+                setBatch1ParticipantFilter("all");
+                setSearchInput("");
+                setSearchTerm("");
+              }}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]"
+            >
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Batch 1 Accepted</p>
               <p className="mt-2 text-2xl font-black text-blue-300">{acceptedBatchOneCount.toLocaleString()}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Accepted with Batch 1 bucket</p>
-            </div>
+            </button>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Batch 2 Accepted</p>
               <p className="mt-2 text-2xl font-black text-orange-300">{acceptedBatch2Count.toLocaleString()}</p>
@@ -9133,14 +9145,26 @@ BYWC Programme Administration`;
           const b1Phikwe = b1All.filter(isB1PhikweSpecial);
           const b1Goodhope = b1All.filter(isB1GoodhopeSpecial);
           const searchLow = searchInput.toLowerCase();
+          const b1ListBase =
+            batch1ParticipantFilter === "arrived"
+              ? b1All.filter(a => a.arrivalStatus === "Arrived")
+              : batch1ParticipantFilter === "not_arrived"
+                ? b1All.filter(a => a.arrivalStatus !== "Arrived")
+                : b1All;
           const visibleB1 = searchInput
-            ? b1Core.filter(a => `${a.firstName} ${a.lastName} ${a.email || ""} ${a.omang || ""} ${a.phone || ""} ${a.constituency || ""}`.toLowerCase().includes(searchLow))
-            : b1Core;
+            ? b1ListBase.filter(a => `${a.firstName} ${a.lastName} ${a.email || ""} ${a.omang || ""} ${a.phone || ""} ${a.constituency || ""}`.toLowerCase().includes(searchLow))
+            : b1ListBase;
           const b1Arrived = b1All.filter(a => a.arrivalStatus === "Arrived").length;
           const b1NotArrived = b1All.length - b1Arrived;
           const b1ConstRows = Object.entries(
             b1Core.reduce((acc, a) => { const c = a.constituency || "Unknown"; acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<string, number>)
           ).sort(([, a], [, b]) => b - a);
+          const batch1FilterLabel =
+            batch1ParticipantFilter === "arrived"
+              ? "Arrived"
+              : batch1ParticipantFilter === "not_arrived"
+                ? "Not Arrived"
+                : "Total Selected";
           return (
             <section className="rounded-[32px] border border-emerald-500/30 bg-[#030f08] p-5 shadow-[0_20px_60px_rgba(16,185,129,0.08)]">
               <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -9153,19 +9177,57 @@ BYWC Programme Administration`;
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 mb-5">
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatch1ParticipantFilter("all");
+                    setSearchInput("");
+                    setSearchTerm("");
+                  }}
+                  className={`rounded-2xl border p-4 text-left transition hover:bg-emerald-500/10 ${
+                    batch1ParticipantFilter === "all"
+                      ? "border-emerald-500/50 bg-emerald-500/10"
+                      : "border-emerald-500/20 bg-emerald-500/5"
+                  }`}
+                >
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Total Selected</p>
                   <p className="mt-2 text-3xl font-black text-emerald-300">{b1All.length.toLocaleString()}</p>
-                </div>
-                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+                  <p className="mt-1 text-xs font-semibold text-slate-400">View all profiles</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatch1ParticipantFilter("arrived");
+                    setSearchInput("");
+                    setSearchTerm("");
+                  }}
+                  className={`rounded-2xl border p-4 text-left transition hover:bg-emerald-500/10 ${
+                    batch1ParticipantFilter === "arrived"
+                      ? "border-emerald-500/60 bg-emerald-500/15"
+                      : "border-emerald-500/40 bg-emerald-500/10"
+                  }`}
+                >
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-400">Arrived</p>
                   <p className="mt-2 text-3xl font-black text-emerald-300">{b1Arrived.toLocaleString()}</p>
                   <p className="mt-1 text-xs font-semibold text-slate-400">{b1All.length > 0 ? Math.round((b1Arrived / b1All.length) * 100) : 0}% attendance</p>
-                </div>
-                <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatch1ParticipantFilter("not_arrived");
+                    setSearchInput("");
+                    setSearchTerm("");
+                  }}
+                  className={`rounded-2xl border p-4 text-left transition hover:bg-orange-500/10 ${
+                    batch1ParticipantFilter === "not_arrived"
+                      ? "border-orange-500/60 bg-orange-500/15"
+                      : "border-orange-500/30 bg-orange-500/10"
+                  }`}
+                >
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Not Arrived</p>
                   <p className="mt-2 text-3xl font-black text-orange-300">{b1NotArrived.toLocaleString()}</p>
-                </div>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">View pending profiles</p>
+                </button>
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Constituencies</p>
                   <p className="mt-2 text-3xl font-black text-white">{b1ConstRows.length}</p>
@@ -9185,6 +9247,14 @@ BYWC Programme Administration`;
                     />
                   </div>
                   <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
+                      <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-300">
+                        {batch1FilterLabel} Profiles ({visibleB1.length.toLocaleString()})
+                      </p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                        Click any person to open their full profile.
+                      </p>
+                    </div>
                     {visibleB1.length === 0 ? (
                       <div className="p-8 text-center text-sm font-semibold text-slate-400">{searchInput ? "No results for this search." : "No Batch 1 data found."}</div>
                     ) : (
@@ -10286,11 +10356,20 @@ BYWC Programme Administration`;
                 <>
                   {/* Summary cards */}
                   <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveSection("batch1");
+                        setBatch1ParticipantFilter("all");
+                        setSearchInput("");
+                        setSearchTerm("");
+                      }}
+                      className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-left transition hover:bg-emerald-500/10"
+                    >
                       <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Batch 1</p>
                       <p className="mt-2 text-3xl font-black text-emerald-300">{batch1Count}</p>
                       <p className="mt-1 text-[10px] text-slate-500">all accepted</p>
-                    </div>
+                    </button>
                     <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-300">Batch 2</p>
                       <p className="mt-2 text-3xl font-black text-orange-300">{batch2Count}</p>
