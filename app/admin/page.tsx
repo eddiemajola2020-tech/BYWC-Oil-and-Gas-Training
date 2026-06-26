@@ -35,6 +35,7 @@ const ADMIN_EMAILS = [
   "bandaseilaneng@gmail.com",
   "oil-gas.training@sethresources.com",
   "tsmogotsi@yahoo.com",
+  "lolotau02@gmail.com",
 ];
 
 type ApplicationStatus =

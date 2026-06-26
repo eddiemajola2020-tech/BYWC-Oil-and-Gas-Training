@@ -9,6 +9,7 @@ const ADMIN_EMAILS = [
   "bandaseilaneng@gmail.com",
   "oil-gas.training@sethresources.com",
   "tsmogotsi@yahoo.com",
+  "lolotau02@gmail.com",
 ];
 const REDIRECT_URL = "https://bywcprogram.org/create-new-password";
 
