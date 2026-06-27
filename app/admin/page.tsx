@@ -3246,6 +3246,63 @@ export default function AdminPage() {
     setSavingId(null);
   }
 
+  async function handleMoveToBatch1Deferred(application: Application) {
+    const confirmed = window.confirm(
+      `Move ${application.firstName} ${application.lastName} to Batch 1 — Deferred Sprinkle?\n\nThis places them inside the Batch 1 internal selection. Their selectionBucket will be set to "Batch 1 - Deferred-Sprinkle".`
+    );
+    if (!confirmed) return;
+
+    setSavingId(application.id);
+    const newBucket = "Internal Hold - Do Not Notify / Batch 1 - Deferred-Sprinkle";
+
+    const { error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update({ status: "Submitted", selection_bucket: newBucket })
+      .eq("application_id", application.applicationId);
+
+    if (error) {
+      console.error("Failed to move to Batch 1 Deferred:", error);
+      alert(error.message);
+      setSavingId(null);
+      return;
+    }
+
+    await logAdminAction({
+      action: "status_change",
+      applicationId: application.applicationId,
+      details: {
+        previousStatus: application.status,
+        newStatus: "Submitted",
+        selectionBucket: newBucket,
+        applicantEmail: application.email,
+        applicantName: `${application.firstName} ${application.lastName}`,
+      },
+    });
+
+    setApplications((prev) =>
+      prev.map((item) =>
+        item.applicationId === application.applicationId
+          ? { ...item, status: "Submitted" as ApplicationStatus, selectionBucket: newBucket }
+          : item,
+      ),
+    );
+
+    setBatch2Applications((prev) =>
+      prev.filter((a) => a.applicationId !== application.applicationId),
+    );
+
+    if (selectedApplication?.applicationId === application.applicationId) {
+      setSelectedApplication({
+        ...selectedApplication,
+        status: "Submitted" as ApplicationStatus,
+        selectionBucket: newBucket,
+      });
+    }
+
+    await refreshAdminNumbers(false);
+    setSavingId(null);
+  }
+
   async function handleSyncAuth(e: React.FormEvent) {
     e.preventDefault();
     if (!syncAuthEmail.trim()) return;
@@ -12047,6 +12104,14 @@ BYWC Programme Administration`;
                   className="bg-amber-500 text-white px-5 py-3 rounded-xl font-semibold hover:bg-amber-600 transition disabled:opacity-50"
                 >
                   Defer — Next Intake
+                </button>
+
+                <button
+                  onClick={() => handleMoveToBatch1Deferred(selectedApplication)}
+                  disabled={savingId === selectedApplication.id}
+                  className="bg-fuchsia-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-fuchsia-700 transition disabled:opacity-50"
+                >
+                  Move to Batch 1 Deferred
                 </button>
 
                 <button
