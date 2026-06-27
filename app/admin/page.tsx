@@ -37,6 +37,7 @@ const ADMIN_EMAILS = [
   "tsmogotsi@yahoo.com",
   "lolotau02@gmail.com",
 ];
+const ARRIVAL_DISCLAIMER_VERSION = "BYWC-ARRIVAL-DISCLAIMER-2026-V1";
 
 type ApplicationStatus =
   | "Submitted"
@@ -103,6 +104,7 @@ function getManualAcceptanceBucket(batch: AcceptanceBatch) {
 
 type AuditAction =
   | "status_change"
+  | "arrival_marked"
   | "auto_review"
   | "master_selection"
   | "selection_publish"
@@ -2970,6 +2972,163 @@ export default function AdminPage() {
 
     await refreshAdminNumbers(false);
     setSavingId(null);
+  }
+
+  async function markApplicationArrived(application: Application) {
+    const databaseId = application.databaseId || application.id;
+    const arrivedAt = new Date().toISOString();
+
+    const { data: sourceRow, error: sourceError } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .select(
+        "next_of_kin_name,next_of_kin_phone,next_of_kin_alt_phone,next_of_kin_relationship,emergency_contact_name,emergency_contact_number,emergency_contact_relationship",
+      )
+      .eq("id", databaseId)
+      .single();
+
+    if (sourceError) {
+      throw sourceError;
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      arrival_status: "Arrived",
+      arrived_at: arrivedAt,
+      arrival_confirmed_by: "Admin scan on behalf",
+      arrival_disclaimer_accepted: true,
+      arrival_disclaimer_accepted_at: arrivedAt,
+      arrival_disclaimer_version: ARRIVAL_DISCLAIMER_VERSION,
+      registration_status: "Pending",
+    };
+
+    if (sourceRow?.next_of_kin_name) {
+      updatePayload.emergency_contact_name = sourceRow.next_of_kin_name;
+      updatePayload.emergency_contact_number =
+        sourceRow.next_of_kin_phone || sourceRow.next_of_kin_alt_phone || "";
+      updatePayload.emergency_contact_relationship =
+        sourceRow.next_of_kin_relationship || "";
+    } else {
+      if (sourceRow?.emergency_contact_name) {
+        updatePayload.emergency_contact_name = sourceRow.emergency_contact_name;
+      }
+      if (sourceRow?.emergency_contact_number) {
+        updatePayload.emergency_contact_number = sourceRow.emergency_contact_number;
+      }
+      if (sourceRow?.emergency_contact_relationship) {
+        updatePayload.emergency_contact_relationship =
+          sourceRow.emergency_contact_relationship;
+      }
+    }
+
+    const { data, error } = await supabase
+      .from(APPLICATIONS_TABLE)
+      .update(updatePayload)
+      .eq("id", databaseId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    await logAdminAction({
+      action: "arrival_marked",
+      applicationId: application.applicationId,
+      details: {
+        applicantEmail: application.email,
+        applicantName: `${application.firstName} ${application.lastName}`,
+        arrivalConfirmedBy: "Admin scan on behalf",
+      },
+    });
+
+    return formatApplication(data);
+  }
+
+  async function handleMarkApplicationArrived(application: Application) {
+    const confirmed = window.confirm(
+      `Mark ${application.firstName} ${application.lastName} as Arrived?`,
+    );
+    if (!confirmed) return;
+
+    setSavingId(application.id);
+    try {
+      const updatedApplication = await markApplicationArrived(application);
+
+      setApplications((prev) =>
+        prev.map((item) =>
+          item.id === updatedApplication.id ? updatedApplication : item,
+        ),
+      );
+      setAcceptedApplications((prev) =>
+        prev.map((item) =>
+          item.id === updatedApplication.id ? updatedApplication : item,
+        ),
+      );
+      setBatch2Applications((prev) =>
+        prev.map((item) =>
+          item.id === updatedApplication.id ? updatedApplication : item,
+        ),
+      );
+
+      if (selectedApplication?.id === application.id) {
+        setSelectedApplication(updatedApplication);
+      }
+
+      await refreshAdminNumbers(false);
+    } catch (error) {
+      console.error("Failed to mark arrived:", error);
+      alert(error instanceof Error ? error.message : "Failed to mark arrived.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function handleBulkProfileMarkArrived(applications: Application[]) {
+    const targets = applications.filter((application) =>
+      selectedProfileIds.has(application.id),
+    );
+
+    if (targets.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Mark ${targets.length} selected candidate${targets.length === 1 ? "" : "s"} as Arrived?`,
+    );
+    if (!confirmed) return;
+
+    setBulkProfileSaving(true);
+    const updatedApplications: Application[] = [];
+
+    for (const application of targets) {
+      try {
+        const updatedApplication = await markApplicationArrived(application);
+        updatedApplications.push(updatedApplication);
+      } catch (error) {
+        console.error("Bulk arrival update failed:", error);
+        alert(
+          `Failed to mark ${application.firstName} ${application.lastName} arrived: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        );
+      }
+    }
+
+    if (updatedApplications.length > 0) {
+      const updatedById = new Map(updatedApplications.map((item) => [item.id, item]));
+      const applyUpdates = (items: Application[]) =>
+        items.map((item) => updatedById.get(item.id) || item);
+
+      setApplications(applyUpdates);
+      setAcceptedApplications(applyUpdates);
+      setBatch2Applications(applyUpdates);
+
+      if (selectedApplication && updatedById.has(selectedApplication.id)) {
+        setSelectedApplication(updatedById.get(selectedApplication.id) || null);
+      }
+    }
+
+    setSelectedProfileIds(new Set());
+    await refreshAdminNumbers(false);
+    await loadAcceptedApplications();
+    setBulkProfileSaving(false);
   }
 
   async function handleDeferApplication(application: Application) {
@@ -9090,6 +9249,7 @@ BYWC Programme Administration`;
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Accepted", "Batch 1")} disabled={bulkProfileSaving} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:opacity-50">Accept B1</button>
                       <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Accepted", "Batch 2")} disabled={bulkProfileSaving} className="rounded-xl bg-teal-600 px-3 py-2 text-xs font-black text-white transition hover:bg-teal-700 disabled:opacity-50">Accept B2</button>
+                      <button type="button" onClick={() => handleBulkProfileMarkArrived(filteredApplications)} disabled={bulkProfileSaving} className="rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white transition hover:bg-sky-700 disabled:opacity-50">Mark Arrived</button>
                       <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Rejected")} disabled={bulkProfileSaving} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white transition hover:bg-red-700 disabled:opacity-50">Reject</button>
                       <button type="button" onClick={() => handleBulkProfileStatusChange(filteredApplications, "Deferred")} disabled={bulkProfileSaving} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:opacity-50">Defer</button>
                       <button type="button" onClick={() => setSelectedProfileIds(new Set())} disabled={bulkProfileSaving} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200 transition hover:bg-white/10 disabled:opacity-50">Clear</button>
@@ -9455,6 +9615,7 @@ BYWC Programme Administration`;
                         <div className="flex flex-wrap gap-2">
                           <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Accepted", "Batch 1")} disabled={bulkProfileSaving} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:opacity-50">Accept B1</button>
                           <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Accepted", "Batch 2")} disabled={bulkProfileSaving} className="rounded-xl bg-teal-600 px-3 py-2 text-xs font-black text-white transition hover:bg-teal-700 disabled:opacity-50">Accept B2</button>
+                          <button type="button" onClick={() => handleBulkProfileMarkArrived(visibleB1)} disabled={bulkProfileSaving} className="rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white transition hover:bg-sky-700 disabled:opacity-50">Mark Arrived</button>
                           <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Rejected")} disabled={bulkProfileSaving} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white transition hover:bg-red-700 disabled:opacity-50">Reject</button>
                           <button type="button" onClick={() => handleBulkProfileStatusChange(visibleB1, "Deferred")} disabled={bulkProfileSaving} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:opacity-50">Defer</button>
                           <button type="button" onClick={() => setSelectedProfileIds(new Set())} disabled={bulkProfileSaving} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200 transition hover:bg-white/10 disabled:opacity-50">Clear</button>
@@ -11844,6 +12005,17 @@ BYWC Programme Administration`;
                   className="bg-teal-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-teal-700 transition disabled:opacity-50"
                 >
                   Accept Batch 2
+                </button>
+
+                <button
+                  onClick={() => handleMarkApplicationArrived(selectedApplication)}
+                  disabled={
+                    savingId === selectedApplication.id ||
+                    selectedApplication.arrivalStatus === "Arrived"
+                  }
+                  className="bg-sky-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-sky-700 transition disabled:opacity-50"
+                >
+                  Mark Arrived
                 </button>
 
                 <button
