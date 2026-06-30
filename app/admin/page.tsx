@@ -113,7 +113,7 @@ function getPublicSelectionLabel(value?: string | null, fallback = "—") {
     .replace(/\bAccepted Manually\b/gi, "Accepted")
     .replace(/\bManual Add\b/gi, "Selected")
     .replace(/\bManual Override\b/gi, "Selected")
-    .replace(/\bPriority override\b/gi, "Priority selected")
+    .replace(/\bPriority override\b/gi, "Selected")
     .replace(/\bmanual profile created\b/gi, "Profile completed")
     .replace(/\bmanual entry\b/gi, "Profile")
     .replace(/\s{2,}/g, " ")
@@ -131,11 +131,11 @@ function getPublicAdminText(value?: string | null, fallback = "-") {
     .replace(/\bmanually added\b/gi, "added")
     .replace(/\bmanual profile created\b/gi, "profile completed")
     .replace(/\bmanual entry\b/gi, "profile")
-    .replace(/\bPriority override bypassed hard gate\b/gi, "Priority review selected applicant")
-    .replace(/\bPriority override selected before normal ranking\b/gi, "Priority review selected applicant")
-    .replace(/\bPriority override - selected despite hard gate\b/gi, "Priority review selected applicant")
-    .replace(/\bPriority override - selected before normal ranking\b/gi, "Priority review selected applicant")
-    .replace(/\bPriority override\b/gi, "Priority review")
+    .replace(/\bPriority override bypassed hard gate\b/gi, "Selected applicant")
+    .replace(/\bPriority override selected before normal ranking\b/gi, "Selected applicant")
+    .replace(/\bPriority override - selected despite hard gate\b/gi, "Selected applicant")
+    .replace(/\bPriority override - selected before normal ranking\b/gi, "Selected applicant")
+    .replace(/\bPriority override\b/gi, "Selected")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -7028,17 +7028,17 @@ BYWC Programme Administration`;
         {activeSection === "programme" && (
         <>
 
-        {/* Manual Add Applicant */}
+        {/* Add Applicant */}
         <section className="mb-5 rounded-[30px] border border-blue-500/20 bg-[#0b1028] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] lg:p-5">
           <div className="mb-4">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-400">
               Admin Tool
             </p>
             <h2 className="mt-0.5 text-base font-black text-white">
-              Add Applicant Manually
+              Add Applicant
             </h2>
             <p className="mt-1 text-xs leading-5 text-slate-400">
-              Directly insert a person into the database. Duplicate Omang check is enforced. Use for manual entries that bypassed the online form.
+              Directly insert a person into the database. Duplicate Omang check is enforced.
             </p>
           </div>
 
@@ -8252,7 +8252,7 @@ BYWC Programme Administration`;
             Create Account &amp; Send Reset Link
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
-            Use this for applicants who were manually added and have never created a password. Creates their auth account if missing, then sends a reset link to their email.
+            Use this for applicants who do not have a password yet. Creates their auth account if missing, then sends a reset link to their email.
           </p>
 
           <form onSubmit={handleSyncAuth} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -9203,7 +9203,7 @@ BYWC Programme Administration`;
               <div className="mb-5 flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.15em] text-violet-400">Special Group</p>
-                  <h3 className="mt-0.5 text-lg font-black text-white">Add Member Manually</h3>
+                  <h3 className="mt-0.5 text-lg font-black text-white">Add Member</h3>
                 </div>
                 <button type="button" onClick={() => setAddSpecialOpen(false)} className="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white">✕</button>
               </div>
@@ -9550,7 +9550,7 @@ BYWC Programme Administration`;
                             {application.autoReviewScore ?? "Not reviewed"}
                           </p>
                           <p className="mt-1 break-words text-[11px] leading-4 text-slate-400">
-                            {application.autoReviewResult || "-"}
+                            {getPublicAdminText(application.autoReviewResult)}
                           </p>
                           {application.hardRejectReason && (
                             <p className="mt-1 max-h-20 overflow-y-auto pr-1 text-[11px] leading-4 text-red-400">
@@ -10366,7 +10366,7 @@ BYWC Programme Administration`;
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-400">Rejected</p>
                   <h2 className="mt-1 text-xl font-black text-white">Rejected Applications — {totalCount.toLocaleString()}</h2>
-                  <p className="mt-1 text-sm text-slate-400">Did not pass review gates or were manually rejected · click any name to view full profile and rejection reason</p>
+                  <p className="mt-1 text-sm text-slate-400">Did not pass review gates · click any name to view full profile and rejection reason</p>
                 </div>
                 <button type="button" onClick={() => { setActiveSection("applications"); setSearchInput(""); setSearchTerm(""); }} className="shrink-0 self-start rounded-2xl border border-white/10 bg-white/5 px-5 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/10">← Back to All</button>
               </div>
@@ -11979,7 +11979,7 @@ BYWC Programme Administration`;
                 />
                 <Detail
                   label="Auto Review Result"
-                  value={selectedApplication.autoReviewResult || "-"}
+                  value={getPublicAdminText(selectedApplication.autoReviewResult)}
                 />
                 <Detail
                   label="Priority Group"
