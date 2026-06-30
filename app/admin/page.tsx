@@ -102,6 +102,44 @@ function getManualAcceptanceBucket(batch: AcceptanceBatch) {
   return `Published - Applicant Visible / ${batch} - Accepted Manually`;
 }
 
+function getPublicSelectionLabel(value?: string | null, fallback = "—") {
+  const raw = (value || "").trim();
+  if (!raw) return fallback;
+
+  return raw
+    .replace(/^Published - Applicant Visible\s*\/\s*/i, "")
+    .replace(/^Internal Hold - Do Not Notify\s*\/\s*/i, "")
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/\bAccepted Manually\b/gi, "Accepted")
+    .replace(/\bManual Add\b/gi, "Selected")
+    .replace(/\bManual Override\b/gi, "Selected")
+    .replace(/\bPriority override\b/gi, "Priority selected")
+    .replace(/\bmanual profile created\b/gi, "Profile completed")
+    .replace(/\bmanual entry\b/gi, "Profile")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function getPublicAdminText(value?: string | null, fallback = "-") {
+  const raw = (value || "").trim();
+  if (!raw) return fallback;
+
+  return raw
+    .replace(/\bAccepted Manually\b/gi, "Accepted")
+    .replace(/\bManual Add\b/gi, "Selected")
+    .replace(/\bManual Override\b/gi, "Selected")
+    .replace(/\bmanually added\b/gi, "added")
+    .replace(/\bmanual profile created\b/gi, "profile completed")
+    .replace(/\bmanual entry\b/gi, "profile")
+    .replace(/\bPriority override bypassed hard gate\b/gi, "Priority review selected applicant")
+    .replace(/\bPriority override selected before normal ranking\b/gi, "Priority review selected applicant")
+    .replace(/\bPriority override - selected despite hard gate\b/gi, "Priority review selected applicant")
+    .replace(/\bPriority override - selected before normal ranking\b/gi, "Priority review selected applicant")
+    .replace(/\bPriority override\b/gi, "Priority review")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 type AuditAction =
   | "status_change"
   | "arrival_marked"
@@ -494,6 +532,14 @@ function countWords(text?: string | null) {
   return (text || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
+function getReliableWordCount(storedCount?: number | null, text?: string | null) {
+  const actualCount = countWords(text);
+  const storedNumber = Number(storedCount);
+
+  if (!Number.isFinite(storedNumber)) return actualCount;
+  return Math.max(storedNumber, actualCount);
+}
+
 function normalize(value?: string | null) {
   return (value || "").trim().toLowerCase();
 }
@@ -504,7 +550,7 @@ function hasValue(value?: string | null) {
 
 function isBotswanaCitizen(value?: string | null) {
   const citizenship = normalize(value);
-  return citizenship === "botswana" || citizenship.includes("botswana");
+  return citizenship === "botswana" || citizenship === "motswana" || citizenship === "batswana" || citizenship.includes("botswana");
 }
 
 function isYes(value?: string | null) {
@@ -653,10 +699,14 @@ function calculateEligibility(application: Application): ReviewDecision {
 
   const age = Number(application.age);
   const points = Number(application.bgcsePoints);
-  const motivationWords =
-    application.motivationWordCount ?? countWords(application.motivation);
-  const postProgramWords =
-    application.postProgramWordCount ?? countWords(application.postProgramPlan);
+  const motivationWords = getReliableWordCount(
+    application.motivationWordCount,
+    application.motivation,
+  );
+  const postProgramWords = getReliableWordCount(
+    application.postProgramWordCount,
+    application.postProgramPlan,
+  );
   const certificatePath =
     application.bgcseCertificateFile || application.certificateFile || "";
   const priorityGroup = getPriorityGroup(application);
@@ -4985,9 +5035,9 @@ BYWC Programme Administration`;
       application.bgcsePoints,
       application.preferredLanguage,
       application.autoReviewScore,
-      application.autoReviewResult,
-      application.priorityGroup,
-      application.selectionBucket,
+      getPublicAdminText(application.autoReviewResult, ""),
+      getPublicSelectionLabel(application.priorityGroup, ""),
+      getPublicSelectionLabel(application.selectionBucket, ""),
       application.hardRejectReason,
       application.documentCompletenessScore,
       application.omangFile,
@@ -5385,9 +5435,9 @@ BYWC Programme Administration`;
         application.bgcsePoints,
         application.preferredLanguage,
         application.autoReviewScore,
-        application.autoReviewResult,
-        application.priorityGroup,
-        application.selectionBucket,
+        getPublicAdminText(application.autoReviewResult, ""),
+        getPublicSelectionLabel(application.priorityGroup, ""),
+        getPublicSelectionLabel(application.selectionBucket, ""),
         application.hardRejectReason,
         application.documentCompletenessScore,
         application.omangFile,
@@ -5649,7 +5699,7 @@ BYWC Programme Administration`;
       application.phone,
       application.email,
       application.status,
-      application.selectionBucket,
+      getPublicSelectionLabel(application.selectionBucket, ""),
     ]);
 
     const csvContent = [
@@ -5702,7 +5752,7 @@ BYWC Programme Administration`;
       application.employmentStatus,
       application.autoReviewScore ?? "",
       application.status,
-      application.selectionBucket,
+      getPublicSelectionLabel(application.selectionBucket, ""),
     ]);
 
     const csvContent = [
@@ -5922,6 +5972,7 @@ BYWC Programme Administration`;
       "Boteti":    "Published - Applicant Visible / Batch 2 - Boteti Special",
       "Chomeleng": "Published - Applicant Visible / Batch 2 - Chomeleng Special",
       "BERA":      "Published - Applicant Visible / Batch 2 - BERA Special",
+      "Serowe":    "Published - Applicant Visible / Batch 2 - Serowe Special",
     };
     const bucket = bucketMap[d.group] || bucketMap["Boteti"];
     const slug = `${d.firstName.toLowerCase().replace(/\s+/g,"")}.${d.lastName.toLowerCase().replace(/\s+/g,"")}`;
@@ -5962,16 +6013,17 @@ BYWC Programme Administration`;
     }
   }
 
-  function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng" | "bera") {
+  function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng" | "bera" | "serowe") {
     const all = batch2Applications;
     const people =
       mode === "combined"  ? all :
       mode === "actual"    ? all.filter(a => !isBatch2Special(a)) :
       mode === "chomeleng" ? all.filter(isChomelenSpecial) :
       mode === "bera"      ? all.filter(isBeraSpecial) :
+      mode === "serowe"    ? all.filter(isSeroweSpecial) :
                              all.filter(isBotetiSpecial);
     if (people.length === 0) { alert("No records for this selection."); return; }
-    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : mode === "chomeleng" ? "ChomelenSpecial" : mode === "bera" ? "BERASpecial" : "BotetiSpecial";
+    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : mode === "chomeleng" ? "ChomelenSpecial" : mode === "bera" ? "BERASpecial" : mode === "serowe" ? "SeroweSpecial" : "BotetiSpecial";
     const headers = ["First Name","Last Name","Omang","Phone","Email","Constituency","Gender","Arrival","Group"];
     const rows = people.map(a => {
       const bucket = a.selectionBucket || "";
@@ -6217,7 +6269,8 @@ BYWC Programme Administration`;
   const isBotetiSpecial = (a: Application) => (a.selectionBucket || "").includes("Boteti Special");
   const isChomelenSpecial = (a: Application) => (a.selectionBucket || "").includes("Chomeleng Special");
   const isBeraSpecial = (a: Application) => (a.selectionBucket || "").includes("BERA Special");
-  const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a) || isBeraSpecial(a);
+  const isSeroweSpecial = (a: Application) => (a.selectionBucket || "").includes("Serowe Special");
+  const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a) || isBeraSpecial(a) || isSeroweSpecial(a);
   const isLuckyOnesPromoted = (a: Application) => (a.selectionBucket || "").includes("Lucky Ones Promoted");
   const isLuckyOnesReviewed = (a: Application) => (a.selectionBucket || "").includes("Remaining Eligible - Reviewed");
 
@@ -7289,7 +7342,7 @@ BYWC Programme Administration`;
                             </td>
                             <td className="px-3 py-3">
                               <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-300">
-                                {application.selectionBucket || "Accepted"}
+                                {getPublicSelectionLabel(application.selectionBucket, "Accepted")}
                               </span>
                             </td>
                           </tr>
@@ -8359,6 +8412,10 @@ BYWC Programme Administration`;
                       className="block w-full px-4 py-2.5 text-left text-xs font-black text-cyan-300 hover:bg-white/10">
                       BERA Special only
                     </button>
+                    <button type="button" onClick={() => handleExportBatch2Csv("serowe")}
+                      className="block w-full px-4 py-2.5 text-left text-xs font-black text-amber-300 hover:bg-white/10">
+                      Serowe Special only
+                    </button>
                   </div>
                 )}
               </div>
@@ -8690,6 +8747,63 @@ BYWC Programme Administration`;
                               <td className="px-3 py-3 font-semibold text-slate-300">{a.constituency || "Unknown"}</td>
                               <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
                               <td className="px-3 py-3"><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-black text-cyan-300">BERA</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Serowe Special List */}
+          {(() => {
+            const serowe = batch2Applications.filter(isSeroweSpecial);
+            const seroweWomen = serowe.filter(a => (a.gender || "").toLowerCase() === "female").length;
+            const seroweMen = serowe.filter(a => (a.gender || "").toLowerCase() === "male").length;
+            const seroweArrived = serowe.filter(a => a.arrivalStatus === "Arrived").length;
+            return (
+              <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-400">Serowe Special List</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Counts toward Women/Men totals · excluded from constituency quota</p>
+                  </div>
+                  <div className="flex gap-3 text-xs font-black">
+                    <span className="rounded-full bg-pink-500/10 px-3 py-1 text-pink-300">{seroweWomen} Women</span>
+                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-blue-300">{seroweMen} Men</span>
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-300">{seroweArrived} Arrived</span>
+                  </div>
+                </div>
+                {serowe.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">No Serowe Special entries yet.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup><col className="w-[30%]"/><col className="w-[18%]"/><col className="w-[16%]"/><col className="w-[16%]"/><col className="w-[12%]"/><col className="w-[8%]"/></colgroup>
+                      <thead className="bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Constituency</th>
+                          <th className="px-3 py-3 text-left font-black">Arrival</th>
+                          <th className="px-3 py-3 text-left font-black">Label</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {serowe.map(a => {
+                          const arrived = a.arrivalStatus === "Arrived";
+                          return (
+                            <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
+                              <td className="px-3 py-3"><p className="font-black text-amber-300">{a.firstName} {a.lastName}</p></td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.omang || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.phone || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.constituency || "Unknown"}</td>
+                              <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
+                              <td className="px-3 py-3"><span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-300">Serowe</span></td>
                             </tr>
                           );
                         })}
@@ -9104,6 +9218,7 @@ BYWC Programme Administration`;
                   <option value="Boteti">Batch 2 — Boteti Special</option>
                   <option value="Chomeleng">Batch 2 — Chomeleng Special</option>
                   <option value="BERA">Batch 2 — BERA Special</option>
+                  <option value="Serowe">Batch 2 — Serowe Special</option>
                 </select>
               </div>
 
@@ -9439,7 +9554,7 @@ BYWC Programme Administration`;
                           </p>
                           {application.hardRejectReason && (
                             <p className="mt-1 max-h-20 overflow-y-auto pr-1 text-[11px] leading-4 text-red-400">
-                              {application.hardRejectReason}
+                              {getPublicAdminText(application.hardRejectReason)}
                             </p>
                           )}
                         </td>
@@ -10337,7 +10452,7 @@ BYWC Programme Administration`;
                                   </td>
                                   <td className="px-3 py-3">
                                     <span className="line-clamp-2 text-[10px] font-semibold text-red-400/80">
-                                      {application.hardRejectReason || "—"}
+                                      {getPublicAdminText(application.hardRejectReason, "—")}
                                     </span>
                                   </td>
                                 </tr>
@@ -10606,7 +10721,7 @@ BYWC Programme Administration`;
                                 <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                                 <td className="px-3 py-3">
                                   <span className="rounded-full bg-pink-500/10 px-2 py-1 text-[10px] font-black text-pink-300">
-                                    {application.selectionBucket || application.status || "—"}
+                                    {getPublicSelectionLabel(application.selectionBucket, application.status || "—")}
                                   </span>
                                 </td>
                               </tr>
@@ -10735,7 +10850,7 @@ BYWC Programme Administration`;
                                 <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                                 <td className="px-3 py-3">
                                   <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-black text-blue-300">
-                                    {application.selectionBucket || application.status || "—"}
+                                    {getPublicSelectionLabel(application.selectionBucket, application.status || "—")}
                                   </span>
                                 </td>
                               </tr>
@@ -11117,7 +11232,7 @@ BYWC Programme Administration`;
                                             {application.autoReviewScore ?? "-"}
                                           </p>
                                           <p className="mt-1 text-[11px] text-slate-400">
-                                            {application.selectionBucket || "-"}
+                                            {getPublicSelectionLabel(application.selectionBucket, "-")}
                                           </p>
                                         </td>
                                         <td className="px-3 py-3 align-top">
@@ -11868,11 +11983,11 @@ BYWC Programme Administration`;
                 />
                 <Detail
                   label="Priority Group"
-                  value={selectedApplication.priorityGroup || "-"}
+                  value={getPublicSelectionLabel(selectedApplication.priorityGroup, "-")}
                 />
                 <Detail
                   label="Selection Bucket"
-                  value={selectedApplication.selectionBucket || "-"}
+                  value={getPublicSelectionLabel(selectedApplication.selectionBucket, "-")}
                 />
                 <Detail
                   label="Document Score"
@@ -11954,19 +12069,19 @@ BYWC Programme Administration`;
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <LongDetail
                   label="Auto Review Notes"
-                  value={selectedApplication.autoReviewNotes || "-"}
+                  value={getPublicAdminText(selectedApplication.autoReviewNotes)}
                 />
                 <LongDetail
                   label="Hard Reject Reason"
-                  value={selectedApplication.hardRejectReason || "-"}
+                  value={getPublicAdminText(selectedApplication.hardRejectReason)}
                   danger
                 />
                 <LongDetail
-                  label={`Motivation (${selectedApplication.motivationWordCount ?? countWords(selectedApplication.motivation)} words)`}
+                  label={`Motivation (${getReliableWordCount(selectedApplication.motivationWordCount, selectedApplication.motivation)} words)`}
                   value={selectedApplication.motivation || "-"}
                 />
                 <LongDetail
-                  label={`Post-Program Plan (${selectedApplication.postProgramWordCount ?? countWords(selectedApplication.postProgramPlan)} words)`}
+                  label={`Post-Program Plan (${getReliableWordCount(selectedApplication.postProgramWordCount, selectedApplication.postProgramPlan)} words)`}
                   value={selectedApplication.postProgramPlan || "-"}
                 />
               </div>
@@ -12313,7 +12428,7 @@ function DispatchMiniGroup({
                 </p>
                 <p className="mt-1 text-[11px] text-slate-500">
                   Score: {application.autoReviewScore ?? "-"} •{" "}
-                  {application.selectionBucket || application.status}
+                  {getPublicSelectionLabel(application.selectionBucket, application.status)}
                 </p>
               </div>
 
