@@ -95,6 +95,44 @@ function isBatchOneSelection(selectionBucket?: string | null, status?: Applicati
   return false;
 }
 
+function shouldHideAutoReviewScore(
+  application: Pick<Application, "status" | "selectionBucket">,
+) {
+  const bucket = application.selectionBucket || "";
+  return (
+    application.status === "Accepted" &&
+    /(accepted manually|manual add|priority override)/i.test(bucket)
+  );
+}
+
+function getUiAutoReviewScore(
+  application: Pick<Application, "status" | "selectionBucket" | "autoReviewScore">,
+  fallback = "-",
+) {
+  if (shouldHideAutoReviewScore(application)) return fallback;
+  return application.autoReviewScore?.toString() || fallback;
+}
+
+function getGenderBadge(gender?: string | null) {
+  const normalized = normalize(gender);
+  if (normalized === "male") {
+    return { label: "M", className: "bg-blue-500/10 text-blue-300" };
+  }
+  if (normalized === "female") {
+    return { label: "F", className: "bg-pink-500/10 text-pink-300" };
+  }
+  return { label: "-", className: "bg-white/5 text-slate-500" };
+}
+
+function GenderBadge({ gender }: { gender?: string | null }) {
+  const badge = getGenderBadge(gender);
+  return (
+    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
+
 type AcceptanceBatch = "Batch 1" | "Batch 2";
 type BatchParticipantFilter = "all" | "arrived" | "not_arrived";
 
@@ -3509,7 +3547,7 @@ export default function AdminPage() {
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Auto-review failed";
+        error instanceof Error ? error.message : "Review failed";
       console.error("Failed to auto-review application:", error);
       alert(message);
       setSavingId(null);
@@ -3548,7 +3586,7 @@ export default function AdminPage() {
     const confirmed = window.confirm(
       `Run Batch 2 hidden selection? 480 seats total.\n\n` +
       `Rules:\n` +
-      `• Priority override emails forced in first\n` +
+      `• Pre-approved applicants included first\n` +
       `• 450km+ constituencies (Chobe, Maun, Okavango, Ghanzi etc.) get major priority\n` +
       `• Equal constituency distribution, hard cap ${BATCH_2_MAX_PER_CONSTITUENCY} per constituency\n` +
       `• Gender floor: ${BATCH_2_MIN_MEN_TARGET} men — HARD REQUIREMENT (3-pass guarantee)\n` +
@@ -3699,8 +3737,8 @@ export default function AdminPage() {
     setSelectionProgress({
       active: true,
       title: "Running Batch 2 hidden selection",
-      phase: "Phase 1: Priority overrides",
-      detail: `Forcing ${STRATEGIC_COVERAGE_EMAILS.length} priority emails into selection...`,
+      phase: "Phase 1: Pre-approved applicants",
+      detail: `Preparing ${STRATEGIC_COVERAGE_EMAILS.length} pre-approved applicants for selection...`,
       current: 0,
       total: STRATEGIC_COVERAGE_EMAILS.length,
     });
@@ -4050,7 +4088,7 @@ export default function AdminPage() {
       `Batch 2 Hidden Selection Complete\n` +
       `══════════════════════════════════\n` +
       `Total selected: ${selected.size} / ${BATCH_2_INTAKE}\n` +
-      `Priority overrides: ${priorityOverrideSelected.length}\n` +
+      `Pre-approved selected: ${priorityOverrideSelected.length}\n` +
       `Deferred sprinkled: ${deferredAdded} / ${BATCH_2_DEFERRED_SPRINKLE}\n` +
       `450km+ far-area selected: ${farSelected}\n` +
       `Constituencies represented: ${constituenciesHit} / ${constituencies.length}\n` +
@@ -4998,10 +5036,10 @@ BYWC Programme Administration`;
       "Completed BGCSE / IGCSE",
       "BGCSE Points",
       "Preferred Language",
-      "Auto Review Score",
-      "Auto Review Result",
-      "Priority Group",
-      "Selection Bucket",
+      "Review Score",
+      "Review Outcome",
+      "Applicant Category",
+      "Selection",
       "Hard Reject Reason",
       "Document Score",
       "Omang File",
@@ -5034,7 +5072,7 @@ BYWC Programme Administration`;
       application.completedBgcseIgcse,
       application.bgcsePoints,
       application.preferredLanguage,
-      application.autoReviewScore,
+      getUiAutoReviewScore(application, ""),
       getPublicAdminText(application.autoReviewResult, ""),
       getPublicSelectionLabel(application.priorityGroup, ""),
       getPublicSelectionLabel(application.selectionBucket, ""),
@@ -5397,10 +5435,10 @@ BYWC Programme Administration`;
         "Completed BGCSE / IGCSE",
         "BGCSE Points",
         "Preferred Language",
-        "Auto Review Score",
-        "Auto Review Result",
-        "Priority Group",
-        "Selection Bucket",
+        "Review Score",
+        "Review Outcome",
+        "Applicant Category",
+        "Selection",
         "Hard Reject Reason",
         "Document Score",
         "Omang File",
@@ -5434,7 +5472,7 @@ BYWC Programme Administration`;
         application.completedBgcseIgcse,
         application.bgcsePoints,
         application.preferredLanguage,
-        application.autoReviewScore,
+        getUiAutoReviewScore(application, ""),
         getPublicAdminText(application.autoReviewResult, ""),
         getPublicSelectionLabel(application.priorityGroup, ""),
         getPublicSelectionLabel(application.selectionBucket, ""),
@@ -5750,7 +5788,7 @@ BYWC Programme Administration`;
       application.phone,
       application.email,
       application.employmentStatus,
-      application.autoReviewScore ?? "",
+      getUiAutoReviewScore(application, ""),
       application.status,
       getPublicSelectionLabel(application.selectionBucket, ""),
     ]);
@@ -5973,6 +6011,7 @@ BYWC Programme Administration`;
       "Chomeleng": "Published - Applicant Visible / Batch 2 - Chomeleng Special",
       "BERA":      "Published - Applicant Visible / Batch 2 - BERA Special",
       "Serowe":    "Published - Applicant Visible / Batch 2 - Serowe Special",
+      "BaIsago":   "Published - Applicant Visible / Batch 2 - Ba Isago Special",
     };
     const bucket = bucketMap[d.group] || bucketMap["Boteti"];
     const slug = `${d.firstName.toLowerCase().replace(/\s+/g,"")}.${d.lastName.toLowerCase().replace(/\s+/g,"")}`;
@@ -6013,7 +6052,7 @@ BYWC Programme Administration`;
     }
   }
 
-  function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng" | "bera" | "serowe") {
+  function handleExportBatch2Csv(mode: "combined" | "actual" | "special" | "chomeleng" | "bera" | "serowe" | "baisago") {
     const all = batch2Applications;
     const people =
       mode === "combined"  ? all :
@@ -6021,9 +6060,10 @@ BYWC Programme Administration`;
       mode === "chomeleng" ? all.filter(isChomelenSpecial) :
       mode === "bera"      ? all.filter(isBeraSpecial) :
       mode === "serowe"    ? all.filter(isSeroweSpecial) :
+      mode === "baisago"   ? all.filter(isBaIsagoSpecial) :
                              all.filter(isBotetiSpecial);
     if (people.length === 0) { alert("No records for this selection."); return; }
-    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : mode === "chomeleng" ? "ChomelenSpecial" : mode === "bera" ? "BERASpecial" : mode === "serowe" ? "SeroweSpecial" : "BotetiSpecial";
+    const label = mode === "combined" ? "Combined" : mode === "actual" ? "Actual" : mode === "chomeleng" ? "ChomelenSpecial" : mode === "bera" ? "BERASpecial" : mode === "serowe" ? "SeroweSpecial" : mode === "baisago" ? "BaIsagoSpecial" : "BotetiSpecial";
     const headers = ["First Name","Last Name","Omang","Phone","Email","Constituency","Gender","Arrival","Group"];
     const rows = people.map(a => {
       const bucket = a.selectionBucket || "";
@@ -6270,7 +6310,8 @@ BYWC Programme Administration`;
   const isChomelenSpecial = (a: Application) => (a.selectionBucket || "").includes("Chomeleng Special");
   const isBeraSpecial = (a: Application) => (a.selectionBucket || "").includes("BERA Special");
   const isSeroweSpecial = (a: Application) => (a.selectionBucket || "").includes("Serowe Special");
-  const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a) || isBeraSpecial(a) || isSeroweSpecial(a);
+  const isBaIsagoSpecial = (a: Application) => (a.selectionBucket || "").includes("Ba Isago Special");
+  const isBatch2Special = (a: Application) => isBotetiSpecial(a) || isChomelenSpecial(a) || isBeraSpecial(a) || isSeroweSpecial(a) || isBaIsagoSpecial(a);
   const isLuckyOnesPromoted = (a: Application) => (a.selectionBucket || "").includes("Lucky Ones Promoted");
   const isLuckyOnesReviewed = (a: Application) => (a.selectionBucket || "").includes("Remaining Eligible - Reviewed");
 
@@ -7737,7 +7778,7 @@ BYWC Programme Administration`;
                               {application.employmentStatus || "-"}
                             </td>
                             <td className="px-3 py-3 font-black text-cyan-300">
-                              {application.autoReviewScore ?? "-"}
+                              {getUiAutoReviewScore(application)}
                             </td>
                           </tr>
                         ))}
@@ -8416,6 +8457,10 @@ BYWC Programme Administration`;
                       className="block w-full px-4 py-2.5 text-left text-xs font-black text-amber-300 hover:bg-white/10">
                       Serowe Special only
                     </button>
+                    <button type="button" onClick={() => handleExportBatch2Csv("baisago")}
+                      className="block w-full px-4 py-2.5 text-left text-xs font-black text-lime-300 hover:bg-white/10">
+                      Ba Isago Special only
+                    </button>
                   </div>
                 )}
               </div>
@@ -8530,7 +8575,6 @@ BYWC Programme Administration`;
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {visibleBatch2Applications.map((application) => {
-                          const isMale = (application.gender || "").toLowerCase() === "male";
                           const arrived = application.arrivalStatus === "Arrived";
                           const fromLucky = isLuckyOnesPromoted(application);
                           return (
@@ -8550,9 +8594,7 @@ BYWC Programme Administration`;
                               <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
                               <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                               <td className="px-3 py-3">
-                                <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
-                                  {isMale ? "M" : "F"}
-                                </span>
+                                <GenderBadge gender={application.gender} />
                               </td>
                               <td className="px-3 py-3">
                                 <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>
@@ -8623,14 +8665,13 @@ BYWC Programme Administration`;
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {boteti.map(a => {
-                          const isMale = (a.gender || "").toLowerCase() === "male";
                           const arrived = a.arrivalStatus === "Arrived";
                           return (
                             <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
                               <td className="px-3 py-3"><p className="font-black text-violet-300">{a.firstName} {a.lastName}</p></td>
                               <td className="px-3 py-3 font-semibold text-slate-300">{a.omang || "—"}</td>
                               <td className="px-3 py-3 font-semibold text-slate-300">{a.phone || "—"}</td>
-                              <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>{isMale ? "M" : "F"}</span></td>
+                              <td className="px-3 py-3"><GenderBadge gender={a.gender} /></td>
                               <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
                               <td className="px-3 py-3"><span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-black text-violet-300">Boteti</span></td>
                             </tr>
@@ -8804,6 +8845,63 @@ BYWC Programme Administration`;
                               <td className="px-3 py-3 font-semibold text-slate-300">{a.constituency || "Unknown"}</td>
                               <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
                               <td className="px-3 py-3"><span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-300">Serowe</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Ba Isago Special List */}
+          {(() => {
+            const baIsago = batch2Applications.filter(isBaIsagoSpecial);
+            const baIsagoWomen = baIsago.filter(a => (a.gender || "").toLowerCase() === "female").length;
+            const baIsagoMen = baIsago.filter(a => (a.gender || "").toLowerCase() === "male").length;
+            const baIsagoArrived = baIsago.filter(a => a.arrivalStatus === "Arrived").length;
+            return (
+              <div className="mt-4 rounded-2xl border border-lime-500/30 bg-lime-500/5 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-lime-400">Ba Isago Special List</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Counts toward Women/Men totals · excluded from constituency quota</p>
+                  </div>
+                  <div className="flex gap-3 text-xs font-black">
+                    <span className="rounded-full bg-pink-500/10 px-3 py-1 text-pink-300">{baIsagoWomen} Women</span>
+                    <span className="rounded-full bg-blue-500/10 px-3 py-1 text-blue-300">{baIsagoMen} Men</span>
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-300">{baIsagoArrived} Arrived</span>
+                  </div>
+                </div>
+                {baIsago.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-400">No Ba Isago Special entries yet.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <table className="w-full table-fixed text-[12px]">
+                      <colgroup><col className="w-[30%]"/><col className="w-[18%]"/><col className="w-[16%]"/><col className="w-[16%]"/><col className="w-[12%]"/><col className="w-[8%]"/></colgroup>
+                      <thead className="bg-[#111827] text-slate-300">
+                        <tr>
+                          <th className="px-3 py-3 text-left font-black">Applicant</th>
+                          <th className="px-3 py-3 text-left font-black">Omang</th>
+                          <th className="px-3 py-3 text-left font-black">Phone</th>
+                          <th className="px-3 py-3 text-left font-black">Constituency</th>
+                          <th className="px-3 py-3 text-left font-black">Arrival</th>
+                          <th className="px-3 py-3 text-left font-black">Label</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {baIsago.map(a => {
+                          const arrived = a.arrivalStatus === "Arrived";
+                          return (
+                            <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
+                              <td className="px-3 py-3"><p className="font-black text-lime-300">{a.firstName} {a.lastName}</p></td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.omang || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.phone || "—"}</td>
+                              <td className="px-3 py-3 font-semibold text-slate-300">{a.constituency || "Unknown"}</td>
+                              <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span></td>
+                              <td className="px-3 py-3"><span className="rounded-full bg-lime-500/10 px-2 py-1 text-[10px] font-black text-lime-300">Ba Isago</span></td>
                             </tr>
                           );
                         })}
@@ -9219,6 +9317,7 @@ BYWC Programme Administration`;
                   <option value="Chomeleng">Batch 2 — Chomeleng Special</option>
                   <option value="BERA">Batch 2 — BERA Special</option>
                   <option value="Serowe">Batch 2 — Serowe Special</option>
+                  <option value="BaIsago">Batch 2 — Ba Isago Special</option>
                 </select>
               </div>
 
@@ -9471,7 +9570,7 @@ BYWC Programme Administration`;
                         Constituency
                       </th>
                       <th className="px-3 py-3 text-left font-black">
-                        Auto Review
+                        Review
                       </th>
                       <th className="px-3 py-3 text-left font-black">Status</th>
                       <th className="px-3 py-3 text-left font-black">
@@ -9547,7 +9646,7 @@ BYWC Programme Administration`;
 
                         <td className="px-3 py-3 align-top">
                           <p className="truncate font-black text-white">
-                            {application.autoReviewScore ?? "Not reviewed"}
+                            {getUiAutoReviewScore(application, "Not reviewed")}
                           </p>
                           <p className="mt-1 break-words text-[11px] leading-4 text-slate-400">
                             {getPublicAdminText(application.autoReviewResult)}
@@ -9841,7 +9940,6 @@ BYWC Programme Administration`;
                           </thead>
                           <tbody className="divide-y divide-white/5">
                             {visibleB1.map(application => {
-                              const isMale = (application.gender || "").toLowerCase() === "male";
                               const arrived = application.arrivalStatus === "Arrived";
                               return (
                                 <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
@@ -9868,9 +9966,7 @@ BYWC Programme Administration`;
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                                   <td className="px-3 py-3">
-                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
-                                      {isMale ? "M" : "F"}
-                                    </span>
+                                    <GenderBadge gender={application.gender} />
                                   </td>
                                   <td className="px-3 py-3">
                                     <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>
@@ -9929,14 +10025,13 @@ BYWC Programme Administration`;
                         <tbody className="divide-y divide-white/5">
                           {b1Phikwe.map(a => {
                             const arrived = a.arrivalStatus === "Arrived";
-                            const isMale = (a.gender || "").toLowerCase().includes("male") && !(a.gender || "").toLowerCase().includes("female");
                             return (
                               <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
                                 <td className="px-3 py-2 font-black text-purple-300">{a.firstName} {a.lastName}</td>
                                 <td className="px-3 py-2 text-slate-300">{a.omang || "—"}</td>
                                 <td className="px-3 py-2 text-slate-300">{a.phone || "—"}</td>
                                 <td className="px-3 py-2">
-                                  {a.gender ? <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>{isMale ? "M" : "F"}</span> : <span className="text-slate-500">—</span>}
+                                  <GenderBadge gender={a.gender} />
                                 </td>
                                 <td className="px-3 py-2">
                                   <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span>
@@ -9976,14 +10071,13 @@ BYWC Programme Administration`;
                         <tbody className="divide-y divide-white/5">
                           {b1Goodhope.map(a => {
                             const arrived = a.arrivalStatus === "Arrived";
-                            const isMale = (a.gender || "").toLowerCase().includes("male") && !(a.gender || "").toLowerCase().includes("female");
                             return (
                               <tr key={a.id} className="cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(a)}>
                                 <td className="px-3 py-2 font-black text-purple-300">{a.firstName} {a.lastName}</td>
                                 <td className="px-3 py-2 text-slate-300">{a.omang || "—"}</td>
                                 <td className="px-3 py-2 text-slate-300">{a.phone || "—"}</td>
                                 <td className="px-3 py-2">
-                                  {a.gender ? <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>{isMale ? "M" : "F"}</span> : <span className="text-slate-500">—</span>}
+                                  <GenderBadge gender={a.gender} />
                                 </td>
                                 <td className="px-3 py-2">
                                   <span className={`rounded-full px-2 py-1 text-[10px] font-black ${arrived ? "bg-emerald-500/10 text-emerald-300" : "bg-orange-500/10 text-orange-300"}`}>{arrived ? "✓ Arrived" : "Not Arrived"}</span>
@@ -10085,7 +10179,6 @@ BYWC Programme Administration`;
                           </thead>
                           <tbody className="divide-y divide-white/5">
                             {filteredApplications.map(application => {
-                              const isMale = (application.gender || "").toLowerCase() === "male";
                               const isReviewed = isLuckyOnesReviewed(application);
                               const isLucky = (application.selectionBucket || "") === "Lucky Ones";
                               return (
@@ -10106,13 +10199,11 @@ BYWC Programme Administration`;
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                                   <td className="px-3 py-3">
-                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
-                                      {isMale ? "M" : "F"}
-                                    </span>
+                                    <GenderBadge gender={application.gender} />
                                   </td>
                                   <td className="px-3 py-3">
                                     <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-[10px] font-black text-yellow-300">
-                                      {application.autoReviewScore ?? "—"}
+                                      {getUiAutoReviewScore(application, "—")}
                                     </span>
                                   </td>
                                 </tr>
@@ -10230,9 +10321,7 @@ BYWC Programme Administration`;
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {luckyOnesApplications.map(application => {
-                      const isMale = (application.gender || "").toLowerCase() === "male";
-                      return (
+                    {luckyOnesApplications.map(application => (
                         <tr key={application.id} className="align-top transition hover:bg-yellow-500/[0.04]">
                           <td className="px-3 py-3 cursor-pointer" onClick={() => setSelectedApplication(application)}>
                             <p className="font-black text-yellow-300 hover:underline">{application.firstName} {application.lastName}</p>
@@ -10244,13 +10333,11 @@ BYWC Programme Administration`;
                           <td className="px-3 py-3 font-semibold text-slate-300">{application.omang || "—"}</td>
                           <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                           <td className="px-3 py-3">
-                            <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
-                              {isMale ? "M" : "F"}
-                            </span>
+                            <GenderBadge gender={application.gender} />
                           </td>
                           <td className="px-3 py-3">
                             <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-[10px] font-black text-yellow-300">
-                              {application.autoReviewScore ?? "—"}
+                              {getUiAutoReviewScore(application, "—")}
                             </span>
                           </td>
                           <td className="px-3 py-3">
@@ -10266,8 +10353,7 @@ BYWC Programme Administration`;
                             </div>
                           </td>
                         </tr>
-                      );
-                    })}
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -10284,7 +10370,7 @@ BYWC Programme Administration`;
                       const headers = ["First Name", "Last Name", "Phone", "Omang", "Email", "Gender", "Age", "Constituency", "Score"];
                       const rows = luckyOnesGraduated.map(a => [
                         a.firstName, a.lastName, a.phone, a.omang, a.email,
-                        a.gender, a.age, a.constituency, a.autoReviewScore ?? "",
+                        a.gender, a.age, a.constituency, getUiAutoReviewScore(a, ""),
                       ]);
                       const csv = [headers, ...rows].map(r => r.map(v => `"${(v ?? "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
                       const blob = new Blob([csv], { type: "text/csv" });
@@ -10317,9 +10403,7 @@ BYWC Programme Administration`;
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-emerald-500/10">
-                      {luckyOnesGraduated.map((application) => {
-                        const isMale = (application.gender || "").toLowerCase() === "male";
-                        return (
+                      {luckyOnesGraduated.map((application) => (
                           <tr key={application.id} className="align-top transition cursor-pointer hover:bg-emerald-500/[0.04]" onClick={() => setSelectedApplication(application)}>
                             <td className="px-3 py-3">
                               <p className="font-black text-emerald-300 underline-offset-2 hover:underline">
@@ -10331,18 +10415,15 @@ BYWC Programme Administration`;
                             <td className="px-3 py-3 font-mono text-xs text-slate-400">{application.omang || "—"}</td>
                             <td className="px-3 py-3 text-xs text-slate-300">{application.constituency || "—"}</td>
                             <td className="px-3 py-3">
-                              <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
-                                {isMale ? "M" : "F"}
-                              </span>
+                              <GenderBadge gender={application.gender} />
                             </td>
                             <td className="px-3 py-3">
                               <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-300">
-                                {application.autoReviewScore ?? "—"}
+                                {getUiAutoReviewScore(application, "—")}
                               </span>
                             </td>
                           </tr>
-                        );
-                      })}
+                        ))}
                     </tbody>
                   </table>
                 </div>
@@ -10434,9 +10515,7 @@ BYWC Programme Administration`;
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                            {filteredApplications.map(application => {
-                              const isMale = (application.gender || "").toLowerCase() === "male";
-                              return (
+                            {filteredApplications.map(application => (
                                 <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
                                   <td className="px-3 py-3">
                                     <p className="font-black text-red-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
@@ -10446,9 +10525,7 @@ BYWC Programme Administration`;
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                                   <td className="px-3 py-3">
-                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
-                                      {isMale ? "M" : "F"}
-                                    </span>
+                                    <GenderBadge gender={application.gender} />
                                   </td>
                                   <td className="px-3 py-3">
                                     <span className="line-clamp-2 text-[10px] font-semibold text-red-400/80">
@@ -10456,8 +10533,7 @@ BYWC Programme Administration`;
                                     </span>
                                   </td>
                                 </tr>
-                              );
-                            })}
+                              ))}
                           </tbody>
                         </table>
                       </div>
@@ -10575,9 +10651,7 @@ BYWC Programme Administration`;
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                            {filteredApplications.map(application => {
-                              const isMale = (application.gender || "").toLowerCase() === "male";
-                              return (
+                            {filteredApplications.map(application => (
                                 <tr key={application.id} className="align-top cursor-pointer transition hover:bg-white/[0.04]" onClick={() => setSelectedApplication(application)}>
                                   <td className="px-3 py-3">
                                     <p className="font-black text-amber-300 underline-offset-2 hover:underline">{application.firstName} {application.lastName}</p>
@@ -10587,16 +10661,13 @@ BYWC Programme Administration`;
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.phone || "—"}</td>
                                   <td className="px-3 py-3 font-semibold text-slate-300">{application.constituency || "Unknown"}</td>
                                   <td className="px-3 py-3">
-                                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${isMale ? "bg-blue-500/10 text-blue-300" : "bg-pink-500/10 text-pink-300"}`}>
-                                      {isMale ? "M" : "F"}
-                                    </span>
+                                    <GenderBadge gender={application.gender} />
                                   </td>
                                   <td className="px-3 py-3">
                                     <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-300">Deferred</span>
                                   </td>
                                 </tr>
-                              );
-                            })}
+                              ))}
                           </tbody>
                         </table>
                       </div>
@@ -11229,7 +11300,7 @@ BYWC Programme Administration`;
                                         </td>
                                         <td className="px-3 py-3 align-top">
                                           <p className="font-black text-white">
-                                            {application.autoReviewScore ?? "-"}
+                                            {getUiAutoReviewScore(application)}
                                           </p>
                                           <p className="mt-1 text-[11px] text-slate-400">
                                             {getPublicSelectionLabel(application.selectionBucket, "-")}
@@ -11971,22 +12042,21 @@ BYWC Programme Administration`;
                 />
                 <Detail label="Status" value={selectedApplication.status} />
                 <Detail
-                  label="Auto Review Score"
+                  label="Review Score"
                   value={
-                    selectedApplication.autoReviewScore?.toString() ||
-                    "Not reviewed"
+                    getUiAutoReviewScore(selectedApplication, "Not reviewed")
                   }
                 />
                 <Detail
-                  label="Auto Review Result"
+                  label="Review Outcome"
                   value={getPublicAdminText(selectedApplication.autoReviewResult)}
                 />
                 <Detail
-                  label="Priority Group"
+                  label="Applicant Category"
                   value={getPublicSelectionLabel(selectedApplication.priorityGroup, "-")}
                 />
                 <Detail
-                  label="Selection Bucket"
+                  label="Selection"
                   value={getPublicSelectionLabel(selectedApplication.selectionBucket, "-")}
                 />
                 <Detail
@@ -12068,10 +12138,6 @@ BYWC Programme Administration`;
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <LongDetail
-                  label="Auto Review Notes"
-                  value={getPublicAdminText(selectedApplication.autoReviewNotes)}
-                />
-                <LongDetail
                   label="Hard Reject Reason"
                   value={getPublicAdminText(selectedApplication.hardRejectReason)}
                   danger
@@ -12148,7 +12214,7 @@ BYWC Programme Administration`;
                   disabled={savingId === selectedApplication.id}
                   className="bg-orange-500 text-white px-5 py-3 rounded-xl font-semibold hover:bg-orange-600 transition disabled:opacity-50"
                 >
-                  Run Auto Review
+                  Review Application
                 </button>
 
                 <button
@@ -12427,7 +12493,7 @@ function DispatchMiniGroup({
                   {application.email}
                 </p>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Score: {application.autoReviewScore ?? "-"} •{" "}
+                  Score: {getUiAutoReviewScore(application)} •{" "}
                   {getPublicSelectionLabel(application.selectionBucket, application.status)}
                 </p>
               </div>
